@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Node / Vite
+node_modules/
+gui/dist/
+
+# Tauri / Rust
+gui/src-tauri/target/
+gui/src-tauri/gen/schemas/
+
+# Editoren und Betriebssystem
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Lokale Laufzeitdaten
+*.log

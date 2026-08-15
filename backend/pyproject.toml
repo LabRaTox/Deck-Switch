@@ -1,0 +1,25 @@
+[project]
+name = "deckswitch"
+version = "0.1.0"
+description = "Eigene Stream Deck+ Steuerungssoftware für CachyOS"
+requires-python = ">=3.11"
+dependencies = [
+    "streamdeck>=0.9.5",
+    "pillow>=10.0",
+    "cairosvg>=2.7",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "simpleobsws>=1.4",
+    "dbus-next>=0.2.3",
+]
+
+[project.scripts]
+deckswitch = "deckswitch.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["deckswitch*"]

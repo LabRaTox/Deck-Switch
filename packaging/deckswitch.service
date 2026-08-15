@@ -1,0 +1,23 @@
+[Unit]
+Description=DECK//SWITCH Backend
+Documentation=file:%h/Projekte/StreamDeck/README.md
+# Erst starten, wenn die grafische Sitzung steht: die udev-Regel vergibt den
+# Gerätezugriff per uaccess an den eingeloggten User.
+After=graphical-session.target pipewire.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# __REPO__ wird von scripts/install-service.sh bzw. dem Schalter in den
+# Einstellungen durch den echten Pfad ersetzt.
+WorkingDirectory=__REPO__
+ExecStart=__REPO__/.venv/bin/python -m deckswitch
+Restart=on-failure
+RestartSec=5
+# Das Deck kann beim Login noch nicht bereit sein — die Runtime wartet selbst
+# darauf, ein Absturz wäre also ein echter Fehler und kein Normalfall.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical-session.target

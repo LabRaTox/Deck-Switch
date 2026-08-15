@@ -1,0 +1,1777 @@
+/*
+ * Optik bewusst an die offizielle Elgato-Software angelehnt: dunkle
+ * Oberfläche, Deck-Grid in Gerätegeometrie in der Mitte, Aktionsbibliothek
+ * links, Eigenschaften-Panel rechts.
+ */
+
+:root {
+  --bg: #131316;
+  --bg-raised: #1b1b20;
+  --bg-sunken: #0e0e11;
+  --border: #2a2a31;
+  --border-strong: #3a3a44;
+  --text: #e9e9ee;
+  --text-dim: #9a9aa6;
+  --accent: #3b82f6;
+  --accent-soft: #3b82f622;
+  --danger: #ef4444;
+  --ok: #22c55e;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  color-scheme: dark;
+  font-family: "Inter", "Noto Sans", system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body,
+html,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  width: 100%;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type="range"] {
+  padding: 0;
+  border: none;
+  background: transparent;
+  accent-color: var(--accent);
+}
+
+input[type="color"] {
+  padding: 2px;
+  height: 32px;
+  min-width: 44px;
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- Buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 7px 12px;
+  text-decoration: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: #24242b;
+  border-color: #4a4a56;
+}
+
+.btn.small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: #2f6fd8;
+}
+
+.btn.danger {
+  border-color: #7f1d1d;
+  color: #fca5a5;
+}
+
+.btn.danger:hover {
+  background: #3b1212;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ Layout */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: 280px minmax(560px, 1fr) 360px;
+  flex: 1;
+  min-height: 0;
+}
+
+.boot {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}
+
+.boot-card {
+  text-align: center;
+  padding: 32px 40px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.boot-card code {
+  display: block;
+  margin-top: 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------------ Topbar */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 16px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Das Symbol bringt seinen eigenen Korpus samt Rundung mit — hier nur die
+   Größe. Quelle: gui/public/icon.svg, erzeugt von scripts/make-icon.py. */
+.logo {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.topbar-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 14px;
+  color: var(--text-dim);
+}
+
+.nav-tab:hover {
+  color: var(--text);
+}
+
+.nav-tab.active {
+  background: var(--accent-soft);
+  border-color: #3b82f655;
+  color: #cfe0ff;
+}
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.brightness {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+}
+
+.brightness input[type="range"] {
+  width: 110px;
+}
+
+.brightness output {
+  min-width: 38px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.device-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.device-status .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.device-status.ok .dot {
+  background: var(--ok);
+  box-shadow: 0 0 8px #22c55e88;
+}
+
+.device-status.bad .dot {
+  background: var(--danger);
+}
+
+.device-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.device-text small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* ------------------------------------------------------------- Fehlerbanner */
+
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: #3a1416;
+  border-bottom: 1px solid #7f1d1d;
+  font-size: 13px;
+}
+
+.error-banner.warning {
+  background: #3a2e14;
+  border-bottom-color: #854d0e;
+}
+
+.error-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0;
+}
+
+.error-count {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.error-latest {
+  color: #fecaca;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-list {
+  flex-basis: 100%;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.error-list li {
+  display: grid;
+  grid-template-columns: 70px 110px 1fr;
+  gap: 10px;
+  padding: 3px 0;
+  border-top: 1px solid #ffffff12;
+  color: #fde2e2;
+}
+
+.error-source {
+  color: var(--text-dim);
+}
+
+.error-text {
+  color: #fca5a5;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+/* --------------------------------------------------------------- Bibliothek */
+
+.library,
+.inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-raised);
+  padding: 12px;
+  gap: 10px;
+}
+
+.library {
+  border-right: 1px solid var(--border);
+}
+
+.inspector {
+  border-left: 1px solid var(--border);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-head h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Hinweistext in leeren Panels. Bewusst NICHT ".empty" — die Deck-Kacheln
+   tragen als Modifier ebenfalls "empty" und würden den Außenabstand erben,
+   was sie im Raster gegenüber den belegten verschieben würde. */
+.empty-note {
+  margin: 8px 0;
+  color: var(--text-dim);
+}
+
+.library-scroll,
+.inspector-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.library-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 6px 2px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.library-group-head .chevron {
+  margin-left: auto;
+}
+
+/* Farbbalken: zeigt die Zugehörigkeit zu einem Plugin, keinen Zustand. */
+.accent-bar {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* Runde Punkte sind in dieser Oberfläche immer Verbindungsanzeigen. */
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.status-dot.online {
+  background: var(--ok);
+  box-shadow: 0 0 8px #22c55e88;
+}
+
+.status-dot.offline {
+  background: #52525b;
+}
+
+/* Hält die Ausrichtung, wo ein Plugin gar keinen Status hat. */
+.dot-placeholder {
+  width: 9px;
+  flex: none;
+}
+
+.action-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  margin-bottom: 4px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: grab;
+}
+
+.action-card:hover {
+  border-color: var(--border-strong);
+  background: #17171c;
+}
+
+.action-card:active {
+  cursor: grabbing;
+}
+
+.action-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #101014;
+  flex: none;
+}
+
+.action-icon img,
+.action-icon > span[role="img"] {
+  width: 20px;
+  height: 20px;
+}
+
+.action-icon-fallback {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--text-dim);
+  border-radius: 4px;
+}
+
+.action-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.action-text strong {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-text small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* --------------------------------------------------------------- Deck-Bühne */
+
+.stage {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.stage-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ------------------------------------------------------------ Seitenbaum */
+
+.pagetree {
+  display: flex;
+  flex-direction: column;
+  width: 236px;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: #17171b;
+}
+
+/* Eingeklappt bleibt nur eine schmale Leiste zum Wiederaufklappen — auf
+   schmalen Fenstern gewinnt so das Deck den Platz. */
+.pagetree.collapsed {
+  width: 34px;
+  align-items: center;
+  padding-top: 10px;
+  gap: 10px;
+}
+
+.pagetree-rail-label {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.pagetree-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pagetree-title {
+  flex: 1;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  line-height: 0;
+}
+
+.icon-btn:hover {
+  background: #ffffff14;
+  color: var(--text);
+}
+
+.icon-btn.danger:hover {
+  color: var(--danger);
+}
+
+.pagetree-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 6px 12px;
+}
+
+/* Legende statt Fließtext: die Pfeiltasten stehen als Icons in der Zeile,
+   nicht als Sonderzeichen mitten im Satz. */
+.pagetree-hint {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.pagetree-hint p {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+}
+
+.pagetree-hint p:last-child {
+  margin-bottom: 0;
+}
+
+.pagetree-hint svg {
+  flex: none;
+}
+
+/* Die beiden Tasten einer Richtung gehören zusammen und stehen deshalb
+   enger beieinander als am Text daneben. */
+.pagetree-hint .hint-keys {
+  display: flex;
+  gap: 1px;
+  margin-right: 2px;
+}
+
+/* Der erste Hinweis läuft über zwei Zeilen — das Icon bleibt oben. */
+.pagetree-hint p:first-child {
+  align-items: flex-start;
+  margin-bottom: 7px;
+}
+
+.pagetree-hint p:first-child svg {
+  margin-top: 1px;
+}
+
+.pagetree-hint span {
+  min-width: 0;
+}
+
+.pagetree-hint kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* --- Zeile ------------------------------------------------------------- */
+
+.pagerow {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-height: 28px;
+  border-radius: 7px;
+  cursor: grab;
+}
+
+.pagerow:hover {
+  background: #ffffff0c;
+}
+
+.pagerow.active {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.pagerow.dragging {
+  opacity: 0.4;
+}
+
+.pagerow-twist {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  line-height: 0;
+}
+
+.pagerow-twist:hover {
+  color: var(--text);
+}
+
+.pagerow-twist.empty {
+  cursor: default;
+}
+
+.pagerow-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.pagerow-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pagerow.active .pagerow-label {
+  font-weight: 500;
+}
+
+/* Zahl der verborgenen Unterseiten — zeigt an einem zugeklappten Zweig,
+   dass dort noch etwas liegt. */
+.pagerow-count {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ffffff14;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.pagerow-input {
+  flex: 1;
+  min-width: 0;
+  margin: 3px 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--bg-sunken);
+}
+
+.pagerow-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.pagerow:hover .pagerow-actions,
+.pagerow.active .pagerow-actions {
+  display: flex;
+}
+
+/* --- Gruppen ----------------------------------------------------------- */
+
+/* Unterseiten stehen nicht nur eingerückt, sondern in einem eigenen Rahmen
+   unter ihrer Seite — damit ist auf einen Blick klar, was wozu gehört. */
+.pagebranch {
+  margin: 1px 0 4px 10px;
+  padding: 2px 0 2px 8px;
+  border-left: 2px solid #4a4a58;
+  border-radius: 0 0 0 6px;
+  background: #ffffff06;
+}
+
+/* Der Zweig, in dem die geöffnete Seite liegt — nur die Linie färben: eine
+   Fläche würde mit der Markierung der geöffneten Seite konkurrieren. */
+.pagebranch.in-path {
+  border-left-color: var(--accent);
+}
+
+.pagerow.has-children .pagerow-label {
+  font-weight: 500;
+}
+
+/* --- Ablagemarken beim Ziehen ------------------------------------------ */
+
+.pagerow.drop-before::after,
+.pagerow.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.pagerow.drop-before::after {
+  top: -1px;
+}
+
+.pagerow.drop-after::after {
+  bottom: -1px;
+}
+
+/* Mitte der Zeile: die gezogene Seite wird Unterseite dieser hier. */
+.pagerow.drop-into {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: var(--accent-soft);
+}
+
+/* --- Brotkrume über dem Deck ------------------------------------------- */
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  background: #17171b;
+  font-size: 12px;
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.crumb-sep {
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+.crumb-btn {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+}
+
+.crumb-btn:hover {
+  background: #ffffff0c;
+  color: var(--text);
+}
+
+.crumb-btn.current {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.deck {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding: 26px;
+  align-items: center;
+}
+
+.deck-section h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+/* Gerätegeometrie: 4×2 Tasten, darunter ein durchgehender Streifen. */
+/* Spaltenzahl und Kachelgröße setzt DeckGrid inline aus den Gerätedaten —
+   ein Stream Deck XL hat 8 Spalten, ein Mini 3. */
+.key-grid {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.dial-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  width: 532px;
+  gap: 1px;
+  padding: 6px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.dial-knobs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  width: 532px;
+  margin-top: 12px;
+  justify-items: center;
+}
+
+.knob {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #3a3a44, #17171b 70%);
+  border: 1px solid var(--border-strong);
+}
+
+.tile {
+  position: relative;
+  margin: 0;
+  border-radius: var(--radius);
+  background: #000;
+  border: 2px solid transparent;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.12s ease, transform 0.08s ease;
+}
+
+.tile.key {
+  /* Vorgabe für den Fall ohne Gerät; DeckGrid überschreibt sie inline. */
+  width: 118px;
+  height: 118px;
+}
+
+.tile.dial {
+  aspect-ratio: 2 / 1;
+  border-radius: 4px;
+}
+
+.tile:hover {
+  border-color: var(--border-strong);
+}
+
+.tile.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #3b82f633;
+}
+
+.tile.drop {
+  border-color: var(--ok);
+  transform: scale(1.02);
+}
+
+.tile.empty {
+  background: #0a0a0c;
+  border: 2px dashed #26262d;
+}
+
+.tile-preview {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.tile-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #35353f;
+  font-size: 22px;
+  pointer-events: none;
+}
+
+.tile-index {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 9px;
+  color: #ffffff40;
+  pointer-events: none;
+}
+
+.tile-actions {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: none;
+  gap: 3px;
+}
+
+.tile:hover .tile-actions {
+  display: flex;
+}
+
+.tile-actions button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  border: none;
+  border-radius: 6px;
+  background: #000000bb;
+  color: #fff;
+}
+
+.tile-actions button:hover {
+  background: var(--accent);
+}
+
+/* ------------------------------------------------------------------ Inspektor */
+
+.inspector-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.hero-preview {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #000;
+  flex: none;
+}
+
+.hero-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.hero-text small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.inspector-section {
+  padding: 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inspector-section h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.inspector-section h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.icon-states {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.icon-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  max-width: 76px;
+}
+
+.icon-slot-preview {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.icon-slot:hover .icon-slot-preview {
+  border-color: var(--accent);
+}
+
+.icon-slot-preview img,
+.icon-slot-preview > span[role="img"] {
+  width: 30px;
+  height: 30px;
+}
+
+/* Geerbtes Manifest-Icon: sichtbar, aber erkennbar „nicht selbst gewählt“. */
+.icon-slot-preview .inherited {
+  opacity: 0.45;
+}
+
+.icon-slot-empty {
+  color: #3a3a44;
+  font-size: 20px;
+}
+
+.icon-slot small {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* -------------------------------------------------------------------- Felder */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field > label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 10px;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox input {
+  width: auto;
+}
+
+.color-input {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Farbfeld schmal halten — sonst frisst es durch width:100% die ganze Zeile. */
+.color-input input[type="color"] {
+  flex: none;
+  width: 44px;
+}
+
+.color-input input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+/* Einzeln stehende Farbfelder (ohne Textfeld daneben) ebenfalls begrenzen. */
+.field > input[type="color"] {
+  width: 100%;
+  max-width: 120px;
+}
+
+.help {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.saved-hint {
+  color: var(--ok);
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------- Hintergründe */
+
+.background-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.preset {
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  place-items: end center;
+  padding-bottom: 3px;
+  overflow: hidden;
+}
+
+.preset span {
+  font-size: 9px;
+  color: #ffffffcc;
+  text-shadow: 0 1px 2px #000;
+  white-space: nowrap;
+}
+
+.preset:hover {
+  border-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------- Modals */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #000000bb;
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  padding: 24px;
+}
+
+.modal {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 100%;
+  min-height: 0;
+  box-shadow: 0 24px 60px #000000aa;
+}
+
+/* Nur der Inhalt scrollt — Kopf- und Fußzeile bleiben stehen. */
+.modal-body {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modal-head h2 {
+  font-size: 15px;
+}
+
+.icon-picker-controls {
+  display: grid;
+  grid-template-columns: 200px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.uploads-grid {
+  max-height: 140px;
+}
+
+.icon-cell {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  background: #0b0b0e;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.icon-cell:hover {
+  border-color: var(--accent);
+  background: #14141a;
+}
+
+.icon-cell.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #3b82f644;
+}
+
+.icon-cell img,
+.icon-cell > span[role="img"] {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dropzone {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 14px;
+  text-align: center;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.dropzone:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------- Plugins & Settings */
+
+.page-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+.plugin-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.plugin-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  /* Die Plugin-Farbe sitzt als Streifen an der Kante, statt als Punkt
+     neben dem Namen — dort wäre sie mit einer Statusanzeige verwechselbar. */
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plugin-card.disabled {
+  opacity: 0.55;
+}
+
+.plugin-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.plugin-title {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-title small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.plugin-description {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.plugin-config {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.plugin-config summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.plugin-config > *:not(summary) {
+  margin-bottom: 10px;
+}
+
+.discord-connect {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.switch {
+  position: relative;
+  width: 38px;
+  height: 21px;
+  flex: none;
+}
+
+.switch input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #34343d;
+  transition: background 0.15s ease;
+  pointer-events: none;
+}
+
+.switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #d4d4dc;
+  transition: transform 0.15s ease;
+}
+
+.switch input:checked + span {
+  background: var(--accent);
+}
+
+.switch input:checked + span::after {
+  transform: translateX(17px);
+}
+
+.settings-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 620px;
+}
+
+/* --------------------------------------------------------------- Scrollbars */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2f2f38;
+  border-radius: 999px;
+  border: 2px solid var(--bg-raised);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #40404c;
+}
+
+/* Zähler für einen wiederholt aufgetretenen Fehler. */
+.error-repeat {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #ffffff1a;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Griff zum Umsortieren der Plugin-Karten. Bewusst klein und nur dort
+   ziehbar — die Karte selbst enthält Schalter, die man nicht versehentlich
+   verschieben können soll. */
+.drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  user-select: none;
+  flex: none;
+}
+
+.drag-handle:hover {
+  color: var(--text);
+  background: #ffffff10;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.plugin-slot {
+  display: flex;
+  border-radius: var(--radius);
+}
+
+.plugin-slot > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-slot.drop {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------- Plugin-Installation */
+
+.installer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 720px;
+  margin-top: 8px;
+}
+
+.dropzone.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* Anfrage über streamdeck://. Bewusst auffällig: Hier wird gleich fremder
+   Programmcode installiert, die Herkunft muss man sehen. */
+.install-request {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: #2a2410;
+  border-bottom: 1px solid #a16207;
+}
+
+.install-request-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.install-request-text code {
+  font-size: 11px;
+  color: #d4d4d8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.install-request-text small {
+  color: #fcd34d;
+  font-size: 11px;
+}
+
+.install-origin {
+  font-size: 13px;
+  color: #fde68a;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------ Kontextmenü */
+
+.context-menu {
+  position: fixed;
+  /* Über den Modals, damit ein Menü auch dort nicht verdeckt wird. */
+  z-index: 60;
+  min-width: 168px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 40px #000000aa;
+}
+
+.context-menu button {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.context-menu button:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.context-menu button:disabled {
+  color: var(--text-dim);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.context-menu button.danger:hover:not(:disabled) {
+  background: var(--danger);
+}
+
+.context-menu button.separated {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  /* Der Rahmen sitzt am Button, das Padding schafft die Luft darüber. */
+  padding-top: 11px;
+}
+
+/* ------------------------------------------------ Bildschirmschoner */
+
+.screensaver-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.screensaver-preview img {
+  width: 100%;
+  max-width: 420px;
+  /* Das Vorschaubild hat die Proportionen des Decks — nicht verzerren. */
+  height: auto;
+  display: block;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: #000;
+}
+
+.wallpaper-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wallpaper-preview img {
+  width: 100%;
+  /* Der Streifen ist 8:1 — in dem Verhältnis auch anzeigen. */
+  aspect-ratio: 8 / 1;
+  object-fit: contain;
+  display: block;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #000;
+}
+
+/* ------------------------------------------------- Plugin-Symbole */
+
+.plugin-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 8px;
+  display: block;
+  object-fit: cover;
+  background: var(--bg-sunken);
+}
+
+.plugin-icon.placeholder {
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  /* Der Buchstabe steht auf der Akzentfarbe — die kann hell sein. */
+  text-shadow: 0 1px 2px #0006;
+}
+
+/* ------------------------------------------------------ Wortmarke */
+
+.wordmark {
+  font-weight: 700;
+  /* Gesperrt gesetzt — Versalien brauchen mehr Luft, sonst kleben sie. */
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.wordmark-slash {
+  color: var(--accent);
+  /* Die Schrägstriche etwas enger und leicht dünner: Sie sind Trennzeichen,
+     nicht Teil der Wörter, und sollen nicht mit ihnen um Gewicht ringen. */
+  letter-spacing: -0.04em;
+  font-weight: 600;
+  padding: 0 0.04em;
+}
+
+/* Im Startbildschirm groß und ruhig. */
+.boot-card .wordmark {
+  font-size: 26px;
+  letter-spacing: 0.08em;
+}

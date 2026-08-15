@@ -1,0 +1,24 @@
+# Rust-Anteil bleibt bewusst minimal: nur die Fenster-Shell. Die Fachlogik
+# steckt im Python-Backend, die Oberfläche im React-Frontend.
+[package]
+name = "deckswitch"
+version = "0.1.0"
+description = "Steuerung für das Elgato Stream Deck+"
+authors = ["Heiko Stuhrmann"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "deckswitch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-log = "2"

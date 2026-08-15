@@ -1,0 +1,17 @@
+# udev-Regeln für Elgato Stream Deck (Vendor 0fd9)
+#
+# Ohne diese Regel gehört der HID-Knoten root:root 0600, das Backend könnte
+# das Gerät also nur als root öffnen.
+#
+# TAG+="uaccess" übergibt den Zugriff per systemd-logind an den aktuell lokal
+# eingeloggten User (ACL statt weltweit lesbarem 0666) — der saubere Weg auf
+# einem Single-User-Desktop wie CachyOS/KDE.
+#
+# Installation:
+#   sudo install -m 644 packaging/70-streamdeck.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger --subsystem-match=usb --subsystem-match=hidraw
+# Danach das Gerät einmal ab- und wieder anstecken (oder neu einloggen).
+
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0fd9", TAG+="uaccess"

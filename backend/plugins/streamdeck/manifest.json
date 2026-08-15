@@ -1,0 +1,266 @@
+{
+  "id": "streamdeck",
+  "name": "Streamdeck",
+  "version": "1.0.0",
+  "type": "action",
+  "entry": "plugin.py",
+  "class": "StreamdeckPlugin",
+  "accent": "#64748b",
+  "description": {
+    "de": "Seiten und Ordner: navigieren zwischen mehreren Belegungen.",
+    "en": "Pages and folders: navigate between multiple layouts."
+  },
+  "actions": [
+    {
+      "id": "folder",
+      "name": {
+        "de": "Ordner",
+        "en": "Folder"
+      },
+      "description": {
+        "de": "Springt in eine untergeordnete Seite mit eigener Belegung.",
+        "en": "Jumps into a sub page with its own layout."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "folder",
+      "settings_schema": [
+        {
+          "key": "page_id",
+          "type": "select",
+          "label": {
+            "de": "Zielseite",
+            "en": "Target page"
+          },
+          "options_source": "pages",
+          "help": {
+            "de": "Wird beim Anlegen automatisch als Unterseite erstellt.",
+            "en": "Created automatically as a sub page."
+          }
+        }
+      ]
+    },
+    {
+      "id": "home",
+      "name": {
+        "de": "Home",
+        "en": "Home"
+      },
+      "description": {
+        "de": "Zurück zur Startseite.",
+        "en": "Back to the root page."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "home",
+      "default_label": {
+        "de": "Home",
+        "en": "Home"
+      },
+      "settings_schema": []
+    },
+    {
+      "id": "back",
+      "name": {
+        "de": "Zurück",
+        "en": "Back"
+      },
+      "description": {
+        "de": "Eine Ebene nach oben.",
+        "en": "One level up."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "arrow-back-up",
+      "default_label": {
+        "de": "Zurück",
+        "en": "Back"
+      },
+      "settings_schema": []
+    },
+    {
+      "id": "page_number",
+      "name": {
+        "de": "Seitenanzeige",
+        "en": "Page indicator"
+      },
+      "description": {
+        "de": "Zeigt die aktuelle Seitennummer an.",
+        "en": "Shows the current page number."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "file-description",
+      "settings_schema": [
+        {
+          "key": "format",
+          "type": "select",
+          "label": {
+            "de": "Anzeige",
+            "en": "Display"
+          },
+          "default": "number_of_total",
+          "options": [
+            {
+              "value": "number",
+              "label": {
+                "de": "Nur Nummer",
+                "en": "Number only"
+              }
+            },
+            {
+              "value": "number_of_total",
+              "label": {
+                "de": "Nummer / Gesamt",
+                "en": "Number / total"
+              }
+            },
+            {
+              "value": "name",
+              "label": {
+                "de": "Seitenname",
+                "en": "Page name"
+              }
+            }
+          ]
+        },
+        {
+          "key": "text_size",
+          "type": "number",
+          "label": {
+            "de": "Textgröße",
+            "en": "Text size"
+          },
+          "default": 40,
+          "min": 10,
+          "max": 80
+        },
+        {
+          "key": "show_icon",
+          "type": "bool",
+          "label": {
+            "de": "Icon zusätzlich zeigen",
+            "en": "Also show icon"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "goto_page",
+      "name": {
+        "de": "Gehe zu Seite",
+        "en": "Go to page"
+      },
+      "description": {
+        "de": "Springt direkt zu einer bestimmten Seite.",
+        "en": "Jumps directly to a specific page."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "arrow-right",
+      "settings_schema": [
+        {
+          "key": "page_id",
+          "type": "select",
+          "label": {
+            "de": "Zielseite",
+            "en": "Target page"
+          },
+          "options_source": "pages"
+        }
+      ]
+    },
+    {
+      "id": "next_page",
+      "name": {
+        "de": "Nächste Seite",
+        "en": "Next page"
+      },
+      "description": {
+        "de": "Blättert zur nächsten Seite derselben Ebene.",
+        "en": "Goes to the next page on the same level."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "chevron-right",
+      "settings_schema": [
+        {
+          "key": "wrap",
+          "type": "bool",
+          "label": {
+            "de": "Am Ende umbrechen",
+            "en": "Wrap around"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "prev_page",
+      "name": {
+        "de": "Vorherige Seite",
+        "en": "Previous page"
+      },
+      "description": {
+        "de": "Blättert zur vorherigen Seite derselben Ebene.",
+        "en": "Goes to the previous page on the same level."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "chevron-left",
+      "settings_schema": [
+        {
+          "key": "wrap",
+          "type": "bool",
+          "label": {
+            "de": "Am Anfang umbrechen",
+            "en": "Wrap around"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "brightness",
+      "name": {
+        "de": "Helligkeit",
+        "en": "Brightness"
+      },
+      "description": {
+        "de": "Stellt die Helligkeit der Displays ein.",
+        "en": "Adjusts display brightness."
+      },
+      "inputs": [
+        "dial",
+        "key"
+      ],
+      "default_icon": "sun",
+      "settings_schema": [
+        {
+          "key": "step",
+          "type": "number",
+          "label": {
+            "de": "Schrittweite (%)",
+            "en": "Step size (%)"
+          },
+          "default": 5,
+          "min": 1,
+          "max": 25
+        }
+      ]
+    }
+  ],
+  "icon": "icon.png"
+}

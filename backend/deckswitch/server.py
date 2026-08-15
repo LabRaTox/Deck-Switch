@@ -1,0 +1,974 @@
+"""Lokaler HTTP-/WebSocket-Server als Brücke zur GUI.
+
+Bindet ausschließlich an ``127.0.0.1``. Änderungen aus der GUI landen direkt
+in der laufenden Runtime — kein „speichern und Backend neu starten“.
+
+Über den WebSocket gehen Ereignisse in die Gegenrichtung: Geräteverbindung,
+Seitenwechsel, Plugin-Fehler, Zustandsänderungen von außen.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import io
+import json
+import logging
+import mimetypes
+import re
+import subprocess
+import uuid
+from pathlib import Path
+from typing import Any
+
+from fastapi import (
+    Body,
+    FastAPI,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ValidationError
+
+from . import events as ev
+from . import paths
+from .config import Config, Page, Slot
+from .plugins import installer
+from .runtime import Runtime
+from .services import autostart, backgrounds, screensaver
+
+log = logging.getLogger(__name__)
+
+#: Bildformate, die ein Plugin als Symbol mitbringen darf.
+PLUGIN_ICON_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+
+#: Dateiendungen, die als Bildschirmschoner infrage kommen.
+SCREENSAVER_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+
+MAX_UPLOAD_BYTES = 4 * 1024 * 1024
+SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+class SlotPayload(BaseModel):
+    slot: Slot | None = None
+
+
+class PageCreate(BaseModel):
+    name: str = "Neue Seite"
+    parent_id: str | None = None
+
+
+class PageUpdate(BaseModel):
+    name: str | None = None
+    parent_id: str | None = None
+
+
+class PageMove(BaseModel):
+    """Neue Position einer Seite: Elternteil + Index unter den Geschwistern.
+
+    Beides wird immer mitgeschickt — Umsortieren innerhalb des gleichen
+    Elternteils ist schlicht ein Move mit unverändertem ``parent_id``.
+    """
+
+    parent_id: str | None = None
+    index: int = 0
+
+
+def _allowed_origins(host: str, port: int) -> set[str]:
+    """Herkünfte, denen der Server trauen darf.
+
+    Der Server bindet nur an 127.0.0.1, aber das schützt nicht vor dem
+    Browser: Jede offene Webseite läuft auf demselben Rechner und könnte
+    sonst im Hintergrund mit dem Deck reden. Deshalb eine feste Liste statt
+    ``*`` — die eigene GUI, der Vite-Dev-Server und das Tauri-Fenster.
+    """
+    hosts = {host, "127.0.0.1", "localhost"}
+    origins = {f"http://{h}:{port}" for h in hosts}
+    # Vite im Entwicklungsmodus.
+    for dev_port in (5173, 5174, 4173):
+        origins |= {f"http://{h}:{dev_port}" for h in ("localhost", "127.0.0.1")}
+    # Das Tauri-Fenster meldet sich je nach Plattform unterschiedlich.
+    origins |= {"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"}
+    return origins
+
+
+#: HTTP-Methoden, die etwas verändern — nur die brauchen den Origin-Riegel.
+_UNSAFE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+
+
+def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -> FastAPI:
+    app = FastAPI(title="DECK//SWITCH", version="0.1.0", docs_url="/api/docs")
+    allowed_origins = _allowed_origins(host, port)
+
+    # CORS auf die bekannten Herkünfte einschränken. Damit blockt der Browser
+    # das *Lesen* fremder Antworten und lässt vorab geprüfte Anfragen (JSON,
+    # also alles, was die GUI schickt) gar nicht erst durch.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(allowed_origins),
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.middleware("http")
+    async def _origin_guard(request, call_next):
+        """Zweiter Riegel gegen fremde Webseiten.
+
+        CORS schützt nur, was der Browser *vorab prüft*. Eine „einfache"
+        Anfrage (Formular-POST, GET) geht ohne Vorabprüfung raus, und der
+        Browser blockt danach nur das Lesen der Antwort — die Aktion wäre
+        aber schon passiert. Deshalb: Trägt eine verändernde Anfrage einen
+        fremden ``Origin``, wird sie hier abgewiesen, bevor sie etwas tut.
+
+        Ohne ``Origin`` (Kommandozeile, gleiche Herkunft) bleibt alles frei —
+        der Schutz richtet sich gegen den Browser, nicht gegen den Nutzer.
+        """
+        if request.method in _UNSAFE_METHODS:
+            origin = request.headers.get("origin")
+            if origin is not None and origin not in allowed_origins:
+                return JSONResponse(
+                    {"detail": "Zugriff von einer fremden Herkunft abgelehnt"},
+                    status_code=403,
+                )
+        return await call_next(request)
+
+    # ======================================================================
+    # Zustand
+    # ======================================================================
+
+    @app.get("/api/state")
+    async def get_state() -> dict[str, Any]:
+        return {
+            "device": runtime.device.info.as_dict(),
+            "config": runtime.config.model_dump(mode="json"),
+            "current_page_id": runtime.current_page_id(),
+            "plugins": _plugins_payload(runtime),
+            "errors": runtime.errors[-50:],
+            "backgrounds": backgrounds.PRESETS,
+        }
+
+    @app.get("/api/device")
+    async def get_device() -> dict[str, Any]:
+        return runtime.device.info.as_dict()
+
+    @app.post("/api/device/brightness")
+    async def set_brightness(value: int = Body(..., embed=True)) -> dict[str, Any]:
+        runtime.config.device.brightness = max(0, min(100, value))
+        runtime.device.set_brightness(runtime.config.device.brightness)
+        runtime.save_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="brightness")
+        return {"brightness": runtime.config.device.brightness}
+
+    @app.post("/api/device/reconnect")
+    async def reconnect() -> dict[str, Any]:
+        runtime.device.close()
+        return {"ok": True}
+
+    # ======================================================================
+    # Config
+    # ======================================================================
+
+    @app.get("/api/config")
+    async def get_config() -> dict[str, Any]:
+        return runtime.config.model_dump(mode="json")
+
+    @app.put("/api/config")
+    async def put_config(payload: dict = Body(...)) -> dict[str, Any]:
+        try:
+            config = Config.model_validate(payload)
+        except ValidationError as exc:
+            raise HTTPException(422, f"Config ungültig: {exc}") from exc
+        runtime.apply_config(config)
+        return config.model_dump(mode="json")
+
+    # ======================================================================
+    # Bildschirmschoner
+    # ======================================================================
+
+    @app.get("/api/screensavers")
+    async def list_screensavers() -> list[dict[str, Any]]:
+        """Alles, was sich als Schoner einstellen lässt.
+
+        Hochgeladene Bilder und Schoner-Plugins in einer Liste — die GUI
+        soll dafür nicht zwei Quellen zusammenfügen müssen.
+        """
+        entries: list[dict[str, Any]] = []
+
+        for loaded in runtime.registry.screensavers:
+            # ``instance`` fehlt, wenn das Plugin beim Laden gescheitert ist.
+            # So eines anzubieten hieße, den Fehler erst beim Auswählen zu
+            # zeigen — und dann als leeres Deck statt als Meldung.
+            if not loaded.enabled or loaded.instance is None:
+                continue
+            entries.append(
+                {
+                    "source": f"plugin:{loaded.id}",
+                    "kind": "plugin",
+                    "name": loaded.manifest.name,
+                    "description": loaded.manifest.description,
+                    "animated": getattr(loaded.instance, "interval_s", 0) > 0,
+                    "preview_url": f"/api/screensavers/preview?source=plugin:{loaded.id}",
+                }
+            )
+
+        if paths.UPLOADS_DIR.is_dir():
+            for path in sorted(paths.UPLOADS_DIR.iterdir()):
+                if path.suffix.lower() not in SCREENSAVER_SUFFIXES:
+                    continue
+                entries.append(
+                    {
+                        "source": f"upload:{path.name}",
+                        "kind": "upload",
+                        "name": path.stem,
+                        "description": "",
+                        "animated": path.suffix.lower() == ".gif",
+                        "preview_url": f"/api/uploads/{path.name}",
+                    }
+                )
+        return entries
+
+    @app.get("/api/screensavers/preview")
+    def screensaver_preview(source: str) -> Response:
+        """Zeigt, wie der Schoner auf dem Deck aussieht — inklusive Fugen."""
+        deck = screensaver.layout(
+            runtime.device.info.key_size,
+            runtime.device.info.key_count or 8,
+            runtime.device.info.touchscreen_size,
+        )
+        try:
+            image = runtime.screensaver_preview(source, deck)
+        except Exception as exc:
+            raise HTTPException(404, f"Schoner nicht darstellbar: {exc}") from exc
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return Response(buffer.getvalue(), media_type="image/png")
+
+    @app.post("/api/screensavers/test")
+    async def test_screensaver() -> dict[str, Any]:
+        """Zeigt den eingestellten Schoner sofort — zum Ausprobieren."""
+        if not runtime.config.device.screensaver.source:
+            raise HTTPException(400, "Kein Bildschirmschoner eingestellt")
+        runtime.start_screensaver_now()
+        return {"ok": True}
+
+    # ======================================================================
+    # Touchstrip-Hintergrundbild
+    # ======================================================================
+
+    @app.get("/api/wallpapers")
+    async def list_wallpapers() -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = [
+            {
+                "source": f"plugin:{loaded.id}",
+                "kind": "plugin",
+                "name": loaded.manifest.name,
+                "description": loaded.manifest.description,
+                "preview_url": f"/api/wallpapers/preview?source=plugin:{loaded.id}",
+            }
+            for loaded in runtime.registry.wallpapers
+            if loaded.enabled and loaded.instance is not None
+        ]
+
+        if paths.WALLPAPERS_DIR.is_dir():
+            for path in sorted(paths.WALLPAPERS_DIR.iterdir()):
+                if path.suffix.lower() not in SCREENSAVER_SUFFIXES:
+                    continue
+                entries.append(
+                    {
+                        "source": f"upload:{path.name}",
+                        "kind": "upload",
+                        "name": path.stem,
+                        "description": "",
+                        "preview_url": (
+                            f"/api/wallpapers/preview?source=upload:{path.name}"
+                        ),
+                    }
+                )
+        return entries
+
+    @app.get("/api/wallpapers/preview")
+    def wallpaper_preview(source: str, fit: str = "cover", opacity: int = 100) -> Response:
+        """Der Streifen, wie er auf dem Gerät ankommt — mit Segmentgrenzen.
+
+        Einpassung und Deckkraft kommen als Parameter statt aus der Config:
+        So lässt sich die Wirkung ausprobieren, bevor man sie speichert.
+        """
+        try:
+            image = runtime.wallpaper_preview(source, fit=fit, opacity=opacity)
+        except Exception as exc:
+            raise HTTPException(404, f"Hintergrundbild nicht darstellbar: {exc}") from exc
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return Response(buffer.getvalue(), media_type="image/png")
+
+    # ======================================================================
+    # Autostart
+    # ======================================================================
+
+    # Bewusst synchron: ``systemctl`` ist ein Unterprozess. In einer
+    # ``async``-Route würde er den Event-Loop blockieren und damit auch den
+    # WebSocket, über den das Deck seine Ereignisse meldet. So gibt FastAPI
+    # die Route in den Threadpool.
+
+    @app.get("/api/autostart")
+    def get_autostart() -> dict[str, Any]:
+        return autostart.status().as_dict()
+
+    @app.post("/api/autostart")
+    def set_autostart(payload: dict = Body(...)) -> dict[str, Any]:
+        try:
+            return autostart.set_enabled(bool(payload.get("enabled"))).as_dict()
+        except autostart.AutostartUnavailable as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except (autostart.AutostartError, OSError, subprocess.SubprocessError) as exc:
+            raise HTTPException(500, f"Autostart nicht schaltbar: {exc}") from exc
+
+    @app.get("/api/export")
+    async def export_config() -> Response:
+        return Response(
+            runtime.store.export_json(),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": 'attachment; filename="streamdeck-config.json"'
+            },
+        )
+
+    @app.post("/api/import")
+    async def import_config(
+        payload: dict = Body(...), merge_profiles: bool = False
+    ) -> dict[str, Any]:
+        try:
+            config = runtime.store.import_json(
+                json.dumps(payload), merge_profiles=merge_profiles
+            )
+        except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(422, f"Import fehlgeschlagen: {exc}") from exc
+        runtime.apply_config(config, save=False)
+        return config.model_dump(mode="json")
+
+    # ======================================================================
+    # Seiten
+    # ======================================================================
+
+    @app.get("/api/pages")
+    async def list_pages() -> dict[str, Any]:
+        profile = runtime.config.active_profile()
+        return {
+            "root_page_id": profile.root_page_id,
+            "current_page_id": runtime.current_page_id(),
+            "pages": {pid: page.model_dump(mode="json") for pid, page in profile.pages.items()},
+        }
+
+    @app.post("/api/pages")
+    async def create_page(payload: PageCreate) -> dict[str, Any]:
+        profile = runtime.config.active_profile()
+        parent_id = payload.parent_id
+        if parent_id is not None and parent_id not in profile.pages:
+            raise HTTPException(404, "Übergeordnete Seite existiert nicht")
+        page = Page(
+            name=payload.name,
+            parent_id=parent_id,
+            # Neue Seiten hinten anhängen, statt vor bestehende zu springen.
+            order=len(profile.children(parent_id)),
+        )
+        profile.pages[page.id] = page
+        runtime.save_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="page_created", page_id=page.id)
+        return page.model_dump(mode="json")
+
+    @app.patch("/api/pages/{page_id}")
+    async def update_page(page_id: str, payload: PageUpdate) -> dict[str, Any]:
+        profile = runtime.config.active_profile()
+        page = profile.pages.get(page_id)
+        if page is None:
+            raise HTTPException(404, "Seite nicht gefunden")
+        if payload.name is not None:
+            page.name = payload.name
+        if payload.parent_id is not None:
+            new_parent = payload.parent_id or None
+            _check_move_target(profile, page_id, new_parent)
+            # Ans Ende des neuen Elternteils — eine sinnvollere Position kennt
+            # ein reines Umhängen nicht; die gibt es über /move.
+            profile.move_page(page_id, new_parent, len(profile.children(new_parent)))
+        runtime.save_config()
+        runtime.request_redraw()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="page_updated", page_id=page_id)
+        return page.model_dump(mode="json")
+
+    @app.post("/api/pages/{page_id}/move")
+    async def move_page(page_id: str, payload: PageMove) -> dict[str, Any]:
+        """Sortiert eine Seite um und/oder hängt sie an ein anderes Elternteil."""
+        profile = runtime.config.active_profile()
+        if page_id not in profile.pages:
+            raise HTTPException(404, "Seite nicht gefunden")
+        if page_id == profile.root_page_id and payload.parent_id is not None:
+            raise HTTPException(400, "Die Startseite kann keine Unterseite werden")
+        _check_move_target(profile, page_id, payload.parent_id)
+
+        profile.move_page(page_id, payload.parent_id, payload.index)
+        runtime.save_config()
+        runtime.request_redraw()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="page_moved", page_id=page_id)
+        return {
+            "pages": {pid: p.model_dump(mode="json") for pid, p in profile.pages.items()}
+        }
+
+    @app.delete("/api/pages/{page_id}")
+    async def delete_page(page_id: str) -> dict[str, Any]:
+        profile = runtime.config.active_profile()
+        if page_id == profile.root_page_id:
+            raise HTTPException(400, "Die Startseite kann nicht gelöscht werden")
+        if page_id not in profile.pages:
+            raise HTTPException(404, "Seite nicht gefunden")
+
+        # Unterseiten mitnehmen — sonst blieben unerreichbare Waisen zurück.
+        parent_id = profile.pages[page_id].parent_id
+        removed = profile.subtree_ids(page_id)
+        for pid in removed:
+            profile.pages.pop(pid, None)
+        _drop_references(profile, removed)
+        profile.reindex(parent_id)
+
+        if runtime.current_page_id() in removed:
+            runtime.navigate(profile.root_page_id)
+        runtime.save_config()
+        runtime.request_redraw()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="page_deleted", page_id=page_id)
+        return {"deleted": sorted(removed)}
+
+    @app.post("/api/navigate/{page_id}")
+    async def navigate(page_id: str) -> dict[str, Any]:
+        profile = runtime.config.active_profile()
+        if page_id not in profile.pages:
+            raise HTTPException(404, "Seite nicht gefunden")
+        runtime.navigate(page_id)
+        return {"current_page_id": runtime.current_page_id()}
+
+    # ======================================================================
+    # Belegungen
+    # ======================================================================
+
+    @app.put("/api/pages/{page_id}/slots/{input_type}/{index}")
+    async def put_slot(
+        page_id: str, input_type: str, index: int, payload: SlotPayload
+    ) -> dict[str, Any]:
+        page = _require_page(runtime, page_id)
+        mapping = _require_mapping(page, input_type)
+        _check_index(runtime, input_type, index)
+
+        if payload.slot is None:
+            mapping.pop(index, None)
+        else:
+            if runtime.registry.get(payload.slot.plugin_id) is None:
+                raise HTTPException(404, f"Plugin '{payload.slot.plugin_id}' nicht gefunden")
+            mapping[index] = payload.slot
+
+        runtime.save_config()
+        runtime._contexts.pop(f"{page_id}:{input_type}:{index}", None)
+        if page_id == runtime.current_page_id():
+            runtime._mark_dirty((input_type, index))
+        runtime.bus.publish(
+            ev.EVT_CONFIG_CHANGED,
+            reason="slot_changed",
+            page_id=page_id,
+            input_type=input_type,
+            index=index,
+        )
+        return {"ok": True}
+
+    @app.delete("/api/pages/{page_id}/slots/{input_type}/{index}")
+    async def delete_slot(page_id: str, input_type: str, index: int) -> dict[str, Any]:
+        return await put_slot(page_id, input_type, index, SlotPayload(slot=None))
+
+    @app.post("/api/pages/{page_id}/slots/{input_type}/{index}/trigger")
+    async def trigger_slot(page_id: str, input_type: str, index: int) -> dict[str, Any]:
+        """Belegung aus der GUI auslösen — zum Ausprobieren ohne Gerät."""
+        if page_id != runtime.current_page_id():
+            runtime.navigate(page_id)
+        if input_type == "key":
+            await runtime._handle_key(index, True)
+            await runtime._handle_key(index, False)
+        else:
+            await runtime._handle_dial_push(index, True)
+        return {"ok": True}
+
+    # ======================================================================
+    # Plugins
+    # ======================================================================
+
+    @app.get("/api/plugins")
+    async def list_plugins() -> list[dict[str, Any]]:
+        return _plugins_payload(runtime)
+
+    @app.post("/api/plugins/{plugin_id}/options/{source}")
+    async def plugin_options(
+        plugin_id: str, source: str, context: dict = Body(default={})
+    ) -> list[dict[str, Any]]:
+        """Auswahlliste eines Feldes.
+
+        ``context`` sind die bereits gesetzten Einstellungen der Belegung —
+        damit kann ein Plugin abhängige Listen liefern (die Filter *dieser*
+        Quelle, die Quellen *dieser* Szene).
+        """
+        plugin = runtime.registry.instance(plugin_id)
+        if plugin is None:
+            raise HTTPException(404, "Plugin nicht geladen")
+        try:
+            return await runtime._call_hook(
+                plugin.get_dynamic_options, source, context or {}
+            )
+        except Exception as exc:
+            raise HTTPException(500, f"Optionen nicht abrufbar: {exc}") from exc
+
+    @app.get("/api/plugins/{plugin_id}/icon")
+    async def plugin_icon(plugin_id: str) -> Response:
+        """Das Bild, das ein Plugin in der Übersicht vertritt."""
+        loaded = runtime.registry.get(plugin_id)
+        if loaded is None or not loaded.manifest.icon:
+            raise HTTPException(404, "Kein Symbol hinterlegt")
+
+        # Der Dateiname kommt aus einem fremden Manifest — er darf auf
+        # nichts außerhalb des Plugin-Ordners zeigen.
+        directory = loaded.directory.resolve()
+        candidate = (directory / loaded.manifest.icon).resolve()
+        if directory not in candidate.parents or not candidate.is_file():
+            raise HTTPException(404, "Symboldatei nicht gefunden")
+        if candidate.suffix.lower() not in PLUGIN_ICON_SUFFIXES:
+            raise HTTPException(415, f"Nicht unterstützt: {candidate.suffix}")
+
+        media = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+        # Wie beim Upload: Ein Plugin-Symbol kommt aus fremder Hand und darf
+        # bei direktem Aufruf kein Skript ausführen.
+        headers = {"X-Content-Type-Options": "nosniff"}
+        if candidate.suffix.lower() == ".svg":
+            headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        return FileResponse(candidate, media_type=media, headers=headers)
+
+    @app.put("/api/plugins/{plugin_id}/config")
+    async def put_plugin_config(plugin_id: str, payload: dict = Body(...)) -> dict[str, Any]:
+        if runtime.registry.get(plugin_id) is None:
+            raise HTTPException(404, "Plugin nicht gefunden")
+        runtime.config.plugin_settings[plugin_id] = payload
+        runtime.save_config()
+        runtime.notify_plugin_config_changed(plugin_id)
+        runtime.request_redraw()
+        return payload
+
+    @app.post("/api/plugins/{plugin_id}/command/{command}")
+    async def plugin_command(
+        plugin_id: str, command: str, payload: dict = Body(default={})
+    ) -> dict[str, Any]:
+        plugin = runtime.registry.instance(plugin_id)
+        if plugin is None:
+            raise HTTPException(404, "Plugin nicht geladen")
+        # Discords „Jetzt verbinden“ öffnet einen Dialog im Client — großzügig
+        # bemessener Timeout, damit der User Zeit zum Bestätigen hat.
+        try:
+            result = await asyncio.wait_for(
+                plugin.gui_command(command, payload), timeout=60
+            )
+        except NotImplementedError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except asyncio.TimeoutError as exc:
+            raise HTTPException(504, "Zeitüberschreitung") from exc
+        except Exception as exc:
+            raise HTTPException(500, f"{type(exc).__name__}: {exc}") from exc
+        return result if isinstance(result, dict) else {"result": result}
+
+    @app.post("/api/plugins/{plugin_id}/enabled")
+    async def set_plugin_enabled(
+        plugin_id: str, enabled: bool = Body(..., embed=True)
+    ) -> dict[str, Any]:
+        loaded = runtime.registry.get(plugin_id)
+        if loaded is None:
+            raise HTTPException(404, "Plugin nicht gefunden")
+        disabled = set(runtime.config.disabled_plugins)
+        disabled.discard(plugin_id) if enabled else disabled.add(plugin_id)
+        runtime.config.disabled_plugins = sorted(disabled)
+        runtime.save_config()
+        await runtime.reload_plugins()
+        return {"plugin_id": plugin_id, "enabled": enabled}
+
+    @app.post("/api/plugins/reload")
+    async def reload_plugins() -> dict[str, Any]:
+        await runtime.reload_plugins()
+        return {"plugins": _plugins_payload(runtime)}
+
+    # -- Installieren und Entfernen ----------------------------------------
+
+    @app.post("/api/plugins/install-url")
+    async def install_from_url(url: str = Body(..., embed=True)) -> dict[str, Any]:
+        """Lädt ein Plugin-Archiv von einer Adresse und installiert es."""
+        try:
+            manifest = await asyncio.get_running_loop().run_in_executor(
+                None, installer.install_url, url
+            )
+        except installer.InstallError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        await runtime.reload_plugins()
+        return {"installed": manifest.id, "version": manifest.version}
+
+    # -- Anfragen über streamdeck:// ---------------------------------------
+
+    @app.post("/api/plugins/install-request")
+    async def request_install(
+        url: str = Body(..., embed=True), origin: str = Body("", embed=True)
+    ) -> dict[str, Any]:
+        """Nimmt eine ``streamdeck://``-Anfrage entgegen — ohne zu installieren.
+
+        Ein Klick auf einen Link im Browser darf keinen Code auf den Rechner
+        bringen. Die Anfrage wartet auf Bestätigung in der GUI.
+        """
+        if not url.lower().startswith(("http://", "https://")):
+            raise HTTPException(400, "Nur http(s)-Adressen werden angenommen")
+        request = runtime.add_install_request(url, origin)
+        return request.as_dict()
+
+    @app.get("/api/plugins/install-requests")
+    async def list_install_requests() -> list[dict[str, Any]]:
+        return runtime.pending_install_requests()
+
+    @app.post("/api/plugins/install-requests/{request_id}")
+    async def confirm_install_request(request_id: str) -> dict[str, Any]:
+        request = runtime.take_install_request(request_id)
+        if request is None:
+            raise HTTPException(404, "Anfrage nicht gefunden oder abgelaufen")
+        try:
+            manifest = await asyncio.get_running_loop().run_in_executor(
+                None, installer.install_url, request.url
+            )
+        except installer.InstallError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        await runtime.reload_plugins()
+        return {"installed": manifest.id, "version": manifest.version}
+
+    @app.delete("/api/plugins/install-requests/{request_id}")
+    async def dismiss_install_request(request_id: str) -> dict[str, Any]:
+        runtime.take_install_request(request_id)
+        return {"dismissed": request_id}
+
+    @app.post("/api/plugins/install")
+    async def install_archive(file: UploadFile = File(...)) -> dict[str, Any]:
+        data = await file.read(installer.MAX_ARCHIVE_BYTES + 1)
+        if len(data) > installer.MAX_ARCHIVE_BYTES:
+            raise HTTPException(413, "Archiv zu groß (max. 64 MB)")
+        try:
+            manifest = installer.install_archive(data, filename=file.filename or "")
+        except installer.InstallError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        await runtime.reload_plugins()
+        return {"installed": manifest.id, "version": manifest.version}
+
+    @app.delete("/api/plugins/{plugin_id}")
+    async def uninstall_plugin(plugin_id: str) -> dict[str, Any]:
+        loaded = runtime.registry.get(plugin_id)
+        if loaded is not None and loaded.builtin:
+            raise HTTPException(400, "Eingebaute Plugins lassen sich nicht entfernen")
+        try:
+            installer.uninstall(plugin_id)
+        except installer.InstallError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+        # Belegungen, die auf das entfernte Plugin zeigen, würden sonst als
+        # Fehlerkacheln stehen bleiben.
+        removed = _drop_plugin_slots(runtime, plugin_id)
+        runtime.config.app.plugin_order = [
+            p for p in runtime.config.app.plugin_order if p != plugin_id
+        ]
+        runtime.save_config()
+        await runtime.reload_plugins()
+        return {"uninstalled": plugin_id, "slots_removed": removed}
+
+    @app.put("/api/plugins/order")
+    async def set_plugin_order(order: list[str] = Body(..., embed=True)) -> dict[str, Any]:
+        """Reihenfolge der Plugins in Bibliothek und Plugin-Liste."""
+        known = set(runtime.registry.plugins)
+        unknown = [p for p in order if p not in known]
+        if unknown:
+            raise HTTPException(404, f"Unbekannte Plugins: {', '.join(unknown)}")
+
+        runtime.config.app.plugin_order = list(dict.fromkeys(order))
+        runtime.save_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="plugin_order")
+        return {"order": runtime.config.app.plugin_order}
+
+    # ======================================================================
+    # Icons und Uploads
+    # ======================================================================
+
+    @app.get("/api/icons/sets")
+    async def icon_sets() -> list[dict[str, Any]]:
+        return [
+            {k: v for k, v in entry.items() if k != "icons"}
+            for entry in runtime.icons.list_sets()
+        ]
+
+    @app.get("/api/icons/sets/{set_id}")
+    async def icon_set(set_id: str, query: str = "", limit: int = 500) -> dict[str, Any]:
+        names = runtime.icons.list_icons(set_id)
+        if query:
+            needle = query.lower()
+            names = [n for n in names if needle in n.lower()]
+        return {"set_id": set_id, "total": len(names), "icons": names[:limit]}
+
+    @app.get("/api/icons/svg/{set_id}/{name}")
+    async def icon_svg(set_id: str, name: str) -> Response:
+        source = runtime.icons.icon_svg_source(set_id, name)
+        if source is None:
+            raise HTTPException(404, "Icon nicht gefunden")
+        return Response(source, media_type="image/svg+xml",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+    @app.post("/api/uploads")
+    async def upload(file: UploadFile = File(...), kind: str = "icon") -> dict[str, Any]:
+        """Nimmt ein Bild an. ``kind=wallpaper`` legt es zu den Streifen.
+
+        Die Ablage entscheidet sich beim Hochladen, weil nur dort bekannt
+        ist, wofür das Bild gedacht war — hinterher sieht man es der Datei
+        nicht mehr an.
+        """
+        data = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "Datei zu groß (max. 4 MB)")
+
+        suffix = Path(file.filename or "").suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif"}:
+            raise HTTPException(415, "Nur PNG, JPG, WEBP, GIF oder SVG")
+
+        stem = SAFE_FILENAME.sub("-", Path(file.filename or "icon").stem)[:40] or "icon"
+        filename = f"{stem}-{uuid.uuid4().hex[:8]}{suffix}"
+        target = paths.WALLPAPERS_DIR if kind == "wallpaper" else paths.UPLOADS_DIR
+        target.mkdir(parents=True, exist_ok=True)
+        (target / filename).write_bytes(data)
+        return {"filename": filename, "url": f"/api/uploads/{filename}"}
+
+    @app.get("/api/uploads/{filename}")
+    async def get_upload(filename: str) -> FileResponse:
+        candidate = paths.image_path(filename)
+        if candidate is None:
+            raise HTTPException(404, "Datei nicht gefunden")
+        media_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+
+        # nosniff verhindert, dass der Browser den Typ überstimmt. Ein
+        # hochgeladenes SVG kann <script> enthalten; im <img> läuft das nie,
+        # beim *direkten* Aufruf der URL aber schon. ``sandbox`` schaltet die
+        # Skriptausführung für diesen Fall ab, ohne die Bilddarstellung zu
+        # stören — fremdes SVG bleibt damit ein Bild, kein Programm.
+        headers = {"X-Content-Type-Options": "nosniff"}
+        if candidate.suffix.lower() == ".svg":
+            headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        return FileResponse(candidate, media_type=media_type, headers=headers)
+
+    @app.get("/api/uploads")
+    async def list_uploads() -> list[dict[str, Any]]:
+        """Eigene Bilder für Kacheln — ohne die Touchstrip-Streifen.
+
+        Die liegen in einer eigenen Ablage und werden über ``/api/wallpapers``
+        angeboten; in der Icon- und Hintergrundauswahl wären sie nur Ballast.
+        """
+        if not paths.UPLOADS_DIR.is_dir():
+            return []
+        return [
+            {"filename": p.name, "url": f"/api/uploads/{p.name}", "size": p.stat().st_size}
+            for p in sorted(paths.UPLOADS_DIR.iterdir())
+            if p.is_file()
+        ]
+
+    # ======================================================================
+    # Vorschau — dieselbe Render-Pipeline wie auf dem Gerät
+    # ======================================================================
+
+    @app.get("/api/preview/{page_id}/{input_type}/{index}.png")
+    async def preview(page_id: str, input_type: str, index: int) -> Response:
+        if input_type not in ("key", "dial"):
+            raise HTTPException(400, "input_type muss 'key' oder 'dial' sein")
+        try:
+            image = await runtime.render_preview(page_id, input_type, index)
+        except Exception as exc:
+            raise HTTPException(500, f"Vorschau fehlgeschlagen: {exc}") from exc
+        buffer = io.BytesIO()
+        image.convert("RGBA").save(buffer, format="PNG")
+        return Response(
+            buffer.getvalue(),
+            media_type="image/png",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    # ======================================================================
+    # Fehlerzustände
+    # ======================================================================
+
+    @app.get("/api/errors")
+    async def get_errors() -> list[dict[str, Any]]:
+        return runtime.errors
+
+    @app.delete("/api/errors")
+    async def clear_errors() -> dict[str, Any]:
+        runtime.clear_errors()
+        return {"ok": True}
+
+    # ======================================================================
+    # WebSocket
+    # ======================================================================
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(socket: WebSocket) -> None:
+        await socket.accept()
+        try:
+            await socket.send_json(
+                {
+                    "type": "hello",
+                    "data": {
+                        "device": runtime.device.info.as_dict(),
+                        "current_page_id": runtime.current_page_id(),
+                    },
+                }
+            )
+            async with runtime.bus.subscribe() as queue:
+                while True:
+                    event = await queue.get()
+                    await socket.send_json({"type": event.type, "data": event.data})
+        except WebSocketDisconnect:
+            pass
+        except Exception as exc:
+            log.debug("WebSocket beendet: %s", exc)
+
+    # ======================================================================
+    # Ausgelieferte GUI (falls gebaut)
+    # ======================================================================
+
+    gui_dist = Path(__file__).resolve().parent.parent.parent / "gui" / "dist"
+    if gui_dist.is_dir():
+        app.mount("/", StaticFiles(directory=str(gui_dist), html=True), name="gui")
+    else:
+
+        @app.get("/")
+        async def root() -> JSONResponse:
+            return JSONResponse(
+                {
+                    "name": "DECK//SWITCH",
+                    "hint": "GUI noch nicht gebaut — 'npm run dev' im Ordner gui/",
+                    "api": "/api/docs",
+                }
+            )
+
+    return app
+
+
+# --------------------------------------------------------------------------
+# Hilfen
+# --------------------------------------------------------------------------
+
+
+def _has_icon(loaded) -> bool:
+    if not loaded.manifest.icon:
+        return False
+    directory = loaded.directory.resolve()
+    candidate = (directory / loaded.manifest.icon).resolve()
+    return directory in candidate.parents and candidate.is_file()
+
+
+def _plugins_payload(runtime: Runtime) -> list[dict[str, Any]]:
+    """Plugins in der vom User festgelegten Reihenfolge.
+
+    Was noch nicht in ``plugin_order`` steht (frisch installiert), landet
+    hinten — so verschiebt ein neues Plugin nie die gewohnte Anordnung.
+    """
+    order = runtime.config.app.plugin_order
+    position = {plugin_id: i for i, plugin_id in enumerate(order)}
+    ordered = sorted(
+        runtime.registry.plugins.values(),
+        key=lambda p: (position.get(p.id, len(position)), p.id),
+    )
+
+    result = []
+    for loaded in ordered:
+        result.append(
+            {
+                "id": loaded.id,
+                "manifest": loaded.manifest.model_dump(mode="json", by_alias=True),
+                # Ob die Datei wirklich da ist, weiß nur das Backend — die
+                # GUI soll kein Bild anfragen, das es nicht gibt.
+                "has_icon": _has_icon(loaded),
+                "builtin": loaded.builtin,
+                "enabled": loaded.enabled,
+                "loaded": loaded.instance is not None or loaded.is_iconset,
+                "error": loaded.error,
+                "config": runtime.config.plugin_settings.get(loaded.id, {}),
+                # None bei Plugins ohne externe Verbindung — die GUI zeigt
+                # dann auch keine Statusanzeige.
+                "status": runtime.plugin_status(loaded.id),
+            }
+        )
+    return result
+
+
+def _require_page(runtime: Runtime, page_id: str) -> Page:
+    page = runtime.config.active_profile().pages.get(page_id)
+    if page is None:
+        raise HTTPException(404, "Seite nicht gefunden")
+    return page
+
+
+def _require_mapping(page: Page, input_type: str) -> dict:
+    if input_type == "key":
+        return page.keys
+    if input_type == "dial":
+        return page.dials
+    raise HTTPException(400, "input_type muss 'key' oder 'dial' sein")
+
+
+def _check_index(runtime: Runtime, input_type: str, index: int) -> None:
+    limit = (
+        (runtime.device.info.key_count or 8)
+        if input_type == "key"
+        else (runtime.device.info.dial_count or 4)
+    )
+    if not 0 <= index < limit:
+        raise HTTPException(400, f"Index {index} liegt außerhalb von 0..{limit - 1}")
+
+
+def _check_move_target(profile, page_id: str, parent_id: str | None) -> None:
+    """Verhindert, dass eine Seite unter sich selbst wandert.
+
+    Ohne die Prüfung hinge der ganze Teilbaum in einem Ring und wäre von der
+    Wurzel aus nicht mehr erreichbar — die Seiten blieben in der Config, aber
+    weder GUI-Baum noch Zurück-Taste kämen je wieder dort hin.
+    """
+    if parent_id is None:
+        return
+    if parent_id not in profile.pages:
+        raise HTTPException(404, "Übergeordnete Seite existiert nicht")
+    if parent_id in profile.subtree_ids(page_id):
+        raise HTTPException(400, "Eine Seite kann nicht unter sich selbst liegen")
+
+
+def _drop_plugin_slots(runtime: Runtime, plugin_id: str) -> int:
+    """Entfernt alle Belegungen, die auf ein entferntes Plugin zeigen."""
+    count = 0
+    for profile in runtime.config.profiles.values():
+        for page in profile.pages.values():
+            for mapping in (page.keys, page.dials):
+                for index, slot in list(mapping.items()):
+                    if slot.plugin_id == plugin_id:
+                        mapping.pop(index, None)
+                        count += 1
+                    elif slot.long_press and slot.long_press.plugin_id == plugin_id:
+                        slot.long_press = None
+                        count += 1
+    return count
+
+
+def _drop_references(profile, removed: set[str]) -> None:
+    """Belegungen entfernen, die auf gelöschte Seiten zeigen."""
+    for page in profile.pages.values():
+        for mapping in (page.keys, page.dials):
+            for index, slot in list(mapping.items()):
+                if slot.plugin_id == "streamdeck" and slot.settings.get("page_id") in removed:
+                    mapping.pop(index, None)

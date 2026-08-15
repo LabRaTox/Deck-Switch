@@ -1,0 +1,457 @@
+{
+  "id": "system",
+  "name": {
+    "de": "System",
+    "en": "System"
+  },
+  "version": "1.0.0",
+  "type": "action",
+  "entry": "plugin.py",
+  "class": "SystemPlugin",
+  "accent": "#0ea5e9",
+  "description": {
+    "de": "Programme starten, Dateien und Links öffnen, Systemwerte anzeigen, Monitorhelligkeit regeln.",
+    "en": "Launch programs, open files and links, show system metrics, control display brightness."
+  },
+  "config_schema": [
+    {
+      "key": "temperature_unit",
+      "type": "select",
+      "label": {
+        "de": "Temperatureinheit",
+        "en": "Temperature unit"
+      },
+      "default": "celsius",
+      "options": [
+        {
+          "value": "celsius",
+          "label": {
+            "de": "Celsius (°C)",
+            "en": "Celsius (°C)"
+          }
+        },
+        {
+          "value": "fahrenheit",
+          "label": {
+            "de": "Fahrenheit (°F)",
+            "en": "Fahrenheit (°F)"
+          }
+        }
+      ],
+      "help": {
+        "de": "Gilt für alle Temperaturanzeigen dieses Plugins. Das Wetter-Plugin hat eine eigene Einstellung.",
+        "en": "Applies to every temperature this plugin shows. The weather plugin has its own setting."
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "launch",
+      "name": {
+        "de": "Programm starten",
+        "en": "Launch program"
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "rocket",
+      "settings_schema": [
+        {
+          "key": "command",
+          "type": "text",
+          "label": {
+            "de": "Befehl",
+            "en": "Command"
+          },
+          "placeholder": "obs",
+          "help": {
+            "de": "Wird ohne Shell ausgeführt; Argumente mit Leerzeichen trennen.",
+            "en": "Executed without a shell; separate arguments with spaces."
+          }
+        },
+        {
+          "key": "working_dir",
+          "type": "path",
+          "label": {
+            "de": "Arbeitsverzeichnis",
+            "en": "Working directory"
+          },
+          "default": ""
+        },
+        {
+          "key": "single_instance",
+          "type": "bool",
+          "label": {
+            "de": "Nicht erneut starten, wenn es schon läuft",
+            "en": "Do not start again if already running"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "open_folder",
+      "name": {
+        "de": "Ordner öffnen",
+        "en": "Open folder"
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "folder-open",
+      "settings_schema": [
+        {
+          "key": "path",
+          "type": "path",
+          "label": {
+            "de": "Pfad",
+            "en": "Path"
+          },
+          "placeholder": "~/Videos"
+        }
+      ]
+    },
+    {
+      "id": "open_file",
+      "name": {
+        "de": "Datei öffnen",
+        "en": "Open file"
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "file",
+      "settings_schema": [
+        {
+          "key": "path",
+          "type": "file",
+          "label": {
+            "de": "Datei",
+            "en": "File"
+          }
+        }
+      ]
+    },
+    {
+      "id": "open_url",
+      "name": {
+        "de": "Link öffnen",
+        "en": "Open link"
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "world",
+      "settings_schema": [
+        {
+          "key": "url",
+          "type": "text",
+          "label": "URL",
+          "placeholder": "https://"
+        }
+      ]
+    },
+    {
+      "id": "run_script",
+      "name": {
+        "de": "Shell-Befehl",
+        "en": "Shell command"
+      },
+      "description": {
+        "de": "Führt eine Befehlszeile in der Shell aus.",
+        "en": "Runs a command line in the shell."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "terminal-2",
+      "settings_schema": [
+        {
+          "key": "command",
+          "type": "text",
+          "label": {
+            "de": "Befehlszeile",
+            "en": "Command line"
+          },
+          "placeholder": "notify-send 'Hallo'"
+        },
+        {
+          "key": "shell",
+          "type": "select",
+          "label": "Shell",
+          "default": "fish",
+          "options": [
+            {
+              "value": "fish",
+              "label": "fish"
+            },
+            {
+              "value": "bash",
+              "label": "bash"
+            },
+            {
+              "value": "sh",
+              "label": "sh"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monitor",
+      "name": {
+        "de": "Systemwert",
+        "en": "System monitor"
+      },
+      "description": {
+        "de": "Zeigt CPU, RAM, GPU, Temperaturen oder Netzdurchsatz — auf einem Dial mit Balken.",
+        "en": "Shows CPU, RAM, GPU, temperatures or network throughput — with a bar on a dial."
+      },
+      "inputs": [
+        "dial",
+        "key"
+      ],
+      "default_icon": "activity",
+      "settings_schema": [
+        {
+          "key": "metric",
+          "type": "select",
+          "label": {
+            "de": "Messwert",
+            "en": "Metric"
+          },
+          "default": "cpu",
+          "options": [
+            {
+              "value": "cpu",
+              "label": {
+                "de": "CPU-Auslastung",
+                "en": "CPU usage"
+              }
+            },
+            {
+              "value": "cpu_temp",
+              "label": {
+                "de": "CPU-Temperatur",
+                "en": "CPU temperature"
+              }
+            },
+            {
+              "value": "memory",
+              "label": {
+                "de": "Arbeitsspeicher",
+                "en": "Memory"
+              }
+            },
+            {
+              "value": "swap",
+              "label": {
+                "de": "Auslagerung",
+                "en": "Swap"
+              }
+            },
+            {
+              "value": "gpu",
+              "label": {
+                "de": "GPU-Auslastung",
+                "en": "GPU usage"
+              }
+            },
+            {
+              "value": "gpu_temp",
+              "label": {
+                "de": "GPU-Temperatur",
+                "en": "GPU temperature"
+              }
+            },
+            {
+              "value": "gpu_memory",
+              "label": {
+                "de": "Grafikspeicher",
+                "en": "VRAM"
+              }
+            },
+            {
+              "value": "nvme_temp",
+              "label": {
+                "de": "SSD-Temperatur",
+                "en": "SSD temperature"
+              }
+            },
+            {
+              "value": "disk",
+              "label": {
+                "de": "Speicherplatz",
+                "en": "Disk space"
+              }
+            },
+            {
+              "value": "net_down",
+              "label": {
+                "de": "Netz empfangen",
+                "en": "Network down"
+              }
+            },
+            {
+              "value": "net_up",
+              "label": {
+                "de": "Netz gesendet",
+                "en": "Network up"
+              }
+            }
+          ],
+          "help": {
+            "de": "GPU-Werte kommen von nvidia-smi und stehen nur mit NVIDIA-Karte zur Verfügung.",
+            "en": "GPU values come from nvidia-smi and need an NVIDIA card."
+          }
+        },
+        {
+          "key": "interface",
+          "type": "select",
+          "label": {
+            "de": "Netzwerkschnittstelle",
+            "en": "Network interface"
+          },
+          "options_source": "interfaces",
+          "depends_on": {
+            "metric": [
+              "net_down",
+              "net_up"
+            ]
+          }
+        },
+        {
+          "key": "path",
+          "type": "path",
+          "label": {
+            "de": "Pfad",
+            "en": "Path"
+          },
+          "default": "/",
+          "depends_on": {
+            "metric": "disk"
+          }
+        },
+        {
+          "key": "show_name",
+          "type": "bool",
+          "label": {
+            "de": "Kürzel vor dem Wert",
+            "en": "Prefix with a short name"
+          },
+          "default": true
+        },
+        {
+          "key": "show_bar",
+          "type": "bool",
+          "label": {
+            "de": "Balken anzeigen",
+            "en": "Show bar"
+          },
+          "default": true
+        },
+        {
+          "key": "bar_color",
+          "type": "color",
+          "label": {
+            "de": "Balkenfarbe",
+            "en": "Bar colour"
+          },
+          "default": "",
+          "help": {
+            "de": "Leer lassen: Der Balken wird ab 75 % gelb und ab 90 % rot.",
+            "en": "Leave empty: the bar turns amber above 75% and red above 90%."
+          }
+        }
+      ]
+    },
+    {
+      "id": "display_brightness",
+      "name": {
+        "de": "Monitorhelligkeit",
+        "en": "Display brightness"
+      },
+      "description": {
+        "de": "Regelt die Helligkeit am Monitor selbst über DDC/CI.",
+        "en": "Adjusts brightness on the monitor itself over DDC/CI."
+      },
+      "inputs": [
+        "dial",
+        "key"
+      ],
+      "default_icon": "brightness-up",
+      "settings_schema": [
+        {
+          "key": "display",
+          "type": "select",
+          "label": {
+            "de": "Monitor",
+            "en": "Display"
+          },
+          "options_source": "displays",
+          "help": {
+            "de": "Nicht jeder Monitor lässt DDC/CI zu — viele muss man im Bildschirmmenü erst freischalten.",
+            "en": "Not every monitor allows DDC/CI — many need it enabled in their on-screen menu first."
+          }
+        },
+        {
+          "key": "step",
+          "type": "number",
+          "label": {
+            "de": "Schrittweite (%)",
+            "en": "Step size (%)"
+          },
+          "default": 5,
+          "min": 1,
+          "max": 25
+        },
+        {
+          "key": "preset_low",
+          "type": "number",
+          "label": {
+            "de": "Druck: dunkler Wert (%)",
+            "en": "Press: dark value (%)"
+          },
+          "default": 20,
+          "min": 0,
+          "max": 100
+        },
+        {
+          "key": "preset_high",
+          "type": "number",
+          "label": {
+            "de": "Druck: heller Wert (%)",
+            "en": "Press: bright value (%)"
+          },
+          "default": 80,
+          "min": 0,
+          "max": 100
+        },
+        {
+          "key": "show_bar",
+          "type": "bool",
+          "label": {
+            "de": "Balken anzeigen",
+            "en": "Show bar"
+          },
+          "default": true
+        },
+        {
+          "key": "bar_color",
+          "type": "color",
+          "label": {
+            "de": "Balkenfarbe",
+            "en": "Bar colour"
+          },
+          "default": "#0ea5e9"
+        }
+      ]
+    }
+  ],
+  "icon": "icon.png"
+}
