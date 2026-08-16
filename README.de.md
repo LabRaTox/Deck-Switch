@@ -90,8 +90,8 @@ Zielplattform sind **CachyOS und Arch Linux**. `setup.sh` setzt deshalb
 nötigen Pakete ab, statt eine Erkennung vorzutäuschen, die niemand testet.
 
 ```sh
-git clone https://github.com/<benutzer>/deckswitch.git
-cd deckswitch
+git clone https://github.com/LabRaTox/Deck-Switch.git
+cd Deck-Switch
 ./scripts/setup.sh          # Pakete, venv, GUI-Build, udev-Regel
 ./scripts/start-backend.sh  # Backend starten
 ```

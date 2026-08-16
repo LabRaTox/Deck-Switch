@@ -89,8 +89,8 @@ requires `pacman` and stops on other distributions with a list of the needed
 packages, rather than faking a detection nobody tests.
 
 ```sh
-git clone https://github.com/<user>/deckswitch.git
-cd deckswitch
+git clone https://github.com/LabRaTox/Deck-Switch.git
+cd Deck-Switch
 ./scripts/setup.sh          # packages, venv, GUI build, udev rule
 ./scripts/start-backend.sh  # start the backend
 ```
