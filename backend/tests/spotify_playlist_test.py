@@ -11,6 +11,8 @@ Aufruf:
     ../.venv/bin/python tests/spotify_playlist_test.py          # nur Erkennung
     ../.venv/bin/python tests/spotify_playlist_test.py --live   # auch OpenUri
 """
+import _wache  # bricht ab, statt in die echte Config zu schreiben
+_wache.sichere_umgebung()
 import asyncio, importlib.util, pathlib, sys, types
 
 SPOTIFY = pathlib.Path(__file__).resolve().parent.parent.parent / "plugin-sources" / "spotify"

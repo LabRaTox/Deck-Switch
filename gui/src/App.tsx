@@ -36,13 +36,24 @@ export default function App() {
             store.setOnline(true);
             useStore.setState({ device: event.data as unknown as DeviceInfo });
             break;
-          case "page_changed":
+          case "page_changed": {
+            // Nur das Deck, das der Editor gerade zeigt. Blättert ein
+            // anderes weiter — jemand drückt einen Ordner am Gerät, oder
+            // ein Overlay wechselt die Seite —, hat das hier nichts zu
+            // suchen: Dessen Seiten-ID gibt es im bearbeiteten Profil gar
+            // nicht, und die Ansicht stünde vor einer leeren Seite.
+            const gemeint = String(event.data.deck ?? "");
+            if (gemeint && gemeint !== store.activeDeck) {
+              store.bumpPreview();
+              break;
+            }
             useStore.setState({
               currentPageId: String(event.data.page_id ?? ""),
               selection: null,
             });
             store.bumpPreview();
             break;
+          }
           case "config_changed":
             void store.load();
             break;

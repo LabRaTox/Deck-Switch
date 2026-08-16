@@ -7,15 +7,20 @@
  */
 
 import type {
+  AppSettings,
   InstallRequest,
   AutostartStatus,
   BackendError,
   BackendState,
   Config,
+  DeckInfo,
+  DeviceSettings,
+  InputStatus,
   Page,
   PluginInfo,
   ScreensaverEntry,
   Slot,
+  TouchWallpaper,
   WallpaperEntry,
 } from "../types";
 
@@ -38,6 +43,31 @@ function resolveBase(): string {
 }
 
 export const API_BASE: string = resolveBase();
+
+/**
+ * Das Deck, das die GUI gerade bearbeitet.
+ *
+ * Seiten, Belegungen und Vorschauen gibt es je Gerät — jedes Deck hat sein
+ * eigenes Profil. Statt diese Kennung durch jeden einzelnen Aufruf zu
+ * reichen, steht sie hier: Die Oberfläche bearbeitet immer genau ein Deck,
+ * und der Store setzt sie beim Umschalten.
+ */
+let activeDeck = "";
+
+export function setActiveDeck(key: string): void {
+  activeDeck = key ?? "";
+}
+
+export function getActiveDeck(): string {
+  return activeDeck;
+}
+
+/** Hängt das aktive Deck an eine Adresse — als erster oder weiterer Parameter. */
+function withDeck(path: string): string {
+  if (!activeDeck) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}deck=${encodeURIComponent(activeDeck)}`;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -79,16 +109,86 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   state: () => request<BackendState>("/api/state"),
 
+  /** Ganze Config ersetzen — nur für den Import gedacht. */
   putConfig: (config: Config) =>
     request<Config>("/api/config", { method: "PUT", body: JSON.stringify(config) }),
 
+  /**
+   * App-Einstellungen gezielt ändern.
+   *
+   * Statt die ganze Config zurückzuschicken: Deren Stand ist womöglich
+   * älter als das, was inzwischen am Gerät oder von einem anderen Fenster
+   * aus passiert ist — das würde sonst stillschweigend überschrieben.
+   */
+  patchAppSettings: (patch: { language?: string; active_iconset?: string }) =>
+    request<AppSettings>("/api/config/app", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
   setBrightness: (value: number) =>
-    request<{ brightness: number }>("/api/device/brightness", {
+    request<{ brightness: number }>(withDeck("/api/device/brightness"), {
       method: "POST",
       body: JSON.stringify({ value }),
     }),
 
-  reconnect: () => request<{ ok: boolean }>("/api/device/reconnect", { method: "POST" }),
+  reconnect: () =>
+    request<{ ok: boolean }>(withDeck("/api/device/reconnect"), { method: "POST" }),
+
+  // -- Decks --------------------------------------------------------------
+
+  decks: () => request<DeckInfo[]>("/api/decks"),
+
+  updateDeck: (
+    key: string,
+    patch: {
+      name?: string;
+      order?: number;
+      profile_id?: string;
+      device?: DeviceSettings;
+      columns?: number;
+      rows?: number;
+      dials?: number;
+      tile_size?: number;
+      overlay_transparent?: boolean;
+      hide_empty?: boolean;
+    },
+  ) =>
+    request<DeckInfo>(`/api/decks/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
+  /** Legt ein virtuelles Deck an — ein Overlay statt Hardware. */
+  createVirtualDeck: (payload: {
+    name: string;
+    columns: number;
+    rows: number;
+    dials: number;
+  }) =>
+    request<DeckInfo>("/api/decks/virtual", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  /** Overlay zeigen, verstecken oder umschalten (`visible: null`). */
+  setOverlay: (key: string, visible: boolean | null, atCursor = true) =>
+    request<{ visible: boolean }>(`/api/decks/${encodeURIComponent(key)}/overlay`, {
+      method: "POST",
+      body: JSON.stringify({ visible, at_cursor: atCursor }),
+    }),
+
+  /** Bindung eines nicht mehr vorhandenen Decks entfernen. */
+  forgetDeck: (key: string) =>
+    request<{ forgotten: string }>(`/api/decks/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    }),
+
+  // -- Schriften und Eingabe ----------------------------------------------
+
+  fonts: () => request<string[]>("/api/fonts"),
+
+  inputStatus: () => request<InputStatus>("/api/input/status"),
 
   // -- Bildschirmschoner --------------------------------------------------
 
@@ -96,10 +196,11 @@ export const api = {
 
   /** Zeigt, wie der Schoner nach dem Zerschneiden auf dem Deck ankommt. */
   screensaverPreviewUrl: (source: string) =>
-    `${API_BASE}/api/screensavers/preview?source=${encodeURIComponent(source)}`,
+    API_BASE +
+    withDeck(`/api/screensavers/preview?source=${encodeURIComponent(source)}`),
 
   testScreensaver: () =>
-    request<{ ok: boolean }>("/api/screensavers/test", { method: "POST" }),
+    request<{ ok: boolean }>(withDeck("/api/screensavers/test"), { method: "POST" }),
 
   // -- Touchstrip-Hintergrundbild -----------------------------------------
 
@@ -111,8 +212,11 @@ export const api = {
    * gecachte zu zeigen, und die Vorschau rechnet beides schon mit ein.
    */
   wallpaperPreviewUrl: (source: string, fit: string, opacity: number) =>
-    `${API_BASE}/api/wallpapers/preview?source=${encodeURIComponent(source)}` +
-    `&fit=${encodeURIComponent(fit)}&opacity=${opacity}`,
+    API_BASE +
+    withDeck(
+      `/api/wallpapers/preview?source=${encodeURIComponent(source)}` +
+        `&fit=${encodeURIComponent(fit)}&opacity=${opacity}`,
+    ),
 
   // -- Autostart ----------------------------------------------------------
 
@@ -127,42 +231,68 @@ export const api = {
 
   // -- Seiten -------------------------------------------------------------
 
+  pages: () =>
+    request<{
+      deck: string;
+      profile_id: string;
+      root_page_id: string;
+      current_page_id: string;
+      pages: Record<string, Page>;
+    }>(withDeck("/api/pages")),
+
   createPage: (name: string, parentId: string | null) =>
-    request<Page>("/api/pages", {
+    request<Page>(withDeck("/api/pages"), {
       method: "POST",
       body: JSON.stringify({ name, parent_id: parentId }),
     }),
 
-  updatePage: (pageId: string, patch: { name?: string; parent_id?: string }) =>
-    request<Page>(`/api/pages/${pageId}`, {
+  updatePage: (
+    pageId: string,
+    patch: { name?: string; parent_id?: string; touch_wallpaper?: TouchWallpaper },
+  ) =>
+    request<Page>(withDeck(`/api/pages/${pageId}`), {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
 
   /** Neue Position: Elternteil + Index unter den Geschwistern (beides immer). */
   movePage: (pageId: string, parentId: string | null, index: number) =>
-    request<{ pages: Record<string, Page> }>(`/api/pages/${pageId}/move`, {
+    request<{ pages: Record<string, Page> }>(withDeck(`/api/pages/${pageId}/move`), {
       method: "POST",
       body: JSON.stringify({ parent_id: parentId, index }),
     }),
 
   deletePage: (pageId: string) =>
-    request<{ deleted: string[] }>(`/api/pages/${pageId}`, { method: "DELETE" }),
+    request<{ deleted: string[] }>(withDeck(`/api/pages/${pageId}`), {
+      method: "DELETE",
+    }),
 
   navigate: (pageId: string) =>
-    request<{ current_page_id: string }>(`/api/navigate/${pageId}`, { method: "POST" }),
+    request<{ current_page_id: string }>(withDeck(`/api/navigate/${pageId}`), {
+      method: "POST",
+    }),
 
   // -- Belegungen ---------------------------------------------------------
 
   putSlot: (pageId: string, inputType: string, index: number, slot: Slot | null) =>
-    request<{ ok: boolean }>(`/api/pages/${pageId}/slots/${inputType}/${index}`, {
-      method: "PUT",
-      body: JSON.stringify({ slot }),
-    }),
+    request<{ ok: boolean }>(
+      withDeck(`/api/pages/${pageId}/slots/${inputType}/${index}`),
+      {
+        method: "PUT",
+        body: JSON.stringify({ slot }),
+      },
+    ),
 
   triggerSlot: (pageId: string, inputType: string, index: number) =>
     request<{ ok: boolean }>(
-      `/api/pages/${pageId}/slots/${inputType}/${index}/trigger`,
+      withDeck(`/api/pages/${pageId}/slots/${inputType}/${index}/trigger`),
+      { method: "POST" },
+    ),
+
+  /** Dial-Stack weiterschalten — dasselbe wie langes Drücken am Gerät. */
+  cycleStack: (pageId: string, index: number) =>
+    request<{ stack_index: number }>(
+      withDeck(`/api/pages/${pageId}/slots/dial/${index}/cycle`),
       { method: "POST" },
     ),
 
@@ -184,7 +314,7 @@ export const api = {
     context: Record<string, unknown> = {},
   ) =>
     request<{ value: unknown; label: string }[]>(
-      `/api/plugins/${pluginId}/options/${source}`,
+      withDeck(`/api/plugins/${pluginId}/options/${source}`),
       { method: "POST", body: JSON.stringify(context) },
     ),
 
@@ -293,8 +423,19 @@ export const api = {
   // -- Vorschau -----------------------------------------------------------
 
   /** Vom Backend gerendert — die Vorschau kann gar nicht abweichen. */
-  previewUrl: (pageId: string, inputType: string, index: number, version = 0) =>
-    `${API_BASE}/api/preview/${pageId}/${inputType}/${index}.png?v=${version}`,
+  previewUrl: (
+    pageId: string,
+    inputType: string,
+    index: number,
+    version = 0,
+    /** Bei einem Dial-Stack: welcher Eintrag gezeigt werden soll. */
+    entry?: number,
+  ) =>
+    API_BASE +
+    withDeck(
+      `/api/preview/${pageId}/${inputType}/${index}.png?v=${version}` +
+        (entry ? `&entry=${entry}` : ""),
+    ),
 
   // -- Fehler, Export, Import ---------------------------------------------
 

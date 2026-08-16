@@ -119,19 +119,24 @@ class AudioPlugin(ActionPlugin):
         if ctx.input_type == "dial":
             return self._render_segment(action_id, settings, ctx, state, level)
 
+        width, height = ctx.size
+        mit_balken = (
+            action_id in ("volume", "app_volume")
+            and ctx.setting("show_bar", True)
+            and level is not None
+        )
+        box = (10, height - 12, width - 10, height - 6)
         image = self.services.render.render_slot(
             ctx,
             state=state,
             label_override=self.get_label(action_id, settings, ctx),
             accent=ACCENT,
+            # Platz für den Balken, sonst läge er auf der Beschriftung.
+            reserve_bottom=self.services.render.bar_reserve(ctx.size, box) if mit_balken else 0,
         )
-        if action_id in ("volume", "app_volume") and ctx.setting("show_bar", True) and level is not None:
-            width, height = ctx.size
+        if mit_balken:
             self.services.render.draw_bar(
-                image,
-                level,
-                box=(10, height - 12, width - 10, height - 6),
-                color=ctx.setting("bar_color", ACCENT),
+                image, level, box=box, color=ctx.setting("bar_color", ACCENT)
             )
         if action_id == "output_device" and state == "active":
             self.services.render.draw_badge(
@@ -144,16 +149,30 @@ class AudioPlugin(ActionPlugin):
     def _render_segment(
         self, action_id, settings, ctx: SlotContext, state, level
     ) -> Image.Image:
-        """Layout für ein Touchstrip-Segment (200×100).
+        """Layout für ein Segment: Icon links, Text oben, Balken unten.
 
-        Hintergrund kommt aus den Einstellungen, darüber Icon links,
-        Beschriftung oben und der Balken über die volle Breite.
+        Alle Maße hängen an der Segmenthöhe, nicht an festen Pixelwerten.
+        Der Touchstrip des Geräts ist 200×100 groß, ein virtuelles Deck legt
+        seine Segmente aber frei fest — bei halber Höhe saß der Balken sonst
+        mitten im Prozenttext.
         """
         render = self.services.render
         width, height = ctx.size
         image = render.background(ctx.size, ctx.appearance, accent=ACCENT)
 
-        icon_px = max(24, min(height - 40, round(min(ctx.size) * ctx.appearance.icon_size / 100)))
+        balken = render.bar_box(ctx.size)
+        rand = balken[0]
+        show_percent = level is not None and ctx.setting("show_percent", True)
+        show_bar = level is not None and ctx.setting("show_bar", True)
+
+        # Der Balken sitzt am unteren Rand; alles andere teilt sich den Rest
+        # darüber. So bleibt bei jeder Höhe Luft zwischen Zahl und Balken.
+        inhalt_hoehe = (balken[1] - rand) if show_bar else (height - rand)
+
+        icon_px = max(
+            16,
+            min(inhalt_hoehe, round(min(ctx.size) * ctx.appearance.icon_size / 100)),
+        )
         icon = self.services.icons.resolve(
             ctx.appearance.icon_for_state(state),
             size=icon_px,
@@ -161,44 +180,48 @@ class AudioPlugin(ActionPlugin):
             fallback_set=self.services.config.app.active_iconset,
             color=ctx.appearance.label_color,
         )
-        image.alpha_composite(icon, (10, (height - icon.height) // 2 - 6))
+        image.alpha_composite(icon, (rand, rand + (inhalt_hoehe - icon.height) // 2))
 
+        # Schriftgröße mitwachsen lassen: Die eingestellte Größe passt für
+        # den Streifen des Geräts, auf einer halb so hohen Kachel nicht.
+        schrift = max(9, min(ctx.appearance.label_size, round(height * 0.30)))
         label = ctx.appearance.label_text or self._default_label(action_id, settings)
-        text_left = 10 + icon_px + 10
-        show_percent = level is not None and ctx.setting("show_percent", True)
+        text_left = rand + icon_px + max(6, rand)
         # Prozentwert steht rechts — das Label darf nicht darunter laufen.
-        label_width = width - text_left - (58 if show_percent else 12)
+        label_width = width - text_left - (round(schrift * 3.2) if show_percent else rand)
 
         if label and ctx.appearance.show_label:
             render.draw_text_at(
                 image,
                 label,
                 x=text_left,
-                y=8,
-                size=ctx.appearance.label_size,
+                y=rand,
+                size=schrift,
                 color=ctx.appearance.label_color,
                 max_width=max(20, label_width),
             )
 
-        if level is not None:
-            if show_percent:
-                render.draw_text_at(
-                    image,
-                    f"{round(level * 100)}%",
-                    x=width - 12,
-                    y=8,
-                    size=ctx.appearance.label_size,
-                    color="#9ca3af" if state == "muted" else ctx.appearance.label_color,
-                    align="right",
-                )
-            if ctx.setting("show_bar", True):
-                color = "#6b7280" if state == "muted" else ctx.setting("bar_color", ACCENT)
-                render.draw_bar(
-                    image,
-                    level,
-                    box=(text_left, height - 30, width - 12, height - 20),
-                    color=color,
-                )
+        if show_percent:
+            render.draw_text_at(
+                image,
+                f"{round(level * 100)}%",
+                x=width - rand,
+                y=rand,
+                size=schrift,
+                color="#9ca3af" if state == "muted" else ctx.appearance.label_color,
+                align="right",
+            )
+
+        if show_bar:
+            color = "#6b7280" if state == "muted" else ctx.setting("bar_color", ACCENT)
+            render.draw_bar(
+                image,
+                level,
+                # Über die volle Breite: Der Balken hat unten eine eigene
+                # Zone, dort steht nichts mehr, was ihn einrücken müsste.
+                box=balken,
+                color=color,
+            )
 
         if action_id == "output_device" and state == "active":
             render.draw_badge(image, ctx.setting("active_badge", "#22c55e"), width=3)

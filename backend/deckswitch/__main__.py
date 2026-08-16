@@ -80,7 +80,7 @@ async def run(args: argparse.Namespace) -> int:
     runtime = probe_runtime
     await runtime.start()
 
-    app = create_app(runtime, host=host, port=port)
+    app = create_app(runtime, host=host, port=port, dev=getattr(args, "dev", False))
     server = uvicorn.Server(
         uvicorn.Config(app, host=host, port=port, log_level="warning", access_log=False)
     )
@@ -181,6 +181,11 @@ def main() -> int:
     parser.add_argument("--config", help="Abweichender Pfad zur config.json")
     parser.add_argument(
         "--no-tray", action="store_true", help="Kein Symbol im Systemabschnitt"
+    )
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Entwicklungsmodus: erlaubt auch den Vite-Dev-Server als Herkunft",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug-Ausgaben")
     args = parser.parse_args()

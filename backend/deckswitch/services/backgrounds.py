@@ -72,6 +72,7 @@ def render_background(
     *,
     accent: str | None = None,
     upload_loader=None,
+    frame_time: float = 0.0,
 ) -> Image.Image:
     """Erzeugt das Hintergrundbild einer Kachel.
 
@@ -90,9 +91,19 @@ def render_background(
         return Image.new("RGBA", size, (0, 0, 0, 0))
 
     if kind == "image" and background.upload and upload_loader is not None:
-        image = upload_loader(background.upload)
+        image = upload_loader(background.upload, frame_time)
         if image is not None:
-            return _fit_cover(image.convert("RGBA"), size)
+            fitted = _fit(image.convert("RGBA"), size, background.fit)
+            opacity = max(0, min(100, background.opacity))
+            if opacity >= 100:
+                return fitted
+            # Unter voller Deckkraft auf den Grundton legen statt einfach
+            # durchsichtig lassen: Auf einer Taste liegt nichts dahinter, ein
+            # halbdurchsichtiges Bild käme dort schlicht dunkler an.
+            faded = fitted.copy()
+            faded.putalpha(fitted.getchannel("A").point(lambda v: v * opacity // 100))
+            base = Image.new("RGBA", size, parse_color(background.color, (0, 0, 0, 255)))
+            return Image.alpha_composite(base, faded)
         kind = "solid"
 
     base = parse_color(background.color, (0, 0, 0, 255))
@@ -138,6 +149,15 @@ def _gradient(size, start, end, direction: str) -> Image.Image:
     return image
 
 
+def _fit(image: Image.Image, size: tuple[int, int], mode: str = "cover") -> Image.Image:
+    """Bild in die Kachel einpassen — füllend, ganz oder verzerrt."""
+    if mode == "stretch":
+        return image.resize(size, Image.LANCZOS)
+    if mode == "contain":
+        return _fit_contain(image, size)
+    return _fit_cover(image, size)
+
+
 def _fit_cover(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     """Bild formatfüllend skalieren und mittig beschneiden."""
     target_w, target_h = size
@@ -148,6 +168,19 @@ def _fit_cover(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     left = (new.width - target_w) // 2
     top = (new.height - target_h) // 2
     return new.crop((left, top, left + target_w, top + target_h))
+
+
+def _fit_contain(image: Image.Image, size: tuple[int, int]) -> Image.Image:
+    """Ganzes Bild zeigen, der Rest bleibt frei."""
+    target_w, target_h = size
+    src_w, src_h = image.size
+    scale = min(target_w / src_w, target_h / src_h)
+    new = image.resize(
+        (max(1, round(src_w * scale)), max(1, round(src_h * scale))), Image.LANCZOS
+    )
+    canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+    canvas.paste(new, ((target_w - new.width) // 2, (target_h - new.height) // 2), new)
+    return canvas
 
 
 #: Startvarianten, die die GUI im Hintergrund-Picker anbietet.

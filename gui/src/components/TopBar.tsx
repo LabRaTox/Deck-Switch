@@ -4,17 +4,26 @@ import { api } from "../api/client";
 import { useStore } from "../store";
 import { Wordmark } from "./Wordmark";
 
-/** Kopfzeile: Ansichtswechsel, Gerätestatus und Helligkeit. */
+/** Kopfzeile: Ansichtswechsel, Deckauswahl, Gerätestatus und Helligkeit. */
 export function TopBar() {
   const { t } = useTranslation();
   const view = useStore((s) => s.view);
   const setView = useStore((s) => s.setView);
   const device = useStore((s) => s.device);
+  const decks = useStore((s) => s.decks);
+  const activeDeck = useStore((s) => s.activeDeck);
+  const selectDeck = useStore((s) => s.selectDeck);
   const online = useStore((s) => s.online);
-  const brightness = useStore((s) => s.config?.device.brightness ?? 70);
-  const patchConfig = useStore((s) => s.patchConfig);
+  const settings = useStore((s) => s.deckSettings());
+  const patchDeckSettings = useStore((s) => s.patchDeckSettings);
 
   const connected = Boolean(device?.connected);
+  const brightness = settings?.brightness ?? 70;
+  // Über die Deckliste und nicht über ``device``: Dort steht die Bauart.
+  // Ein Overlay hat keine Hintergrundbeleuchtung — der Regler hätte nichts
+  // zu regeln, und ein wirkungsloses Bedienelement ist schlimmer als keins.
+  const virtuell =
+    decks.find((deck) => deck.id === activeDeck)?.kind === "virtual";
 
   return (
     <header className="topbar">
@@ -37,25 +46,49 @@ export function TopBar() {
       </nav>
 
       <div className="topbar-right">
-        <label className="brightness" title={t("device.brightness")}>
+        {/* Bei einem einzelnen Deck wäre die Auswahl nur im Weg. */}
+        {decks.length > 1 && (
+          <div className="deck-switch" role="group" aria-label={t("decks.switch")}>
+            {decks.map((deck) => (
+              <button
+                key={deck.id}
+                type="button"
+                className={`deck-chip${deck.id === activeDeck ? " active" : ""}${
+                  deck.connected ? "" : " offline"
+                }`}
+                title={
+                  deck.connected
+                    ? `${deck.deck_type} · ${deck.serial}`
+                    : t("decks.notConnected")
+                }
+                onClick={() => void selectDeck(deck.id)}
+              >
+                <span className="dot" />
+                {deck.name || deck.deck_type}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <label
+          className={virtuell ? "brightness disabled" : "brightness"}
+          title={virtuell ? t("device.brightnessVirtual") : t("device.brightness")}
+        >
           <span aria-hidden="true">☀</span>
           <input
             type="range"
             min={5}
             max={100}
             value={brightness}
-            disabled={!connected}
+            disabled={!connected || virtuell}
             onChange={(event) => {
               const value = Number(event.target.value);
               // Optimistisch setzen, damit der Regler flüssig bleibt.
-              void patchConfig((config) => {
-                config.device.brightness = value;
-                return config;
-              });
+              void patchDeckSettings((current) => ({ ...current, brightness: value }));
               void api.setBrightness(value).catch(() => undefined);
             }}
           />
-          <output>{brightness}%</output>
+          <output>{virtuell ? "—" : `${brightness}%`}</output>
         </label>
 
         <div

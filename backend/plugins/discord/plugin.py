@@ -510,14 +510,13 @@ class DiscordPlugin(ActionPlugin):
         render = self.services.render
 
         if action_id == "input_volume" and ctx.input_type == "dial":
+            # Der Balken bekommt seinen Platz unten reserviert, sonst läge er
+            # auf der Beschriftung.
+            box = render.bar_box(ctx.size)
             image = render.render_slot(ctx, state=state, accent=ACCENT,
-                                       label_override=self.get_label(action_id, settings, ctx))
-            render.draw_bar(
-                image,
-                self.input_volume / 100,
-                box=(12, ctx.size[1] - 22, ctx.size[0] - 12, ctx.size[1] - 12),
-                color=ACCENT,
-            )
+                                       label_override=self.get_label(action_id, settings, ctx),
+                                       reserve_bottom=render.bar_reserve(ctx.size, box))
+            render.draw_bar(image, self.input_volume / 100, box=box, color=ACCENT)
             return image
 
         image = render.render_slot(

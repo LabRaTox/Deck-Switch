@@ -22,6 +22,14 @@ log = logging.getLogger(__name__)
 EVT_CONFIG_CHANGED = "config_changed"
 EVT_PAGE_CHANGED = "page_changed"
 EVT_DEVICE_STATE = "device_state"
+#: Etwas an einem einzelnen Deck hat sich geändert, ohne dass die
+#: Verbindung betroffen wäre — etwa der aktive Eintrag eines Dial-Stacks.
+EVT_DECK_STATE = "deck_state"
+#: Ein Deck ist dazugekommen oder verschwunden.
+EVT_DECKS_CHANGED = "decks_changed"
+#: Eine Kachel eines virtuellen Decks hat ein neues Bild. Das Overlay holt
+#: sich daraufhin genau diese eine — statt im Takt alles abzufragen.
+EVT_DECK_IMAGE = "deck_image"
 EVT_PLUGIN_ERROR = "plugin_error"
 EVT_PLUGIN_STATE = "plugin_state"
 EVT_KEY_PREVIEW = "key_preview"

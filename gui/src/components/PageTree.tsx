@@ -46,6 +46,11 @@ const DRAG_TYPE = "application/x-deckswitch-page";
 export function PageTree() {
   const { t } = useTranslation();
   const config = useStore((s) => s.config);
+  // Das bearbeitete Deck ausdrücklich abonnieren: ``activeProfile`` liest
+  // es zwar selbst aus dem Store, aber ohne Abonnement zeichnet React den
+  // Baum beim Deckwechsel nicht neu — er zeigte dann die Seiten des
+  // vorigen Geräts.
+  const activeDeck = useStore((s) => s.activeDeck);
   const currentPageId = useStore((s) => s.currentPageId);
   const createPage = useStore((s) => s.createPage);
   const movePage = useStore((s) => s.movePage);
@@ -73,9 +78,13 @@ export function PageTree() {
     setDropState(target);
   }, []);
 
-  const rootId = activeProfile(config)?.root_page_id ?? "";
+  const rootId = activeProfile(config, activeDeck)?.root_page_id ?? "";
 
-  const nodeList = useMemo(() => pageTree(config), [config]);
+  // ``activeDeck`` gehört in die Abhängigkeiten, obwohl es nicht als
+  // Argument auftaucht: ``pageTree`` schlägt das Profil des bearbeiteten
+  // Decks im Store nach. Ohne das blieb beim Deckwechsel der alte Baum
+  // stehen — genau der gemeldete Fehler.
+  const nodeList = useMemo(() => pageTree(config), [config, activeDeck]);
   const byParent = useMemo(() => nodesByParent(nodeList), [nodeList]);
   const nodes = useMemo(
     () => new Map(nodeList.map((node) => [node.page.id, node])),
@@ -85,7 +94,7 @@ export function PageTree() {
   /** Alle Vorfahren der geöffneten Seite — markieren den aktiven Zweig. */
   const activePath = useMemo(
     () => new Set(pagePath(config, currentPageId).map((page) => page.id)),
-    [config, currentPageId],
+    [config, currentPageId, activeDeck],
   );
 
   // Beim Verschieben wandert die Zeile im DOM und verliert dabei den Fokus.
@@ -536,11 +545,17 @@ function loadCollapsed(): Set<string> {
 export function PageCrumbs() {
   const { t } = useTranslation();
   const config = useStore((s) => s.config);
+  const activeDeck = useStore((s) => s.activeDeck);
   const currentPageId = useStore((s) => s.currentPageId);
   const navigate = useStore((s) => s.navigate);
-  const rootId = activeProfile(config)?.root_page_id ?? "";
+  const rootId = activeProfile(config, activeDeck)?.root_page_id ?? "";
 
-  const path = useMemo(() => pagePath(config, currentPageId), [config, currentPageId]);
+  const path = useMemo(
+    () => pagePath(config, currentPageId),
+    // ``activeDeck`` gehört in die Abhängigkeiten: ``pagePath`` schlägt im
+    // Profil des bearbeiteten Decks nach.
+    [config, currentPageId, activeDeck],
+  );
   if (!path.length) return null;
 
   return (

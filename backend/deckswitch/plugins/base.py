@@ -176,6 +176,21 @@ class RuntimeApi(Protocol):
     def notify(self, level: str, message: str, **extra: Any) -> None:
         """Meldung an die GUI (Fehler, Warnung, Info)."""
 
+    async def run_steps(self, steps: list, ctx: "SlotContext", *, repeat: bool = False) -> None:
+        """Führt eine Kette von Schritten aus (Multi-Aktion).
+
+        Jeder Schritt ist entweder eine Pause oder eine ganz normale
+        Plugin-Action, die genauso ausgelöst wird wie bei einem Tastendruck.
+        Läuft im Hintergrund; ein zweiter Aufruf auf derselben Belegung
+        bricht den ersten ab.
+        """
+
+    def stop_steps(self, ctx: "SlotContext") -> bool:
+        """Bricht eine laufende Kette dieser Belegung ab."""
+
+    def steps_running(self, ctx: "SlotContext") -> bool:
+        """Läuft auf dieser Belegung gerade eine Kette?"""
+
     def publish_plugin_status(self, plugin_id: str) -> None:
         """Meldet der GUI, dass sich der Verbindungszustand geändert hat.
 
@@ -197,6 +212,16 @@ class Services:
     config: "Config"
     #: Ordner des jeweiligen Plugins — für mitgelieferte Assets.
     plugin_dir: Path = field(default_factory=Path)
+    #: Virtuelle Tastatur (Tastenkombinationen, Text tippen).
+    input: "Any" = None
+    #: Der gerade laufende Medienspieler (MPRIS).
+    media: "Any" = None
+    #: Sitzung, Fenster, Bildschirmfotos.
+    desktop: "Any" = None
+    #: Soundboard-Wiedergabe.
+    sound: "Any" = None
+    #: Overlays der virtuellen Decks zeigen und verstecken.
+    overlay: "Any" = None
 
 
 # --------------------------------------------------------------------------
@@ -222,6 +247,12 @@ class SlotContext:
     slot: "Slot"
     #: Von der Runtime gesetzt: ob dies der Long-Press-Zweig einer Taste ist.
     is_long_press: bool = False
+    #: Laufzeit in Sekunden, aus der animierte Bilder ihr Einzelbild wählen.
+    #: Für stehende Kacheln bleibt sie 0 — dann ändert sich nichts.
+    frame_time: float = 0.0
+    #: Auf welchem Deck diese Belegung liegt. Bei nur einem Gerät belanglos;
+    #: bei mehreren die Antwort auf „welches Deck hat mich gerufen?".
+    deck_serial: str = ""
     #: Freier Zwischenspeicher pro Belegung, überlebt zwischen Hook-Aufrufen
     #: (z. B. gecachte Verbindungs-Handles oder letzte gelesene Werte).
     scratch: dict[str, Any] = field(default_factory=dict)

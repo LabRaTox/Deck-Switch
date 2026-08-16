@@ -260,6 +260,116 @@
           "max": 25
         }
       ]
+    },
+    {
+      "id": "none",
+      "name": {
+        "de": "Leer",
+        "en": "Empty"
+      },
+      "description": {
+        "de": "Tut nichts — Platzhalter, etwa als Grundplatz eines Dials mit belegten Drehrichtungen.",
+        "en": "Does nothing — a placeholder, e.g. the base of a dial whose turn directions are assigned."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "point",
+      "settings_schema": []
+    },
+    {
+      "id": "overlay",
+      "name": {
+        "de": "Virtuelles Deck",
+        "en": "Virtual deck"
+      },
+      "description": {
+        "de": "Zeigt oder versteckt ein virtuelles Deck als Overlay auf dem Bildschirm.",
+        "en": "Shows or hides a virtual deck as an on-screen overlay."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "layout-grid",
+      "states": [
+        {
+          "id": "hidden",
+          "name": {
+            "de": "Versteckt",
+            "en": "Hidden"
+          }
+        },
+        {
+          "id": "visible",
+          "name": {
+            "de": "Sichtbar",
+            "en": "Visible"
+          },
+          "default_icon": "layout-grid-add"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "deck",
+          "type": "select",
+          "label": {
+            "de": "Welches Deck",
+            "en": "Which deck"
+          },
+          "options_source": "virtual_decks",
+          "help": {
+            "de": "Anzulegen unter Einstellungen → Decks.",
+            "en": "Create one under Settings → Decks."
+          }
+        },
+        {
+          "key": "mode",
+          "type": "select",
+          "label": {
+            "de": "Verhalten",
+            "en": "Behaviour"
+          },
+          "default": "toggle",
+          "options": [
+            {
+              "value": "toggle",
+              "label": {
+                "de": "Umschalten",
+                "en": "Toggle"
+              }
+            },
+            {
+              "value": "show",
+              "label": {
+                "de": "Nur zeigen",
+                "en": "Show only"
+              }
+            },
+            {
+              "value": "hide",
+              "label": {
+                "de": "Nur verstecken",
+                "en": "Hide only"
+              }
+            }
+          ]
+        },
+        {
+          "key": "at_cursor",
+          "type": "bool",
+          "label": {
+            "de": "Am Mauszeiger erscheinen",
+            "en": "Appear at the mouse pointer"
+          },
+          "default": true,
+          "help": {
+            "de": "Sonst an einer festen Stelle.",
+            "en": "Otherwise at a fixed spot."
+          }
+        }
+      ]
     }
   ],
   "icon": "icon.png"

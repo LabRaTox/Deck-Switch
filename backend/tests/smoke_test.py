@@ -12,6 +12,8 @@ Aufruf (mit eigener Config, damit die echte unangetastet bleibt):
 
 Beendet sich mit Exit-Code 1, sobald eine Prüfung fehlschlägt.
 """
+import _wache  # bricht ab, statt in die echte Config zu schreiben
+_wache.sichere_umgebung()
 import asyncio, json, sys, time
 from deckswitch.runtime import Runtime
 from deckswitch.config import Slot, Appearance, Page
@@ -77,7 +79,9 @@ async def main():
     root.keys[0] = slot("a")
     # Taste 1: mit Zweitbelegung → erst bei Loslassen bzw. nach Ablauf
     root.keys[1] = slot("a", long=slot("b"))
-    rt.config.device.long_press_ms = 300
+    # Geräteeinstellungen hängen am Deck, nicht global an der Config:
+    # jedes angeschlossene Deck hat eigene Zeiten und eigene Helligkeit.
+    rt.primary.settings.long_press_ms = 300
 
     Recorder.events.clear()
     await rt._handle_key(0, True)
@@ -174,20 +178,21 @@ async def main():
     rt.device.deck = object()   # connected ist ein Property über deck + info
     rt.device.set_brightness = lambda value: brightness_calls.append(value)
 
+    settings = rt.primary.settings
     check("ohne Verbindung wird nicht gedimmt (Vorbedingung)", True)
-    rt.config.device.idle_dim_after_s = 1
+    settings.idle_dim_after_s = 1
     rt._last_input = time.monotonic() - 5
     rt._check_idle()
     check("dimmt nach Ablauf der Wartezeit", rt._dimmed is True)
     check("und setzt die Ruhe-Helligkeit",
-          brightness_calls[-1:] == [rt.config.device.idle_brightness],
+          brightness_calls[-1:] == [settings.idle_brightness],
           str(brightness_calls))
     rt._wake()
     check("Eingabe weckt wieder auf", rt._dimmed is False)
     check("und stellt die volle Helligkeit her",
-          brightness_calls[-1:] == [rt.config.device.brightness],
+          brightness_calls[-1:] == [settings.brightness],
           str(brightness_calls))
-    rt.config.device.idle_dim_after_s = 0
+    settings.idle_dim_after_s = 0
     rt._last_input = time.monotonic() - 500
     rt._check_idle()
     check("0 schaltet das Dimmen ab", rt._dimmed is False)

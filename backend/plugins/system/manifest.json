@@ -451,6 +451,610 @@
           "default": "#0ea5e9"
         }
       ]
+    },
+    {
+      "id": "hotkey",
+      "name": {
+        "de": "Tastenkombination",
+        "en": "Hotkey"
+      },
+      "description": {
+        "de": "Schickt eine Tastenkombination an das Programm im Vordergrund.",
+        "en": "Sends a key combination to the focused application."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "keyboard",
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Bereit",
+            "en": "Idle"
+          }
+        },
+        {
+          "id": "held",
+          "name": {
+            "de": "Gedrückt",
+            "en": "Held"
+          },
+          "default_icon": "keyboard-show"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "combo",
+          "type": "hotkey",
+          "label": {
+            "de": "Tastenkombination",
+            "en": "Key combination"
+          },
+          "placeholder": "Strg+Shift+F5",
+          "help": {
+            "de": "Aufnehmen anklicken und die Kombination drücken.",
+            "en": "Click record and press the combination."
+          }
+        },
+        {
+          "key": "mode",
+          "type": "select",
+          "label": {
+            "de": "Verhalten",
+            "en": "Behaviour"
+          },
+          "default": "tap",
+          "options": [
+            {
+              "value": "tap",
+              "label": {
+                "de": "Einmal tippen",
+                "en": "Tap once"
+              }
+            },
+            {
+              "value": "hold",
+              "label": {
+                "de": "Halten, solange die Taste gedrückt ist",
+                "en": "Hold while the key is down"
+              }
+            }
+          ],
+          "help": {
+            "de": "Halten eignet sich für Push-to-Talk.",
+            "en": "Hold suits push-to-talk."
+          }
+        }
+      ]
+    },
+    {
+      "id": "hotkey_switch",
+      "name": {
+        "de": "Tastenkombination (Umschalter)",
+        "en": "Hotkey switch"
+      },
+      "description": {
+        "de": "Zwei Kombinationen im Wechsel — hin und zurück.",
+        "en": "Two combinations, alternating."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "switch-horizontal",
+      "states": [
+        {
+          "id": "a",
+          "name": {
+            "de": "Erste",
+            "en": "First"
+          }
+        },
+        {
+          "id": "b",
+          "name": {
+            "de": "Zweite",
+            "en": "Second"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "combo_a",
+          "type": "hotkey",
+          "label": {
+            "de": "Erste Kombination",
+            "en": "First combination"
+          }
+        },
+        {
+          "key": "combo_b",
+          "type": "hotkey",
+          "label": {
+            "de": "Zweite Kombination",
+            "en": "Second combination"
+          }
+        }
+      ]
+    },
+    {
+      "id": "text",
+      "name": {
+        "de": "Text tippen",
+        "en": "Type text"
+      },
+      "description": {
+        "de": "Tippt einen hinterlegten Text — Textbaustein auf Knopfdruck.",
+        "en": "Types a stored text — a snippet at the push of a key."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "text-caption",
+      "settings_schema": [
+        {
+          "key": "text",
+          "type": "text",
+          "label": {
+            "de": "Text",
+            "en": "Text"
+          },
+          "help": {
+            "de": "Wird Zeichen für Zeichen über die eingestellte Tastaturbelegung getippt.",
+            "en": "Typed character by character using the active keyboard layout."
+          }
+        },
+        {
+          "key": "enter_after",
+          "type": "bool",
+          "label": {
+            "de": "Mit Eingabetaste abschließen",
+            "en": "Press Enter afterwards"
+          },
+          "default": false
+        },
+        {
+          "key": "delay_ms",
+          "type": "number",
+          "label": {
+            "de": "Pause je Zeichen (ms)",
+            "en": "Delay per character (ms)"
+          },
+          "default": 12,
+          "min": 0,
+          "max": 200,
+          "step": 1,
+          "help": {
+            "de": "Manche Programme verschlucken zu schnelle Eingaben.",
+            "en": "Some applications drop input that arrives too fast."
+          }
+        }
+      ]
+    },
+    {
+      "id": "multimedia",
+      "name": {
+        "de": "Multimedia",
+        "en": "Multimedia"
+      },
+      "description": {
+        "de": "Steuert den Player, der gerade spielt (MPRIS).",
+        "en": "Controls whichever player is currently playing (MPRIS)."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "player-play",
+      "states": [
+        {
+          "id": "playing",
+          "name": {
+            "de": "Spielt",
+            "en": "Playing"
+          },
+          "default_icon": "player-pause"
+        },
+        {
+          "id": "paused",
+          "name": {
+            "de": "Pausiert",
+            "en": "Paused"
+          },
+          "default_icon": "player-play"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "command",
+          "type": "select",
+          "label": {
+            "de": "Aktion",
+            "en": "Action"
+          },
+          "default": "play_pause",
+          "options": [
+            {
+              "value": "play_pause",
+              "label": {
+                "de": "Wiedergabe / Pause",
+                "en": "Play / pause"
+              }
+            },
+            {
+              "value": "next",
+              "label": {
+                "de": "Nächster Titel",
+                "en": "Next track"
+              }
+            },
+            {
+              "value": "previous",
+              "label": {
+                "de": "Vorheriger Titel",
+                "en": "Previous track"
+              }
+            },
+            {
+              "value": "stop",
+              "label": {
+                "de": "Anhalten",
+                "en": "Stop"
+              }
+            },
+            {
+              "value": "play",
+              "label": {
+                "de": "Wiedergabe",
+                "en": "Play"
+              }
+            },
+            {
+              "value": "pause",
+              "label": {
+                "de": "Pause",
+                "en": "Pause"
+              }
+            }
+          ]
+        },
+        {
+          "key": "player",
+          "type": "select",
+          "label": {
+            "de": "Player",
+            "en": "Player"
+          },
+          "options_source": "players",
+          "help": {
+            "de": "Automatisch nimmt den Player, der gerade spielt.",
+            "en": "Automatic picks whichever player is playing."
+          }
+        },
+        {
+          "key": "show_title",
+          "type": "bool",
+          "label": {
+            "de": "Titel anzeigen",
+            "en": "Show title"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "power",
+      "name": {
+        "de": "Sitzung",
+        "en": "Session"
+      },
+      "description": {
+        "de": "Sperren, abmelden, ruhen, neu starten, ausschalten.",
+        "en": "Lock, log out, suspend, reboot, shut down."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "power",
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Bereit",
+            "en": "Idle"
+          }
+        },
+        {
+          "id": "armed",
+          "name": {
+            "de": "Wartet auf Bestätigung",
+            "en": "Waiting for confirmation"
+          },
+          "default_icon": "alert-triangle"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "command",
+          "type": "select",
+          "label": {
+            "de": "Aktion",
+            "en": "Action"
+          },
+          "default": "lock",
+          "options": [
+            {
+              "value": "lock",
+              "label": {
+                "de": "Bildschirm sperren",
+                "en": "Lock screen"
+              }
+            },
+            {
+              "value": "screen_off",
+              "label": {
+                "de": "Bildschirme ausschalten",
+                "en": "Turn displays off"
+              }
+            },
+            {
+              "value": "screen_on",
+              "label": {
+                "de": "Bildschirme einschalten",
+                "en": "Turn displays on"
+              }
+            },
+            {
+              "value": "suspend",
+              "label": {
+                "de": "Bereitschaft",
+                "en": "Suspend"
+              }
+            },
+            {
+              "value": "hibernate",
+              "label": {
+                "de": "Ruhezustand",
+                "en": "Hibernate"
+              }
+            },
+            {
+              "value": "logout_prompt",
+              "label": {
+                "de": "Abmelden (mit Rückfrage)",
+                "en": "Log out (with prompt)"
+              }
+            },
+            {
+              "value": "logout",
+              "label": {
+                "de": "Abmelden (sofort)",
+                "en": "Log out (immediately)"
+              }
+            },
+            {
+              "value": "reboot_prompt",
+              "label": {
+                "de": "Neu starten (mit Rückfrage)",
+                "en": "Reboot (with prompt)"
+              }
+            },
+            {
+              "value": "reboot",
+              "label": {
+                "de": "Neu starten (sofort)",
+                "en": "Reboot (immediately)"
+              }
+            },
+            {
+              "value": "poweroff_prompt",
+              "label": {
+                "de": "Ausschalten (mit Rückfrage)",
+                "en": "Shut down (with prompt)"
+              }
+            },
+            {
+              "value": "poweroff",
+              "label": {
+                "de": "Ausschalten (sofort)",
+                "en": "Shut down (immediately)"
+              }
+            }
+          ]
+        },
+        {
+          "key": "confirm",
+          "type": "bool",
+          "label": {
+            "de": "Zweimal drücken",
+            "en": "Press twice"
+          },
+          "default": true,
+          "help": {
+            "de": "Der erste Druck macht nur scharf — gegen Fehlgriffe.",
+            "en": "The first press only arms the key — against mishaps."
+          }
+        }
+      ]
+    },
+    {
+      "id": "screenshot",
+      "name": {
+        "de": "Bildschirmfoto",
+        "en": "Screenshot"
+      },
+      "description": {
+        "de": "Nimmt ein Bildschirmfoto auf (Spectacle).",
+        "en": "Takes a screenshot (Spectacle)."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "camera",
+      "settings_schema": [
+        {
+          "key": "mode",
+          "type": "select",
+          "label": {
+            "de": "Ausschnitt",
+            "en": "Area"
+          },
+          "default": "fullscreen",
+          "options": [
+            {
+              "value": "fullscreen",
+              "label": {
+                "de": "Alle Bildschirme",
+                "en": "All screens"
+              }
+            },
+            {
+              "value": "current",
+              "label": {
+                "de": "Aktueller Bildschirm",
+                "en": "Current screen"
+              }
+            },
+            {
+              "value": "window",
+              "label": {
+                "de": "Aktives Fenster",
+                "en": "Active window"
+              }
+            },
+            {
+              "value": "region",
+              "label": {
+                "de": "Bereich auswählen",
+                "en": "Select a region"
+              }
+            }
+          ]
+        },
+        {
+          "key": "clipboard",
+          "type": "bool",
+          "label": {
+            "de": "In die Zwischenablage statt in eine Datei",
+            "en": "To clipboard instead of a file"
+          },
+          "default": false
+        },
+        {
+          "key": "directory",
+          "type": "path",
+          "label": {
+            "de": "Zielordner",
+            "en": "Target folder"
+          },
+          "default": "",
+          "depends_on": {
+            "clipboard": false
+          },
+          "help": {
+            "de": "Leer = Bilder/Screenshots.",
+            "en": "Empty = Pictures/Screenshots."
+          }
+        },
+        {
+          "key": "delay_ms",
+          "type": "number",
+          "label": {
+            "de": "Verzögerung (ms)",
+            "en": "Delay (ms)"
+          },
+          "default": 0,
+          "min": 0,
+          "max": 10000,
+          "step": 100
+        }
+      ]
+    },
+    {
+      "id": "close_app",
+      "name": {
+        "de": "Programm beenden",
+        "en": "Close program"
+      },
+      "description": {
+        "de": "Beendet ein laufendes Programm.",
+        "en": "Terminates a running program."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "square-x",
+      "settings_schema": [
+        {
+          "key": "pattern",
+          "type": "text",
+          "label": {
+            "de": "Programm",
+            "en": "Program"
+          },
+          "placeholder": "obs",
+          "help": {
+            "de": "Name oder Teil der Kommandozeile.",
+            "en": "Name or part of the command line."
+          }
+        },
+        {
+          "key": "force",
+          "type": "bool",
+          "label": {
+            "de": "Erzwingen (SIGKILL)",
+            "en": "Force (SIGKILL)"
+          },
+          "default": false,
+          "help": {
+            "de": "Ohne Nachfrage und ohne Speichern — nur im Notfall.",
+            "en": "No prompt and no saving — for emergencies only."
+          }
+        }
+      ]
+    },
+    {
+      "id": "window",
+      "name": {
+        "de": "Fenster & Arbeitsfläche",
+        "en": "Window & desktop"
+      },
+      "description": {
+        "de": "Löst einen globalen Kurzbefehl von KDE aus — maximieren, anordnen, Arbeitsfläche wechseln.",
+        "en": "Triggers a KDE global shortcut — maximise, tile, switch desktop."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "layout-board",
+      "settings_schema": [
+        {
+          "key": "component",
+          "type": "select",
+          "label": {
+            "de": "Bereich",
+            "en": "Component"
+          },
+          "default": "kwin",
+          "options_source": "shortcut_components"
+        },
+        {
+          "key": "shortcut",
+          "type": "select",
+          "label": {
+            "de": "Kurzbefehl",
+            "en": "Shortcut"
+          },
+          "options_source": "shortcuts",
+          "options_depend_on": [
+            "component"
+          ]
+        }
+      ]
     }
   ],
   "icon": "icon.png"

@@ -1,3 +1,4 @@
+import { useStore } from "../store";
 import type { Config, Page, Profile } from "../types";
 
 /** Eine Zeile im Seitenbaum — Seite plus alles, was die Darstellung braucht. */
@@ -112,9 +113,20 @@ export function pagePath(config: Config | null, pageId: string): Page[] {
   return chain;
 }
 
-export function activeProfile(config: Config | null): Profile | null {
+/**
+ * Das Profil, das gerade bearbeitet wird.
+ *
+ * Mit mehreren Decks gibt es kein „das aktive Profil" mehr — jedes Gerät
+ * hat eines. Ohne ausdrückliche Angabe gilt das Deck, das der Editor zeigt.
+ */
+export function activeProfile(
+  config: Config | null,
+  deckKey?: string,
+): Profile | null {
   if (!config) return null;
-  return config.profiles[config.active_profile_id] ?? null;
+  const key = deckKey ?? useStore.getState().activeDeck;
+  const profileId = config.decks?.[key]?.profile_id ?? config.active_profile_id;
+  return config.profiles[profileId] ?? config.profiles[config.active_profile_id] ?? null;
 }
 
 /**

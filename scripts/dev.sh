@@ -9,7 +9,9 @@
 set -eu
 REPO=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 
-"$REPO/.venv/bin/python" -m deckswitch --verbose &
+# --dev lässt den Vite-Server als Herkunft zu; im normalen Betrieb
+# ist er es ausdrücklich nicht.
+"$REPO/.venv/bin/python" -m deckswitch --verbose --dev &
 BACKEND_PID=$!
 
 # Do not leave the backend orphaned, however we leave this script.

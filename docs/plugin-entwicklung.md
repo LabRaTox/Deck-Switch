@@ -73,6 +73,7 @@ Das `settings_schema` ist wichtig: **die GUI baut ihr Formular allein
 daraus**. Ein Plugin muss dafür nichts in der Oberfläche ergänzen.
 
 Feldtypen: `text`, `number`, `bool`, `select`, `color`, `path`, `file`,
+`hotkey` (Aufnahmefeld für Tastenkombinationen),
 `password`. Bei `select` entweder feste `options` angeben oder über
 `options_source` zur Laufzeit füllen lassen (siehe unten).
 
@@ -165,7 +166,17 @@ Ausgabegerät. Der `ctx` sagt, welche Belegung gerade dran ist:
 * `ctx.setting(name, default)` — Einstellung mit Rückfallwert
 * `ctx.scratch` — freier Zwischenspeicher, überlebt zwischen Aufrufen
 * `ctx.request_redraw()` — genau diese Kachel sofort neu zeichnen
-* `ctx.services` — Audio, Icons, Rendering, Runtime
+* `ctx.services` — Audio, Icons, Rendering, Runtime und die Systemdienste
+* `ctx.deck_serial` — auf welchem Deck die Belegung liegt
+* `ctx.frame_time` — Laufzeit in Sekunden; animierte Bilder wählen daraus
+  ihr Einzelbild
+
+**Bei mehreren Decks wichtig:** `ctx.services.runtime` zeigt auf *das Deck,
+auf dem gedrückt wurde*. Wer über `self.services.runtime` navigiert, landet
+dagegen beim Hauptdeck — das ist bei einem einzelnen Gerät dasselbe, bei
+zweien aber falsch. Faustregel: Alles, was mit einer Belegung zu tun hat,
+über `ctx.services.runtime`; alles Übrige (Fehler melden, Config speichern)
+darf über `self.services.runtime` gehen.
 
 ## Zustände von außen
 
@@ -245,7 +256,22 @@ schwarz füllen — sonst ignoriert das Plugin die Einstellungen des Nutzers.
 * `services.icons` — `resolve(icon_ref, size=…)`, `list_icons`
 * `services.render` — siehe oben
 * `services.runtime` — `request_redraw`, `navigate`, `navigate_home`,
-  `navigate_back`, `page_number`, `notify`, `save_config`
+  `navigate_back`, `page_number`, `step_page`, `notify`, `save_config`;
+  über `ctx` zusätzlich `device_settings` (Helligkeit & Co. dieses Decks),
+  `cycle_stack` und die Ketten-Steuerung `run_steps` / `stop_steps` /
+  `steps_running`
+* `services.input` — virtuelle Tastatur: `send_combo("ctrl+shift+f5")`,
+  `hold_combo(combo, pressed)` für Push-to-Talk, `type_text(text)`,
+  `available()`. Die Zuordnung Zeichen → Taste kommt aus der aktiven
+  Tastaturbelegung, nicht aus einer Annahme.
+* `services.media` — der gerade laufende Player über MPRIS:
+  `control("play_pause"|"next"|…)`, `refresh()`, `list_players()`,
+  `state` (spielt, Titel, Interpret)
+* `services.desktop` — Sitzung und Fenster: `power("lock"|"suspend"|…)`,
+  `invoke_shortcut(component, name)` für KDEs globale Kurzbefehle,
+  `list_shortcuts(component)`, `screenshot(mode)`, `close_application()`
+* `services.sound` — Soundboard: `play(pfad, owner=ctx.key, sink=…)`,
+  `toggle`, `stop`, `stop_all`, `is_playing(ctx.key)`
 * `services.config` — die gesamte Konfiguration (lesend)
 * `self.plugin_config` — die globalen Einstellungen dieses Plugins
 
@@ -262,6 +288,37 @@ unter *Plugins → \<Plugin\> → Plugin-Einstellungen*, das Plugin liest es
 GUI. Wirft ein Hook eine Ausnahme, fängt die Runtime sie ab, zeigt eine
 rote Fehlerkachel auf dem Gerät und listet den Fehler in der Oberfläche —
 ein kaputtes Plugin legt also nie die ganze Anwendung lahm.
+
+## Drehrichtungen
+
+Ein Dial kann je Drehrichtung eine eigene Action tragen. Ist eine belegt,
+bekommt sie die Drehung **wie einen kurzen Tastendruck** — also
+`on_key_down` und `on_key_up`, nicht `on_dial_rotate`. Eine Action, die nur
+`on_dial_rotate` beantwortet, taugt damit nicht als Richtungsbelegung; wer
+beides anbieten will, beantwortet beide Hooks.
+
+Umgekehrt gilt: Solange keine Richtung belegt ist, ändert sich nichts —
+`on_dial_rotate` bekommt weiter jedes Delta.
+
+## Was Plugins über Multi-Aktionen wissen müssen
+
+Eine Multi-Aktion ruft ganz normale Actions auf — genau so, wie es ein
+Tastendruck täte: erst `on_key_down`, dann `on_key_up`. Ein Plugin muss
+dafür nichts vorbereiten. Zwei Dinge sind trotzdem gut zu wissen:
+
+* Jeder Schritt bekommt einen **eigenen `ctx.scratch`**. Eine Aktion, die
+  ihren Zustand dort führt (etwa ein Umschalter), zählt also je Schritt
+  getrennt.
+* Eine Kette läuft als eigene Aufgabe und kann **jederzeit abgebrochen**
+  werden. Wer in einem Hook etwas startet, das aufgeräumt werden muss,
+  sollte das nicht auf einen späteren Hook-Aufruf verschieben.
+
+## Kein Symbol
+
+`IconRef(kind="none")` heißt ausdrücklich „hier soll kein Symbol stehen" —
+auch nicht das `default_icon` aus dem Manifest. Das braucht, wer ein fertig
+gestaltetes Tastenbild als Hintergrund setzt; Symbol und Text stecken dann
+schon darin.
 
 ## Iconset-Plugin
 

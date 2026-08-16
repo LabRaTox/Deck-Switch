@@ -8,11 +8,14 @@
  */
 
 import { create } from "zustand";
-import { api } from "./api/client";
+import { api, setActiveDeck } from "./api/client";
 import type {
   BackendError,
   Config,
+  Profile,
+  DeckInfo,
   DeviceInfo,
+  DeviceSettings,
   InputType,
   Page,
   PluginInfo,
@@ -20,12 +23,17 @@ import type {
   BackgroundPreset,
   Selection,
   Slot,
+  TouchWallpaper,
 } from "./types";
 
 interface StoreState {
   ready: boolean;
   online: boolean;
   device: DeviceInfo | null;
+  /** Alle bekannten Decks — auch gerade nicht angeschlossene. */
+  decks: DeckInfo[];
+  /** Das Deck, das der Editor gerade bearbeitet. */
+  activeDeck: string;
   config: Config | null;
   plugins: PluginInfo[];
   errors: BackendError[];
@@ -38,6 +46,33 @@ interface StoreState {
 
   load: () => Promise<void>;
   setOnline: (online: boolean) => void;
+  selectDeck: (key: string) => Promise<void>;
+  activeDeckInfo: () => DeckInfo | null;
+  deckSettings: () => DeviceSettings | null;
+  patchDeckSettings: (mutate: (settings: DeviceSettings) => DeviceSettings) => Promise<void>;
+  renameDeck: (key: string, name: string) => Promise<void>;
+  forgetDeck: (key: string) => Promise<void>;
+  /** Legt ein virtuelles Deck an (Overlay statt Hardware). */
+  createVirtualDeck: (payload: {
+    name: string;
+    columns: number;
+    rows: number;
+    dials: number;
+  }) => Promise<void>;
+  /** Raster eines virtuellen Decks ändern. */
+  setDeckGrid: (
+    key: string,
+    grid: {
+      columns?: number;
+      rows?: number;
+      dials?: number;
+      tile_size?: number;
+      overlay_transparent?: boolean;
+      hide_empty?: boolean;
+    },
+  ) => Promise<void>;
+  /** Overlay zeigen/verstecken. `null` schaltet um. */
+  toggleOverlay: (key: string, visible: boolean | null) => Promise<void>;
   setView: (view: StoreState["view"]) => void;
   select: (selection: Selection | null) => void;
   bumpPreview: () => void;
@@ -65,6 +100,10 @@ interface StoreState {
   deletePage: (pageId: string) => Promise<void>;
 
   patchConfig: (mutate: (config: Config) => Config) => Promise<void>;
+  /** App-Einstellungen gezielt ändern, ohne die ganze Config zu schicken. */
+  patchAppSettings: (patch: { language?: "de" | "en"; active_iconset?: string }) => Promise<void>;
+  /** Hintergrundbild des Touchstrips dieser Seite. */
+  patchTouchWallpaper: (pageId: string, patch: Partial<TouchWallpaper>) => Promise<void>;
   setPluginConfig: (pluginId: string, config: Record<string, unknown>) => Promise<void>;
   setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<void>;
   reloadPlugins: () => Promise<void>;
@@ -80,14 +119,23 @@ interface StoreState {
   pushError: (error: BackendError) => void;
 }
 
-function activeProfile(config: Config) {
-  return config.profiles[config.active_profile_id];
+/**
+ * Das Profil des Decks, das gerade bearbeitet wird.
+ *
+ * Jedes Deck hat ein eigenes — deshalb reicht ``active_profile_id`` allein
+ * nicht mehr aus, sobald zwei Geräte angeschlossen sind.
+ */
+function activeProfile(config: Config, deckKey: string): Profile | undefined {
+  const profileId = config.decks?.[deckKey]?.profile_id ?? config.active_profile_id;
+  return config.profiles[profileId] ?? config.profiles[config.active_profile_id];
 }
 
 export const useStore = create<StoreState>((set, get) => ({
   ready: false,
   online: false,
   device: null,
+  decks: [],
+  activeDeck: "",
   config: null,
   plugins: [],
   errors: [],
@@ -99,16 +147,137 @@ export const useStore = create<StoreState>((set, get) => ({
 
   load: async () => {
     const state = await api.state();
+    const decks = state.decks ?? [];
+
+    // Das bearbeitete Deck beibehalten, solange es noch da ist — ein
+    // Neuladen wegen einer Config-Änderung darf die Ansicht nicht
+    // wegspringen lassen.
+    const previous = get().activeDeck;
+    const active =
+      decks.find((deck) => deck.id === previous)?.id ??
+      state.active_deck ??
+      decks[0]?.id ??
+      "";
+    setActiveDeck(active);
+
+    const activeInfo = decks.find((deck) => deck.id === active);
+    const currentPageId =
+      previous === active && get().currentPageId
+        ? get().currentPageId
+        : (activeInfo?.current_page_id ?? state.current_page_id);
+
     set({
       ready: true,
-      device: state.device,
+      device: activeInfo ?? state.device,
+      decks,
+      activeDeck: active,
       config: state.config,
       plugins: state.plugins,
       errors: state.errors,
       backgroundPresets: state.backgrounds,
-      currentPageId: state.current_page_id,
+      currentPageId,
       previewVersion: get().previewVersion + 1,
     });
+  },
+
+  selectDeck: async (key) => {
+    const deck = get().decks.find((entry) => entry.id === key);
+    if (!deck) return;
+    setActiveDeck(key);
+    set({
+      activeDeck: key,
+      device: deck,
+      currentPageId: deck.current_page_id,
+      selection: null,
+      previewVersion: get().previewVersion + 1,
+    });
+
+    // Nachfragen, auf welcher Seite das Deck *jetzt* steht: Der Stand in
+    // der Deckliste ist der vom letzten Laden, und in der Zwischenzeit kann
+    // am Gerät oder im Overlay geblättert worden sein. Der Editor soll
+    // zeigen, was das Deck zeigt.
+    try {
+      const { current_page_id } = await api.pages();
+      if (current_page_id && get().activeDeck === key) {
+        set({ currentPageId: current_page_id });
+      }
+    } catch {
+      /* Backend kurz weg — dann bleibt der gemerkte Stand */
+    }
+  },
+
+  activeDeckInfo: () => {
+    const { decks, activeDeck } = get();
+    return decks.find((deck) => deck.id === activeDeck) ?? decks[0] ?? null;
+  },
+
+  deckSettings: () => {
+    const { config, activeDeck } = get();
+    return config?.decks?.[activeDeck]?.device ?? config?.device ?? null;
+  },
+
+  patchDeckSettings: async (mutate) => {
+    const { config, activeDeck } = get();
+    const current = config?.decks?.[activeDeck]?.device;
+    if (!config || !current) return;
+
+    const next = mutate(structuredClone(current));
+    // Optimistisch, damit Regler flüssig bleiben.
+    const optimistic = structuredClone(config);
+    optimistic.decks[activeDeck].device = next;
+    set({ config: optimistic, previewVersion: get().previewVersion + 1 });
+
+    try {
+      await api.updateDeck(activeDeck, { device: next });
+    } catch (error) {
+      set({ config });
+      get().pushError(toError(error, "deck"));
+    }
+  },
+
+  renameDeck: async (key, name) => {
+    try {
+      await api.updateDeck(key, { name });
+      await get().load();
+    } catch (error) {
+      get().pushError(toError(error, "deck"));
+    }
+  },
+
+  createVirtualDeck: async (payload) => {
+    try {
+      await api.createVirtualDeck(payload);
+      await get().load();
+    } catch (error) {
+      get().pushError(toError(error, "deck"));
+    }
+  },
+
+  setDeckGrid: async (key, grid) => {
+    try {
+      await api.updateDeck(key, grid);
+      await get().load();
+    } catch (error) {
+      get().pushError(toError(error, "deck"));
+    }
+  },
+
+  toggleOverlay: async (key, visible) => {
+    try {
+      await api.setOverlay(key, visible);
+      set({ decks: await api.decks() });
+    } catch (error) {
+      get().pushError(toError(error, "overlay"));
+    }
+  },
+
+  forgetDeck: async (key) => {
+    try {
+      await api.forgetDeck(key);
+      await get().load();
+    } catch (error) {
+      get().pushError(toError(error, "deck"));
+    }
   },
 
   setOnline: (online) => set({ online }),
@@ -119,8 +288,12 @@ export const useStore = create<StoreState>((set, get) => ({
   currentPage: () => {
     const { config, currentPageId } = get();
     if (!config) return null;
-    const profile = activeProfile(config);
-    return profile?.pages[currentPageId] ?? null;
+    const profile = activeProfile(config, get().activeDeck);
+    if (!profile) return null;
+    // Gehört die gemerkte Seite nicht zu diesem Profil — etwa direkt nach
+    // einem Deckwechsel oder nach dem Löschen —, auf die Startseite
+    // zurückfallen statt eine leere Ansicht zu zeigen.
+    return profile.pages[currentPageId] ?? profile.pages[profile.root_page_id] ?? null;
   },
 
   slotAt: (selection) => {
@@ -132,12 +305,17 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   setSlot: async (inputType, index, slot) => {
-    const { config, currentPageId } = get();
+    const { config } = get();
     if (!config) return;
 
+    // Über ``currentPage()`` und nicht über die gemerkte ID: Nach einem
+    // Deckwechsel kann die ID zu einem fremden Profil gehören — dann würde
+    // hier ins Leere geschrieben.
+    const page = get().currentPage();
+    if (!page) return;
+    const currentPageId = page.id;
+
     const previous = structuredClone(config);
-    const profile = activeProfile(config);
-    const page = profile.pages[currentPageId];
     const mapping = inputType === "key" ? page.keys : page.dials;
     if (slot) mapping[String(index)] = slot;
     else delete mapping[String(index)];
@@ -224,7 +402,8 @@ export const useStore = create<StoreState>((set, get) => ({
     const page = await api.createPage(name, parentId);
     const config = get().config;
     if (config) {
-      activeProfile(config).pages[page.id] = page;
+      const profile = activeProfile(config, get().activeDeck);
+      if (profile) profile.pages[page.id] = page;
       set({ config: { ...config } });
     }
     return page;
@@ -234,7 +413,7 @@ export const useStore = create<StoreState>((set, get) => ({
     await api.updatePage(pageId, { name });
     const config = get().config;
     if (config) {
-      const page = activeProfile(config).pages[pageId];
+      const page = activeProfile(config, get().activeDeck)?.pages[pageId];
       if (page) page.name = name;
       set({ config: { ...config }, previewVersion: get().previewVersion + 1 });
     }
@@ -248,7 +427,7 @@ export const useStore = create<StoreState>((set, get) => ({
     // schickt sie zurück — bis dahin soll die Zeile aber sofort dort stehen,
     // wo sie hingezogen wurde, statt kurz zurückzuspringen.
     const config = structuredClone(previous);
-    const profile = activeProfile(config);
+    const profile = activeProfile(config, get().activeDeck);
     const page = profile?.pages[pageId];
     if (!page) return;
 
@@ -266,7 +445,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const { pages } = await api.movePage(pageId, parentId, index);
       const fresh = get().config;
       if (fresh) {
-        const profileNow = activeProfile(fresh);
+        const profileNow = activeProfile(fresh, get().activeDeck);
         if (profileNow) profileNow.pages = pages;
         set({ config: { ...fresh }, previewVersion: get().previewVersion + 1 });
       }
@@ -280,11 +459,13 @@ export const useStore = create<StoreState>((set, get) => ({
     const { deleted } = await api.deletePage(pageId);
     const config = get().config;
     if (config) {
-      for (const id of deleted) delete activeProfile(config).pages[id];
+      const profile = activeProfile(config, get().activeDeck);
+      for (const id of deleted) delete profile?.pages[id];
       set({ config: { ...config } });
     }
     if (deleted.includes(get().currentPageId) && config) {
-      await get().navigate(activeProfile(config).root_page_id);
+      const root = activeProfile(config, get().activeDeck)?.root_page_id;
+      if (root) await get().navigate(root);
     }
   },
 
@@ -298,6 +479,41 @@ export const useStore = create<StoreState>((set, get) => ({
     } catch (error) {
       set({ config });
       get().pushError(toError(error, "config"));
+    }
+  },
+
+  patchAppSettings: async (patch) => {
+    const config = get().config;
+    if (!config) return;
+    const optimistic = structuredClone(config);
+    Object.assign(optimistic.app, patch);
+    set({ config: optimistic, previewVersion: get().previewVersion + 1 });
+    try {
+      await api.patchAppSettings(patch);
+    } catch (error) {
+      set({ config });
+      get().pushError(toError(error, "config"));
+    }
+  },
+
+  patchTouchWallpaper: async (pageId, patch) => {
+    const config = get().config;
+    if (!config) return;
+    const profile = activeProfile(config, get().activeDeck);
+    const page = profile?.pages[pageId];
+    if (!page) return;
+
+    const next = { ...page.touch_wallpaper, ...patch };
+    const optimistic = structuredClone(config);
+    const target = activeProfile(optimistic, get().activeDeck)?.pages[pageId];
+    if (target) target.touch_wallpaper = next;
+    set({ config: optimistic, previewVersion: get().previewVersion + 1 });
+
+    try {
+      await api.updatePage(pageId, { touch_wallpaper: next });
+    } catch (error) {
+      set({ config });
+      get().pushError(toError(error, "pages"));
     }
   },
 

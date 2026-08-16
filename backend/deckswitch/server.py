@@ -37,10 +37,12 @@ from pydantic import BaseModel, ValidationError
 
 from . import events as ev
 from . import paths
-from .config import Config, Page, Slot
+from .config import Config, DeviceSettings, Page, Slot, TouchWallpaper
 from .plugins import installer
 from .runtime import Runtime
+from .virtualdeck import VirtualDevice
 from .services import autostart, backgrounds, screensaver
+from .services import render as render_service
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +68,67 @@ class PageCreate(BaseModel):
 class PageUpdate(BaseModel):
     name: str | None = None
     parent_id: str | None = None
+    #: Hintergrundbild des Touchstrips dieser Seite.
+    touch_wallpaper: dict | None = None
+
+
+class AppSettingsUpdate(BaseModel):
+    """Nur die App-Einstellungen — kein Rundumschlag über die ganze Config."""
+
+    language: str | None = None
+    active_iconset: str | None = None
+
+
+class VirtualDeckCreate(BaseModel):
+    """Ein neues Overlay-Deck. Raster frei wählbar — es hängt an keiner Hardware."""
+
+    name: str = "Virtuelles Deck"
+    columns: int = 4
+    rows: int = 2
+    dials: int = 0
+
+
+class OverlayToggle(BaseModel):
+    """Overlay eines virtuellen Decks zeigen, verstecken oder umschalten."""
+
+    #: ``None`` = umschalten.
+    visible: bool | None = None
+    at_cursor: bool = True
+
+
+class OverlayPosition(BaseModel):
+    """Wohin das Overlay gezogen wurde — in Bildschirmkoordinaten."""
+
+    x: int
+    y: int
+
+
+class DeckInput(BaseModel):
+    """Eine Eingabe aus dem Overlay."""
+
+    input_type: str = "key"
+    index: int = 0
+    #: ``down``/``up`` für gedrückt/losgelassen, ``click`` für beides
+    #: nacheinander, ``rotate`` für das Mausrad auf einem Dial.
+    action: str = "click"
+    delta: int = 0
+
+
+class DeckUpdate(BaseModel):
+    """Was sich an einem Deck einstellen lässt."""
+
+    name: str | None = None
+    order: int | None = None
+    profile_id: str | None = None
+    #: Vollständige Geräteeinstellungen (Helligkeit, Zeiten, Schoner).
+    device: dict | None = None
+    #: Nur bei virtuellen Decks: Raster und Kachelgröße.
+    columns: int | None = None
+    rows: int | None = None
+    dials: int | None = None
+    tile_size: int | None = None
+    overlay_transparent: bool | None = None
+    hide_empty: bool | None = None
 
 
 class PageMove(BaseModel):
@@ -79,19 +142,24 @@ class PageMove(BaseModel):
     index: int = 0
 
 
-def _allowed_origins(host: str, port: int) -> set[str]:
+def _allowed_origins(host: str, port: int, dev: bool = False) -> set[str]:
     """Herkünfte, denen der Server trauen darf.
 
     Der Server bindet nur an 127.0.0.1, aber das schützt nicht vor dem
     Browser: Jede offene Webseite läuft auf demselben Rechner und könnte
     sonst im Hintergrund mit dem Deck reden. Deshalb eine feste Liste statt
-    ``*`` — die eigene GUI, der Vite-Dev-Server und das Tauri-Fenster.
+    ``*`` — die eigene GUI und das Tauri-Fenster.
+
+    Die Vite-Ports stehen **nur im Entwicklungsmodus** darin. Im normalen
+    Betrieb wären sie ein offenes Scheunentor: Wer auf 5173 irgendetwas
+    laufen lässt, dürfte sonst die ganze API lesen — samt ``/api/export``
+    mit den Zugangsdaten in den Plugin-Einstellungen.
     """
     hosts = {host, "127.0.0.1", "localhost"}
     origins = {f"http://{h}:{port}" for h in hosts}
-    # Vite im Entwicklungsmodus.
-    for dev_port in (5173, 5174, 4173):
-        origins |= {f"http://{h}:{dev_port}" for h in ("localhost", "127.0.0.1")}
+    if dev:
+        for dev_port in (5173, 5174, 4173):
+            origins |= {f"http://{h}:{dev_port}" for h in ("localhost", "127.0.0.1")}
     # Das Tauri-Fenster meldet sich je nach Plattform unterschiedlich.
     origins |= {"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"}
     return origins
@@ -101,9 +169,15 @@ def _allowed_origins(host: str, port: int) -> set[str]:
 _UNSAFE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
 
-def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -> FastAPI:
+def create_app(
+    runtime: Runtime,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8770,
+    dev: bool = False,
+) -> FastAPI:
     app = FastAPI(title="DECK//SWITCH", version="0.1.0", docs_url="/api/docs")
-    allowed_origins = _allowed_origins(host, port)
+    allowed_origins = _allowed_origins(host, port, dev)
 
     # CORS auf die bekannten Herkünfte einschränken. Damit blockt der Browser
     # das *Lesen* fremder Antworten und lässt vorab geprüfte Anfragen (JSON,
@@ -143,31 +217,266 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
 
     @app.get("/api/state")
     async def get_state() -> dict[str, Any]:
+        primary = runtime.primary
         return {
-            "device": runtime.device.info.as_dict(),
+            # ``device`` bleibt das Hauptdeck — für alles, was nur ein Gerät
+            # kennt. Die vollständige Liste steht in ``decks``.
+            "device": primary.device.info.as_dict(),
+            "decks": runtime.decks_payload(),
+            "active_deck": primary.key,
             "config": runtime.config.model_dump(mode="json"),
-            "current_page_id": runtime.current_page_id(),
+            "current_page_id": primary.current_page_id(),
             "plugins": _plugins_payload(runtime),
             "errors": runtime.errors[-50:],
             "backgrounds": backgrounds.PRESETS,
         }
 
     @app.get("/api/device")
-    async def get_device() -> dict[str, Any]:
-        return runtime.device.info.as_dict()
+    async def get_device(deck: str | None = None) -> dict[str, Any]:
+        return runtime.deck(deck).device.info.as_dict()
+
+    # ======================================================================
+    # Decks
+    # ======================================================================
+
+    @app.get("/api/decks")
+    async def list_decks() -> list[dict[str, Any]]:
+        return runtime.decks_payload()
+
+    @app.post("/api/decks/virtual")
+    async def create_virtual_deck(payload: VirtualDeckCreate) -> dict[str, Any]:
+        """Legt ein Deck an, das als Overlay auf dem Bildschirm liegt."""
+        deck = runtime.create_virtual_deck(
+            payload.name.strip() or "Virtuelles Deck",
+            columns=payload.columns,
+            rows=payload.rows,
+            dials=payload.dials,
+        )
+        return deck.as_dict()
+
+    @app.post("/api/decks/{key}/overlay")
+    async def deck_overlay(key: str, payload: OverlayToggle) -> dict[str, Any]:
+        """Zeigt das Overlay, versteckt es oder schaltet um."""
+        deck = runtime.decks.get(key)
+        if deck is None or not deck.binding.is_virtual:
+            raise HTTPException(404, "Kein virtuelles Deck")
+        try:
+            if payload.visible is None:
+                sichtbar = await runtime.overlay.toggle(key, at_cursor=payload.at_cursor)
+            elif payload.visible:
+                await runtime.overlay.show(key, at_cursor=payload.at_cursor)
+                sichtbar = True
+            else:
+                runtime.overlay.hide(key)
+                sichtbar = False
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        runtime.bus.publish(ev.EVT_DECKS_CHANGED, decks=runtime.decks_payload())
+        return {"visible": sichtbar}
+
+    @app.post("/api/decks/{key}/overlay/position")
+    async def deck_overlay_position(key: str, payload: OverlayPosition) -> dict[str, Any]:
+        """Merkt sich, wo das Overlay abgelegt wurde, und setzt es dorthin.
+
+        Das Overlay ruft das selbst, sobald man es loslässt — nicht während
+        des Ziehens: Sonst schriebe jede Mausbewegung die Konfiguration.
+
+        Der Neuaufbau ist nötig, weil eine Layer-Shell-Surface im Betrieb
+        nicht umziehen kann (siehe ``deck-overlay.qml``). Er läuft absichtlich
+        erst *nach* dieser Antwort: Sonst beendeten wir den Prozess, der noch
+        auf sie wartet.
+        """
+        try:
+            x, y = runtime.overlay.remember_position(key, payload.x, payload.y)
+        except RuntimeError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+        if runtime.overlay.is_visible(key):
+            async def an_neue_stelle() -> None:
+                await asyncio.sleep(0.05)
+                try:
+                    await runtime.overlay.show(key, at_cursor=False)
+                except RuntimeError:
+                    log.warning("Overlay ließ sich nicht neu setzen", exc_info=True)
+
+            asyncio.create_task(an_neue_stelle())
+
+        runtime.bus.publish(ev.EVT_DECKS_CHANGED, decks=runtime.decks_payload())
+        return {"x": x, "y": y}
+
+    @app.get("/api/decks/{key}/tiles")
+    async def deck_tiles(key: str) -> dict[str, Any]:
+        """Alles, was das Overlay zum Zeichnen braucht.
+
+        ``versions`` sagt je Kachel, wie oft sie sich geändert hat — das
+        Overlay lädt daraufhin nur die Bilder, die wirklich neu sind.
+        """
+        deck = runtime.decks.get(key)
+        if deck is None:
+            raise HTTPException(404, "Deck nicht gefunden")
+        device = deck.device
+        if not isinstance(device, VirtualDevice):
+            raise HTTPException(400, "Dieses Deck ist kein virtuelles")
+        return {
+            "deck": deck.key,
+            "name": deck.label,
+            "columns": deck.binding.columns,
+            "rows": deck.binding.rows,
+            "dials": deck.binding.dials,
+            "tile_size": deck.binding.key_size,
+            "transparent": deck.binding.overlay_transparent,
+            "hide_empty": deck.binding.hide_empty,
+            "brightness": device.brightness,
+            "revision": device.revision,
+            "versions": device.versions(),
+            "page_id": deck.current_page_id(),
+            # Welche Plätze überhaupt belegt sind — nur damit kann das
+            # Overlay leere ausblenden, ohne die Belegung zu kennen.
+            "filled": _belegte_plaetze(deck),
+        }
+
+    @app.get("/api/decks/{key}/tile/{input_type}/{index}.png")
+    async def deck_tile(key: str, input_type: str, index: int) -> Response:
+        """Das Bild einer Kachel — genau so, wie es auf einem Deck stünde."""
+        deck = runtime.decks.get(key)
+        device = deck.device if deck else None
+        if not isinstance(device, VirtualDevice):
+            raise HTTPException(404, "Kein virtuelles Deck")
+        data = device.image(input_type, index)
+        if data is None:
+            raise HTTPException(404, "Für diese Kachel gibt es noch kein Bild")
+        return Response(
+            data, media_type="image/png", headers={"Cache-Control": "no-store"}
+        )
+
+    @app.post("/api/decks/{key}/input")
+    async def deck_input(key: str, payload: DeckInput) -> dict[str, Any]:
+        """Eine Eingabe aus dem Overlay — derselbe Weg wie am echten Gerät."""
+        deck = runtime.decks.get(key)
+        device = deck.device if deck else None
+        if not isinstance(device, VirtualDevice):
+            raise HTTPException(404, "Kein virtuelles Deck")
+
+        if payload.action == "rotate":
+            device.rotate(payload.index, payload.delta or 1)
+        elif payload.action == "down":
+            device.press(payload.input_type, payload.index, True)
+        elif payload.action == "up":
+            device.press(payload.input_type, payload.index, False)
+        else:
+            # Ein Klick ist Drücken und Loslassen — nur so greifen
+            # Push-to-Talk und die Tastenlogik wie am Gerät.
+            device.press(payload.input_type, payload.index, True)
+            await asyncio.sleep(0.02)
+            device.press(payload.input_type, payload.index, False)
+        return {"ok": True}
+
+    @app.patch("/api/decks/{key}")
+    async def update_deck(key: str, payload: DeckUpdate) -> dict[str, Any]:
+        deck = runtime.decks.get(key)
+        if deck is None:
+            raise HTTPException(404, "Deck nicht gefunden")
+
+        if payload.name is not None:
+            deck.binding.name = payload.name.strip() or deck.device.info.deck_type
+        if payload.order is not None:
+            deck.binding.order = payload.order
+        if payload.profile_id is not None:
+            if payload.profile_id not in runtime.config.profiles:
+                raise HTTPException(404, "Profil nicht gefunden")
+            deck.binding.profile_id = payload.profile_id
+            deck.apply_config()
+        if payload.device is not None:
+            try:
+                deck.binding.device = DeviceSettings.model_validate(payload.device)
+            except ValidationError as exc:
+                raise HTTPException(422, f"Geräteeinstellungen ungültig: {exc}") from exc
+            deck.apply_config()
+
+        # Nach außen heißt die Kachelgröße ``tile_size`` — im Modell
+        # ``key_size``, weil ein Gerät seine Tastengröße so nennt. Die
+        # Zuordnung steht hier ausdrücklich; sie stillschweigend über den
+        # Feldnamen zu erraten war genau der Fehler.
+        raster = (
+            ("columns", "columns", 1, 16),
+            ("rows", "rows", 1, 8),
+            ("dials", "dials", 0, 8),
+            ("tile_size", "key_size", 48, 256),
+        )
+        geaendert = False
+        for aussen, innen, kleinster, groesster in raster:
+            wert = getattr(payload, aussen)
+            if wert is None:
+                continue
+            if not deck.binding.is_virtual:
+                raise HTTPException(400, "Das Raster gilt nur für virtuelle Decks")
+            setattr(deck.binding, innen, max(kleinster, min(groesster, int(wert))))
+            geaendert = True
+        for schalter in ("overlay_transparent", "hide_empty"):
+            wert = getattr(payload, schalter)
+            if wert is None:
+                continue
+            if not deck.binding.is_virtual:
+                raise HTTPException(400, "Diese Einstellung gilt nur für virtuelle Decks")
+            setattr(deck.binding, schalter, bool(wert))
+            geaendert = True
+
+        if geaendert:
+            runtime.update_virtual_geometry(deck)
+
+        runtime.save_config()
+        eintraege = runtime.decks_payload()
+        runtime.bus.publish(ev.EVT_DECKS_CHANGED, decks=eintraege)
+        # Dieselbe Form wie in der Liste zurückgeben — sonst fehlten der GUI
+        # nach dem Speichern genau die Felder, die sie gerade geändert hat.
+        for eintrag in eintraege:
+            if eintrag["id"] == deck.key:
+                return eintrag
+        return deck.as_dict()
+
+    @app.delete("/api/decks/{key}")
+    async def forget_deck(key: str) -> dict[str, Any]:
+        try:
+            if not runtime.forget_deck(key):
+                raise HTTPException(404, "Deck nicht gefunden")
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"forgotten": key}
 
     @app.post("/api/device/brightness")
-    async def set_brightness(value: int = Body(..., embed=True)) -> dict[str, Any]:
-        runtime.config.device.brightness = max(0, min(100, value))
-        runtime.device.set_brightness(runtime.config.device.brightness)
+    async def set_brightness(
+        value: int = Body(..., embed=True), deck: str | None = None
+    ) -> dict[str, Any]:
+        session = runtime.deck(deck)
+        session.settings.brightness = max(0, min(100, value))
+        session.device.set_brightness(session.settings.brightness)
         runtime.save_config()
         runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="brightness")
-        return {"brightness": runtime.config.device.brightness}
+        return {"brightness": session.settings.brightness}
 
     @app.post("/api/device/reconnect")
-    async def reconnect() -> dict[str, Any]:
-        runtime.device.close()
+    async def reconnect(deck: str | None = None) -> dict[str, Any]:
+        runtime.deck(deck).device.close()
         return {"ok": True}
+
+    # ======================================================================
+    # Schriften und Eingabegerät
+    # ======================================================================
+
+    @app.get("/api/fonts")
+    def list_fonts() -> list[str]:
+        """Installierte Schriftfamilien für die Beschriftungsauswahl."""
+        return render_service.list_font_families()
+
+    @app.get("/api/input/status")
+    def input_status() -> dict[str, Any]:
+        """Kann die App Tastendrücke schicken? Was sagt die Belegung?"""
+        available, reason = runtime.input.available()
+        return {
+            "available": available,
+            "reason": reason,
+            "layout": runtime.input.layout if available else "",
+        }
 
     # ======================================================================
     # Config
@@ -176,6 +485,29 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
     @app.get("/api/config")
     async def get_config() -> dict[str, Any]:
         return runtime.config.model_dump(mode="json")
+
+    @app.patch("/api/config/app")
+    async def patch_app_settings(payload: AppSettingsUpdate) -> dict[str, Any]:
+        """Ändert gezielt die App-Einstellungen.
+
+        Bewusst *nicht* über ``PUT /api/config``: Wer für eine Sprachumstellung
+        die ganze Config zurückschickt, überschreibt alles, was in der
+        Zwischenzeit woanders passiert ist — eine Helligkeit, die am Dial
+        verstellt wurde, oder ein Deck, das sich gerade angemeldet hat.
+        """
+        app_settings = runtime.config.app
+        if payload.language is not None:
+            if payload.language not in ("de", "en"):
+                raise HTTPException(422, "Unbekannte Sprache")
+            app_settings.language = payload.language
+        if payload.active_iconset is not None:
+            app_settings.active_iconset = payload.active_iconset
+
+        runtime.save_config()
+        runtime.icons.clear_cache()
+        runtime.request_redraw()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="app_settings")
+        return app_settings.model_dump(mode="json")
 
     @app.put("/api/config")
     async def put_config(payload: dict = Body(...)) -> dict[str, Any]:
@@ -233,15 +565,16 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
         return entries
 
     @app.get("/api/screensavers/preview")
-    def screensaver_preview(source: str) -> Response:
+    def screensaver_preview(source: str, deck: str | None = None) -> Response:
         """Zeigt, wie der Schoner auf dem Deck aussieht — inklusive Fugen."""
-        deck = screensaver.layout(
-            runtime.device.info.key_size,
-            runtime.device.info.key_count or 8,
-            runtime.device.info.touchscreen_size,
+        session = runtime.deck(deck)
+        layout = screensaver.layout(
+            session.device.info.key_size,
+            session.device.info.key_count or 8,
+            session.device.info.touchscreen_size,
         )
         try:
-            image = runtime.screensaver_preview(source, deck)
+            image = session.screensaver_preview(source, layout)
         except Exception as exc:
             raise HTTPException(404, f"Schoner nicht darstellbar: {exc}") from exc
 
@@ -250,11 +583,12 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
         return Response(buffer.getvalue(), media_type="image/png")
 
     @app.post("/api/screensavers/test")
-    async def test_screensaver() -> dict[str, Any]:
+    async def test_screensaver(deck: str | None = None) -> dict[str, Any]:
         """Zeigt den eingestellten Schoner sofort — zum Ausprobieren."""
-        if not runtime.config.device.screensaver.source:
+        session = runtime.deck(deck)
+        if not session.settings.screensaver.source:
             raise HTTPException(400, "Kein Bildschirmschoner eingestellt")
-        runtime.start_screensaver_now()
+        session.start_screensaver_now()
         return {"ok": True}
 
     # ======================================================================
@@ -293,14 +627,18 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
         return entries
 
     @app.get("/api/wallpapers/preview")
-    def wallpaper_preview(source: str, fit: str = "cover", opacity: int = 100) -> Response:
+    def wallpaper_preview(
+        source: str, fit: str = "cover", opacity: int = 100, deck: str | None = None
+    ) -> Response:
         """Der Streifen, wie er auf dem Gerät ankommt — mit Segmentgrenzen.
 
         Einpassung und Deckkraft kommen als Parameter statt aus der Config:
         So lässt sich die Wirkung ausprobieren, bevor man sie speichert.
         """
         try:
-            image = runtime.wallpaper_preview(source, fit=fit, opacity=opacity)
+            image = runtime.deck(deck).wallpaper_preview(
+                source, fit=fit, opacity=opacity
+            )
         except Exception as exc:
             raise HTTPException(404, f"Hintergrundbild nicht darstellbar: {exc}") from exc
         buffer = io.BytesIO()
@@ -357,17 +695,20 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
     # ======================================================================
 
     @app.get("/api/pages")
-    async def list_pages() -> dict[str, Any]:
-        profile = runtime.config.active_profile()
+    async def list_pages(deck: str | None = None) -> dict[str, Any]:
+        session = runtime.deck(deck)
+        profile = session.profile
         return {
+            "deck": session.key,
+            "profile_id": profile.id,
             "root_page_id": profile.root_page_id,
-            "current_page_id": runtime.current_page_id(),
+            "current_page_id": session.current_page_id(),
             "pages": {pid: page.model_dump(mode="json") for pid, page in profile.pages.items()},
         }
 
     @app.post("/api/pages")
-    async def create_page(payload: PageCreate) -> dict[str, Any]:
-        profile = runtime.config.active_profile()
+    async def create_page(payload: PageCreate, deck: str | None = None) -> dict[str, Any]:
+        profile = runtime.deck(deck).profile
         parent_id = payload.parent_id
         if parent_id is not None and parent_id not in profile.pages:
             raise HTTPException(404, "Übergeordnete Seite existiert nicht")
@@ -383,13 +724,22 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
         return page.model_dump(mode="json")
 
     @app.patch("/api/pages/{page_id}")
-    async def update_page(page_id: str, payload: PageUpdate) -> dict[str, Any]:
-        profile = runtime.config.active_profile()
+    async def update_page(
+        page_id: str, payload: PageUpdate, deck: str | None = None
+    ) -> dict[str, Any]:
+        profile = runtime.deck(deck).profile
         page = profile.pages.get(page_id)
         if page is None:
             raise HTTPException(404, "Seite nicht gefunden")
         if payload.name is not None:
             page.name = payload.name
+        if payload.touch_wallpaper is not None:
+            try:
+                page.touch_wallpaper = TouchWallpaper.model_validate(
+                    payload.touch_wallpaper
+                )
+            except ValidationError as exc:
+                raise HTTPException(422, f"Hintergrundbild ungültig: {exc}") from exc
         if payload.parent_id is not None:
             new_parent = payload.parent_id or None
             _check_move_target(profile, page_id, new_parent)
@@ -402,9 +752,11 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
         return page.model_dump(mode="json")
 
     @app.post("/api/pages/{page_id}/move")
-    async def move_page(page_id: str, payload: PageMove) -> dict[str, Any]:
+    async def move_page(
+        page_id: str, payload: PageMove, deck: str | None = None
+    ) -> dict[str, Any]:
         """Sortiert eine Seite um und/oder hängt sie an ein anderes Elternteil."""
-        profile = runtime.config.active_profile()
+        profile = runtime.deck(deck).profile
         if page_id not in profile.pages:
             raise HTTPException(404, "Seite nicht gefunden")
         if page_id == profile.root_page_id and payload.parent_id is not None:
@@ -420,8 +772,9 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
         }
 
     @app.delete("/api/pages/{page_id}")
-    async def delete_page(page_id: str) -> dict[str, Any]:
-        profile = runtime.config.active_profile()
+    async def delete_page(page_id: str, deck: str | None = None) -> dict[str, Any]:
+        session = runtime.deck(deck)
+        profile = session.profile
         if page_id == profile.root_page_id:
             raise HTTPException(400, "Die Startseite kann nicht gelöscht werden")
         if page_id not in profile.pages:
@@ -435,20 +788,20 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
         _drop_references(profile, removed)
         profile.reindex(parent_id)
 
-        if runtime.current_page_id() in removed:
-            runtime.navigate(profile.root_page_id)
+        if session.current_page_id() in removed:
+            session.navigate(profile.root_page_id)
         runtime.save_config()
         runtime.request_redraw()
         runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="page_deleted", page_id=page_id)
         return {"deleted": sorted(removed)}
 
     @app.post("/api/navigate/{page_id}")
-    async def navigate(page_id: str) -> dict[str, Any]:
-        profile = runtime.config.active_profile()
-        if page_id not in profile.pages:
+    async def navigate(page_id: str, deck: str | None = None) -> dict[str, Any]:
+        session = runtime.deck(deck)
+        if page_id not in session.profile.pages:
             raise HTTPException(404, "Seite nicht gefunden")
-        runtime.navigate(page_id)
-        return {"current_page_id": runtime.current_page_id()}
+        session.navigate(page_id)
+        return {"current_page_id": session.current_page_id(), "deck": session.key}
 
     # ======================================================================
     # Belegungen
@@ -456,11 +809,16 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
 
     @app.put("/api/pages/{page_id}/slots/{input_type}/{index}")
     async def put_slot(
-        page_id: str, input_type: str, index: int, payload: SlotPayload
+        page_id: str,
+        input_type: str,
+        index: int,
+        payload: SlotPayload,
+        deck: str | None = None,
     ) -> dict[str, Any]:
-        page = _require_page(runtime, page_id)
+        session = runtime.deck(deck)
+        page = _require_page(session, page_id)
         mapping = _require_mapping(page, input_type)
-        _check_index(runtime, input_type, index)
+        _check_index(session, input_type, index)
 
         if payload.slot is None:
             mapping.pop(index, None)
@@ -470,12 +828,13 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
             mapping[index] = payload.slot
 
         runtime.save_config()
-        runtime._contexts.pop(f"{page_id}:{input_type}:{index}", None)
-        if page_id == runtime.current_page_id():
-            runtime._mark_dirty((input_type, index))
+        session.drop_context(page_id, input_type, index)
+        if page_id == session.current_page_id():
+            session._mark_dirty((input_type, index))
         runtime.bus.publish(
             ev.EVT_CONFIG_CHANGED,
             reason="slot_changed",
+            deck=session.key,
             page_id=page_id,
             input_type=input_type,
             index=index,
@@ -483,20 +842,37 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
         return {"ok": True}
 
     @app.delete("/api/pages/{page_id}/slots/{input_type}/{index}")
-    async def delete_slot(page_id: str, input_type: str, index: int) -> dict[str, Any]:
-        return await put_slot(page_id, input_type, index, SlotPayload(slot=None))
+    async def delete_slot(
+        page_id: str, input_type: str, index: int, deck: str | None = None
+    ) -> dict[str, Any]:
+        return await put_slot(page_id, input_type, index, SlotPayload(slot=None), deck)
 
     @app.post("/api/pages/{page_id}/slots/{input_type}/{index}/trigger")
-    async def trigger_slot(page_id: str, input_type: str, index: int) -> dict[str, Any]:
+    async def trigger_slot(
+        page_id: str, input_type: str, index: int, deck: str | None = None
+    ) -> dict[str, Any]:
         """Belegung aus der GUI auslösen — zum Ausprobieren ohne Gerät."""
-        if page_id != runtime.current_page_id():
-            runtime.navigate(page_id)
+        session = runtime.deck(deck)
+        if page_id != session.current_page_id():
+            session.navigate(page_id)
         if input_type == "key":
-            await runtime._handle_key(index, True)
-            await runtime._handle_key(index, False)
+            await session.handle_key(index, True)
+            await session.handle_key(index, False)
         else:
-            await runtime._handle_dial_push(index, True)
+            await session.handle_dial_push(index, True)
         return {"ok": True}
+
+    @app.post("/api/pages/{page_id}/slots/dial/{index}/cycle")
+    async def cycle_stack(
+        page_id: str, index: int, deck: str | None = None
+    ) -> dict[str, Any]:
+        """Schaltet einen Dial-Stack weiter — dasselbe wie langes Drücken."""
+        session = runtime.deck(deck)
+        if page_id != session.current_page_id():
+            session.navigate(page_id)
+        if not session.cycle_stack(index):
+            raise HTTPException(400, "Auf diesem Dial liegt kein Stack")
+        return {"stack_index": session.stack_index(index)}
 
     # ======================================================================
     # Plugins
@@ -508,20 +884,27 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
 
     @app.post("/api/plugins/{plugin_id}/options/{source}")
     async def plugin_options(
-        plugin_id: str, source: str, context: dict = Body(default={})
+        plugin_id: str,
+        source: str,
+        context: dict = Body(default={}),
+        deck: str | None = None,
     ) -> list[dict[str, Any]]:
         """Auswahlliste eines Feldes.
 
         ``context`` sind die bereits gesetzten Einstellungen der Belegung —
         damit kann ein Plugin abhängige Listen liefern (die Filter *dieser*
-        Quelle, die Quellen *dieser* Szene).
+        Quelle, die Quellen *dieser* Szene). Zusätzlich steckt darin unter
+        ``__deck``, welches Gerät die GUI gerade bearbeitet: Die Seitenliste
+        etwa gibt es je Deck einmal.
         """
         plugin = runtime.registry.instance(plugin_id)
         if plugin is None:
             raise HTTPException(404, "Plugin nicht geladen")
+        payload = dict(context or {})
+        payload["__deck"] = runtime.deck(deck).key
         try:
             return await runtime._call_hook(
-                plugin.get_dynamic_options, source, context or {}
+                plugin.get_dynamic_options, source, payload
             )
         except Exception as exc:
             raise HTTPException(500, f"Optionen nicht abrufbar: {exc}") from exc
@@ -785,11 +1168,19 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
     # ======================================================================
 
     @app.get("/api/preview/{page_id}/{input_type}/{index}.png")
-    async def preview(page_id: str, input_type: str, index: int) -> Response:
+    async def preview(
+        page_id: str,
+        input_type: str,
+        index: int,
+        deck: str | None = None,
+        entry: int | None = None,
+    ) -> Response:
         if input_type not in ("key", "dial"):
             raise HTTPException(400, "input_type muss 'key' oder 'dial' sein")
         try:
-            image = await runtime.render_preview(page_id, input_type, index)
+            image = await runtime.deck(deck).render_preview(
+                page_id, input_type, index, entry
+            )
         except Exception as exc:
             raise HTTPException(500, f"Vorschau fehlgeschlagen: {exc}") from exc
         buffer = io.BytesIO()
@@ -819,6 +1210,20 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
 
     @app.websocket("/ws")
     async def websocket_endpoint(socket: WebSocket) -> None:
+        # WebSockets unterliegen **nicht** der Same-Origin-Policy, und die
+        # CORS-Middleware sieht den Handshake nie. Ohne diese Prüfung könnte
+        # jede offene Webseite mitlesen, was hier durchläuft — Seriennummer,
+        # Seitennamen, Plugin-Fehler samt Pfaden.
+        #
+        # Ohne ``Origin`` (eigenes Werkzeug, Kommandozeile) bleibt es frei:
+        # Der Riegel richtet sich gegen den Browser, nicht gegen den Nutzer —
+        # dieselbe Linie wie beim HTTP-Riegel.
+        origin = socket.headers.get("origin")
+        if origin is not None and origin not in allowed_origins:
+            log.warning("WebSocket von fremder Herkunft abgelehnt: %s", origin)
+            await socket.close(code=1008)
+            return
+
         await socket.accept()
         try:
             await socket.send_json(
@@ -866,6 +1271,14 @@ def create_app(runtime: Runtime, *, host: str = "127.0.0.1", port: int = 8770) -
 # --------------------------------------------------------------------------
 
 
+def _belegte_plaetze(deck) -> list[str]:
+    """``["key:0", "dial:2", …]`` — was auf der aktuellen Seite belegt ist."""
+    seite = deck.current_page
+    return [f"key:{index}" for index in seite.keys] + [
+        f"dial:{index}" for index in seite.dials
+    ]
+
+
 def _has_icon(loaded) -> bool:
     if not loaded.manifest.icon:
         return False
@@ -909,8 +1322,8 @@ def _plugins_payload(runtime: Runtime) -> list[dict[str, Any]]:
     return result
 
 
-def _require_page(runtime: Runtime, page_id: str) -> Page:
-    page = runtime.config.active_profile().pages.get(page_id)
+def _require_page(session, page_id: str) -> Page:
+    page = session.profile.pages.get(page_id)
     if page is None:
         raise HTTPException(404, "Seite nicht gefunden")
     return page
@@ -924,11 +1337,11 @@ def _require_mapping(page: Page, input_type: str) -> dict:
     raise HTTPException(400, "input_type muss 'key' oder 'dial' sein")
 
 
-def _check_index(runtime: Runtime, input_type: str, index: int) -> None:
+def _check_index(session, input_type: str, index: int) -> None:
     limit = (
-        (runtime.device.info.key_count or 8)
+        (session.device.info.key_count or 8)
         if input_type == "key"
-        else (runtime.device.info.dial_count or 4)
+        else (session.device.info.dial_count or 4)
     )
     if not 0 <= index < limit:
         raise HTTPException(400, f"Index {index} liegt außerhalb von 0..{limit - 1}")
@@ -950,7 +1363,13 @@ def _check_move_target(profile, page_id: str, parent_id: str | None) -> None:
 
 
 def _drop_plugin_slots(runtime: Runtime, plugin_id: str) -> int:
-    """Entfernt alle Belegungen, die auf ein entferntes Plugin zeigen."""
+    """Entfernt alles, was auf ein entferntes Plugin zeigt.
+
+    Das ist mehr als die Belegung selbst: Zweitbelegungen, die Einträge
+    eines Dial-Stacks und die Schritte einer Multi-Aktion können ebenso
+    darauf zeigen. Bliebe eines davon stehen, wäre die Taste beim nächsten
+    Druck eine Fehlerkachel.
+    """
     count = 0
     for profile in runtime.config.profiles.values():
         for page in profile.pages.values():
@@ -959,9 +1378,35 @@ def _drop_plugin_slots(runtime: Runtime, plugin_id: str) -> int:
                     if slot.plugin_id == plugin_id:
                         mapping.pop(index, None)
                         count += 1
-                    elif slot.long_press and slot.long_press.plugin_id == plugin_id:
-                        slot.long_press = None
-                        count += 1
+                        continue
+                    count += _clean_slot(slot, plugin_id)
+    return count
+
+
+def _clean_slot(slot: Slot, plugin_id: str) -> int:
+    """Zweige, Stack-Einträge und Schritte einer Belegung säubern."""
+    count = 0
+    for branch in ("long_press", "double_press", "turn_left", "turn_right"):
+        nested = getattr(slot, branch)
+        if nested is None:
+            continue
+        if nested.plugin_id == plugin_id:
+            setattr(slot, branch, None)
+            count += 1
+        else:
+            count += _clean_slot(nested, plugin_id)
+
+    remaining = [entry for entry in slot.stack if entry.plugin_id != plugin_id]
+    count += len(slot.stack) - len(remaining)
+    slot.stack = remaining
+    for entry in slot.stack:
+        count += _clean_slot(entry, plugin_id)
+
+    for field in ("steps", "steps_off"):
+        steps = getattr(slot, field)
+        kept = [s for s in steps if s.plugin_id != plugin_id]
+        count += len(steps) - len(kept)
+        setattr(slot, field, kept)
     return count
 
 
@@ -970,5 +1415,27 @@ def _drop_references(profile, removed: set[str]) -> None:
     for page in profile.pages.values():
         for mapping in (page.keys, page.dials):
             for index, slot in list(mapping.items()):
-                if slot.plugin_id == "streamdeck" and slot.settings.get("page_id") in removed:
+                if _points_to_removed(slot, removed):
                     mapping.pop(index, None)
+                    continue
+                # Auch Schritte einer Multi-Aktion können auf eine gelöschte
+                # Seite zeigen — die Kette bliebe sonst mit einem toten
+                # Schritt stehen.
+                for field in ("steps", "steps_off"):
+                    steps = getattr(slot, field)
+                    setattr(
+                        slot,
+                        field,
+                        [
+                            s
+                            for s in steps
+                            if not (
+                                s.plugin_id == "streamdeck"
+                                and s.settings.get("page_id") in removed
+                            )
+                        ],
+                    )
+
+
+def _points_to_removed(slot: Slot, removed: set[str]) -> bool:
+    return slot.plugin_id == "streamdeck" and slot.settings.get("page_id") in removed

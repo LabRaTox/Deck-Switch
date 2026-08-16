@@ -1,4 +1,4 @@
-"""System-Plugin: Programme starten, Systemwerte zeigen, Monitore regeln.
+"""System-Plugin: Programme, Tastenkombinationen, Text, Medien, Sitzung.
 
 Gestartete Prozesse werden bewusst abgekoppelt (eigene Session, Ausgabe
 verworfen): das Deck ist eine Fernbedienung, kein Terminal — ein gestartetes
@@ -8,15 +8,20 @@ Zwei Nachbarmodule gehören dazu: ``sysinfo`` liest die Messwerte,
 ``ddc`` regelt die Monitorhelligkeit. Letzteres ist deshalb ausgelagert,
 weil ``ddcutil`` fast zwei Sekunden pro Aufruf braucht und das eine eigene
 Behandlung verlangt — siehe die Erklärung dort.
+
+Die Aktionen rund um Tastatur, Medien und Sitzung liegen in den Diensten der
+App (``services/input.py``, ``media.py``, ``desktop.py``); hier steht nur,
+was eine Taste damit anstellt.
 """
 
 from __future__ import annotations
 
-import dataclasses
+import asyncio
 import os
 import shlex
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from deckswitch.plugins.base import ActionPlugin
@@ -25,6 +30,11 @@ from ddc import DdcController
 from sysinfo import Reading, SystemInfo
 
 ACCENT = "#0ea5e9"
+
+#: So lange bleibt eine Aktion mit Rückfrage „scharf", nachdem sie einmal
+#: gedrückt wurde. Danach fängt das Zählen von vorn an — sonst schaltete ein
+#: vergessener erster Druck Stunden später den Rechner aus.
+CONFIRM_WINDOW_S = 3.0
 
 #: Ab diesen Anteilen färbt sich der Balken einer Monitor-Kachel um.
 WARN_AT = 0.75
@@ -87,7 +97,16 @@ class SystemPlugin(ActionPlugin):
         self.ddc.shutdown()
 
     def on_key_down(self, action_id, settings, ctx):
+        if action_id == "hotkey" and settings.get("mode") == "hold":
+            # Push-to-Talk: die Kombination bleibt gedrückt, solange die
+            # Taste unten ist. Deshalb hier nur drücken, nicht tippen.
+            self._hold_hotkey(settings, ctx, pressed=True)
+            return
         self._activate(action_id, settings, ctx)
+
+    def on_key_up(self, action_id, settings, ctx):
+        if action_id == "hotkey" and settings.get("mode") == "hold":
+            self._hold_hotkey(settings, ctx, pressed=False)
 
     def on_dial_push(self, action_id, settings, ctx):
         self._activate(action_id, settings, ctx)
@@ -119,21 +138,24 @@ class SystemPlugin(ActionPlugin):
         render = self.services.render
         show_bar = reading.fraction is not None and ctx.setting("show_bar", True)
 
-        gauge_ctx = ctx
-        if show_bar and ctx.appearance.label_position == "bottom":
-            # Der Balken sitzt am unteren Rand — dort steht sonst die
-            # Beschriftung, und beides übereinander ist unlesbar. Wer die
-            # Position bewusst auf oben oder Mitte stellt, behält sie.
-            gauge_ctx = dataclasses.replace(
-                ctx,
-                appearance=ctx.appearance.model_copy(update={"label_position": "top"}),
-            )
+        width, height = ctx.size
+        if ctx.input_type == "dial":
+            # Ein Segment kann auf einem virtuellen Deck halb so hoch sein
+            # wie der Streifen des Geräts — feste Abstände tragen da nicht.
+            box = render.bar_box(ctx.size)
+        else:
+            box = (10, height - 12, width - 10, height - 6)
 
+        # Der Balken sitzt am unteren Rand — dort stünde sonst die
+        # Beschriftung, und beides übereinander ist unlesbar. Statt die
+        # Position umzubiegen, wird der Platz reserviert: Icon und Label
+        # rücken nach oben und behalten ihre eingestellte Anordnung.
         image = render.render_slot(
-            gauge_ctx,
+            ctx,
             state=None,
             label_override=self.get_label(action_id, settings, ctx),
             accent=ACCENT,
+            reserve_bottom=render.bar_reserve(ctx.size, box) if show_bar else 0,
         )
 
         if not show_bar:
@@ -149,11 +171,6 @@ class SystemPlugin(ActionPlugin):
                 else BAR_OK
             )
 
-        width, height = ctx.size
-        if ctx.input_type == "dial":
-            box = (12, height - 22, width - 12, height - 12)
-        else:
-            box = (10, height - 12, width - 10, height - 6)
         render.draw_bar(image, reading.fraction, box=box, color=colour)
         return image
 
@@ -193,6 +210,11 @@ class SystemPlugin(ActionPlugin):
 
     def on_tick(self, action_id, settings, ctx):
         """Messwerte neu holen — nur für die Kacheln, die welche zeigen."""
+        if action_id == "multimedia":
+            # Der Zustand kommt von einem fremden Programm; ohne Nachfragen
+            # bliebe das Symbol auf „spielt", nachdem woanders pausiert wurde.
+            self.run_async(self._refresh_media(settings, ctx))
+            return
         if action_id not in ("monitor", "display_brightness"):
             return
         reading = self._reading(action_id, settings, ctx)
@@ -203,9 +225,27 @@ class SystemPlugin(ActionPlugin):
             ctx.scratch["text"] = reading.text
             ctx.request_redraw()
 
+    async def _refresh_media(self, settings, ctx) -> None:
+        state = await self.services.media.refresh(settings.get("player") or "")
+        signature = (state.playing, state.title, state.artist)
+        if ctx.scratch.get("media") != signature:
+            ctx.scratch["media"] = signature
+            ctx.request_redraw()
+
     def get_label(self, action_id, settings, ctx):
+        if action_id == "power" and ctx.scratch.get("armed_until", 0) > time.monotonic():
+            # Während der Rückfrage schlägt die Beschriftung alles andere —
+            # der Benutzer muss sehen, dass der nächste Druck ernst wird.
+            return "Sicher?"
         if ctx.appearance.label_text:
             return None
+        if action_id == "hotkey":
+            return (settings.get("combo") or "").strip() or None
+        if action_id == "window":
+            return (settings.get("shortcut") or "").strip() or None
+        if action_id == "multimedia" and settings.get("show_title"):
+            state = self.services.media.state
+            return state.title or state.player or None
         # Ohne eigenes Label wenigstens einen sprechenden Namen zeigen.
         if action_id == "launch":
             command = (settings.get("command") or "").strip()
@@ -224,9 +264,32 @@ class SystemPlugin(ActionPlugin):
             return reading.text
         return None
 
+    def get_state(self, action_id, settings, ctx):
+        if action_id == "hotkey":
+            return "held" if ctx.scratch.get("held") else "default"
+        if action_id == "hotkey_switch":
+            return "b" if ctx.scratch.get("toggled") else "a"
+        if action_id == "power":
+            return "armed" if ctx.scratch.get("armed_until", 0) > time.monotonic() else "default"
+        if action_id == "multimedia":
+            return "playing" if self.services.media.state.playing else "paused"
+        return None
+
     # -- Auswahllisten -----------------------------------------------------
 
     def get_dynamic_options(self, source, context=None):
+        # Die D-Bus-Listen sind ``async``; dieser Hook läuft in einem
+        # Worker-Thread und darf deshalb auf sie warten.
+        if source == "players":
+            players = self._await(self.services.media.list_players()) or []
+            return [{"value": "", "label": "Automatisch (was gerade spielt)"}] + [
+                {"value": name, "label": name} for name in players
+            ]
+        if source == "shortcut_components":
+            return self._await(self.services.desktop.list_components()) or []
+        if source == "shortcuts":
+            component = (context or {}).get("component") or "kwin"
+            return self._await(self.services.desktop.list_shortcuts(component)) or []
         if source == "displays":
             if not self.ddc.available():
                 return []
@@ -238,6 +301,23 @@ class SystemPlugin(ActionPlugin):
                 {"value": name, "label": name} for name in self.info.interfaces()
             ]
         return []
+
+    def _await(self, coro, timeout: float = 8.0):
+        """Wartet aus einem Worker-Thread heraus auf eine Coroutine.
+
+        Die Auswahllisten kommen über D-Bus und damit aus dem Event-Loop,
+        aufgerufen wird ``get_dynamic_options`` aber synchron im Executor.
+        Ohne diese Brücke bliebe die Liste in der GUI leer.
+        """
+        loop = getattr(self.services.runtime, "_loop", None)
+        if loop is None or loop.is_closed():
+            coro.close()
+            return None
+        try:
+            return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout)
+        except Exception as exc:
+            self.log.warning("Auswahlliste nicht abrufbar: %s", exc)
+            return None
 
     def get_status(self):
         """Hinweis in der Plugin-Liste, wenn DDC nicht durchkommt."""
@@ -262,8 +342,151 @@ class SystemPlugin(ActionPlugin):
                 self._run_script(settings)
             elif action_id == "display_brightness":
                 self._toggle_brightness(settings, ctx)
+            elif action_id == "hotkey":
+                self._send_hotkey(settings)
+            elif action_id == "hotkey_switch":
+                self._switch_hotkey(settings, ctx)
+            elif action_id == "text":
+                self._type_text(settings)
+            elif action_id == "multimedia":
+                self._multimedia(settings, ctx)
+            elif action_id == "power":
+                self._power(settings, ctx)
+            elif action_id == "screenshot":
+                self._screenshot(settings)
+            elif action_id == "close_app":
+                self._close_app(settings)
+            elif action_id == "window":
+                self._window(settings)
         except Exception as exc:
             self.notify_error(f"{action_id}: {exc}")
+
+    # -- Tastatur ----------------------------------------------------------
+
+    def _send_hotkey(self, settings) -> None:
+        combo = (settings.get("combo") or "").strip()
+        if not combo:
+            raise ValueError("Keine Tastenkombination eingestellt")
+        self.services.input.send_combo(combo)
+
+    def _hold_hotkey(self, settings, ctx, *, pressed: bool) -> None:
+        combo = (settings.get("combo") or "").strip()
+        if not combo:
+            if pressed:
+                self.notify_error("Keine Tastenkombination eingestellt")
+            return
+        try:
+            self.services.input.hold_combo(combo, pressed)
+        except Exception as exc:
+            self.notify_error(f"hotkey: {exc}")
+            return
+        ctx.scratch["held"] = pressed
+        ctx.request_redraw()
+
+    def _switch_hotkey(self, settings, ctx) -> None:
+        """Zwei Kombinationen im Wechsel — Elgatos „Hotkey Switch“."""
+        second = ctx.scratch.get("toggled", False)
+        key = "combo_b" if not second else "combo_a"
+        combo = (settings.get(key) or "").strip()
+        if not combo:
+            raise ValueError(
+                "Für diese Richtung ist keine Tastenkombination eingestellt"
+            )
+        self.services.input.send_combo(combo)
+        ctx.scratch["toggled"] = not second
+        ctx.request_redraw()
+
+    def _type_text(self, settings) -> None:
+        text = settings.get("text") or ""
+        if not text:
+            raise ValueError("Kein Text eingetragen")
+        if settings.get("enter_after"):
+            text += "\n"
+        typed = self.services.input.type_text(
+            text, delay_s=max(0, int(settings.get("delay_ms") or 12)) / 1000
+        )
+        if typed == 0:
+            raise ValueError("Kein Zeichen war auf der Tastaturbelegung erreichbar")
+
+    # -- Medien ------------------------------------------------------------
+
+    def _multimedia(self, settings, ctx) -> None:
+        command = settings.get("command") or "play_pause"
+        player = settings.get("player") or ""
+        self.run_async(self._multimedia_async(command, player, ctx))
+
+    async def _multimedia_async(self, command: str, player: str, ctx) -> None:
+        media = self.services.media
+        if not await media.control(command, player=player):
+            self.notify_info("Kein Medienspieler erreichbar")
+        await media.refresh(player)
+        ctx.request_redraw()
+
+    # -- Sitzung, Fenster, Bildschirmfoto ---------------------------------
+
+    def _power(self, settings, ctx) -> None:
+        command = settings.get("command") or "lock"
+        if settings.get("confirm") and not self._confirmed(ctx):
+            return
+        self.run_async(self._desktop_call(self.services.desktop.power(command)))
+
+    def _window(self, settings) -> None:
+        component = settings.get("component") or "kwin"
+        shortcut = (settings.get("shortcut") or "").strip()
+        self.run_async(
+            self._desktop_call(
+                self.services.desktop.invoke_shortcut(component, shortcut)
+            )
+        )
+
+    async def _desktop_call(self, coro) -> None:
+        try:
+            await coro
+        except Exception as exc:
+            self.notify_error(str(exc))
+
+    def _screenshot(self, settings) -> None:
+        path = self.services.desktop.screenshot(
+            settings.get("mode") or "fullscreen",
+            directory=(settings.get("directory") or "").strip(),
+            to_clipboard=bool(settings.get("clipboard")),
+            delay_ms=int(settings.get("delay_ms") or 0),
+        )
+        self.notify_info(
+            f"Bildschirmfoto gespeichert: {path}" if path
+            else "Bildschirmfoto in der Zwischenablage"
+        )
+
+    def _close_app(self, settings) -> None:
+        pattern = (settings.get("pattern") or "").strip()
+        hits = self.services.desktop.close_application(
+            pattern, force=bool(settings.get("force"))
+        )
+        if not hits:
+            self.notify_info(f"Kein laufender Prozess passt auf '{pattern}'")
+
+    def _confirmed(self, ctx) -> bool:
+        """„Zweimal drücken“ — der erste Druck macht nur scharf.
+
+        Ein versehentlich getroffenes Herunterfahren wäre der teuerste
+        Fehlgriff, den dieses Gerät anbieten kann.
+        """
+        now = time.monotonic()
+        armed_until = ctx.scratch.get("armed_until", 0.0)
+        if now < armed_until:
+            ctx.scratch["armed_until"] = 0.0
+            ctx.request_redraw()
+            return True
+        ctx.scratch["armed_until"] = now + CONFIRM_WINDOW_S
+        ctx.request_redraw()
+        self.run_async(self._disarm_later(ctx))
+        return False
+
+    async def _disarm_later(self, ctx) -> None:
+        await asyncio.sleep(CONFIRM_WINDOW_S)
+        if ctx.scratch.get("armed_until"):
+            ctx.scratch["armed_until"] = 0.0
+            ctx.request_redraw()
 
     def _toggle_brightness(self, settings, ctx) -> None:
         """Druck auf das Dial: zwischen zwei Werten hin- und herschalten."""

@@ -8,6 +8,8 @@ Aufruf:
     cd backend
     ../.venv/bin/python tests/discord_actions_test.py
 """
+import _wache  # bricht ab, statt in die echte Config zu schreiben
+_wache.sichere_umgebung()
 import asyncio, json, pathlib, sys, tempfile
 sys.path.insert(0, "/home/labratox/Projekte/StreamDeck/backend/plugins/discord")
 from PIL import Image

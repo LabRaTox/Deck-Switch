@@ -15,7 +15,8 @@
     "firmware": "Firmware",
     "serial": "Serial number",
     "backendOffline": "Backend unreachable",
-    "backendOfflineHint": "Is the backend running? Start it with: ./scripts/start-backend.sh"
+    "backendOfflineHint": "Is the backend running? Start it with: ./scripts/start-backend.sh",
+    "brightnessVirtual": "An overlay has no backlight — its tiles look exactly as they were designed."
   },
   "pages": {
     "title": "Pages",
@@ -91,7 +92,45 @@
     "preview": "Preview",
     "remove": "Clear assignment",
     "pageTitle": "Page",
-    "pageHint": "Properties of page “{{name}}”. Select a key to edit its action."
+    "pageHint": "Properties of page “{{name}}”. Select a key to edit its action.",
+    "plugin": "Plugin",
+    "keyLogic": "Key logic",
+    "keyLogicHint": "Press, double press (within {{double}} ms) or hold (from {{long}} ms). Without a second branch the key still fires immediately.",
+    "branches": {
+      "press": "Press",
+      "double": "Double press",
+      "long": "Hold",
+      "left": "Turn left",
+      "right": "Turn right"
+    },
+    "add": {
+      "double": "Assign double press",
+      "long": "Assign hold",
+      "left": "Assign turn left",
+      "right": "Assign turn right"
+    },
+    "remove_double": "Remove double press",
+    "remove_long": "Remove hold",
+    "labelFont": "Font",
+    "labelFontDefault": "Default",
+    "labelAlign": "Alignment",
+    "labelAligns": {
+      "center": "Centre",
+      "left": "Left",
+      "right": "Right"
+    },
+    "labelStyle": "Style",
+    "labelStyles": {
+      "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline"
+    },
+    "dialLogic": "Dial assignment",
+    "dialLogicHint": "Without an assigned direction the base action adjusts continuously. Assigning a direction triggers instead — like a short press.",
+    "turnEvery": "Trigger every … detents",
+    "turnEveryHint": "A brisk turn is easily a dozen detents. 1 triggers on every one.",
+    "remove_left": "Remove turn left",
+    "remove_right": "Remove turn right"
   },
   "icons": {
     "title": "Choose icon",
@@ -128,7 +167,15 @@
     "accentHint": "Empty = the plugin's accent colour",
     "presets": "Presets",
     "image": "Image",
-    "transparentHint": "Lets the page's wallpaper show through. Without a page image the segment stays black, so nothing changes."
+    "transparentHint": "Lets the page's wallpaper show through. Without a page image the segment stays black, so nothing changes.",
+    "imageHint": "PNG, JPG, WEBP, GIF or SVG. Animated GIFs play on the key.",
+    "fit": "Fit",
+    "fits": {
+      "cover": "Fill",
+      "contain": "Show all",
+      "stretch": "Stretch"
+    },
+    "opacity": "Opacity"
   },
   "plugins": {
     "title": "Plugins",
@@ -208,7 +255,13 @@
     "importConfirm": "Really overwrite the current configuration?",
     "importFailed": "Import failed: {{error}}",
     "importDone": "Import successful",
-    "general": "General"
+    "general": "General",
+    "doublePressMs": "Double press window",
+    "doublePressHint": "Only keys with a double press assigned wait this long.",
+    "animations": "Play animated key images",
+    "animationsHint": "Costs USB bandwidth — every frame travels to the device.",
+    "animationFps": "Frames per second",
+    "perDeckHint": "These settings apply to the deck selected above."
   },
   "errors": {
     "title": "Problems",
@@ -229,7 +282,9 @@
     "none": "None",
     "default": "Default",
     "loading": "Loading …",
-    "reset": "Reset"
+    "reset": "Reset",
+    "remove": "Remove",
+    "choose": "Choose"
   },
   "screensaver": {
     "title": "Screensaver",
@@ -271,5 +326,73 @@
     "opacity": "Opacity",
     "opacityHint": "Below 100% the image recedes so icons and labels stay readable.",
     "slotHint": "The image only shows where a segment has no background of its own. Giving a dial a colour deliberately covers it."
+  },
+  "multi": {
+    "title": "Steps",
+    "empty": "No steps yet — drag an action from the library here",
+    "delay": "Delay",
+    "delayMs": "Duration (ms)",
+    "enabled": "Step enabled",
+    "addAction": "Action",
+    "addDelay": "Delay",
+    "chainOn": "Chain “on”",
+    "chainOff": "Chain “off”",
+    "dropHint": "Dropping onto a step inserts before it.",
+    "dropZone": "Drag an action here (appends at the end)"
+  },
+  "stack": {
+    "title": "Dial stack",
+    "hint": "Several assignments on one dial. On the device, holding it switches to the next.",
+    "add": "Entry",
+    "cycle": "Switch"
+  },
+  "creator": {
+    "open": "Design key image",
+    "title": "Design key image",
+    "previewHint": "This is how the image reaches the key (288 × 288).",
+    "image": "Image",
+    "fromUploads": "From your images",
+    "scale": "Size",
+    "offsetX": "Move ↔",
+    "offsetY": "Move ↕",
+    "rotation": "Rotate",
+    "background": "Background",
+    "text": "Text",
+    "textPlaceholder": "Caption",
+    "outline": "Outline for readability",
+    "applyAsKey": "Use as key image",
+    "applyAsIcon": "Use as icon",
+    "imageError": "The image could not be loaded."
+  },
+  "hotkey": {
+    "record": "Record",
+    "cancel": "Cancel",
+    "pressNow": "Press the combination now …"
+  },
+  "decks": {
+    "title": "Decks",
+    "hint": "Each device has its own pages, brightness and screensaver. They are matched by serial number.",
+    "switch": "Choose deck",
+    "notConnected": "not connected",
+    "name": "Name",
+    "edit": "Edit",
+    "forget": "Remove",
+    "forgetConfirm": "Remove “{{name}}” and its assignment? The layout stays as a profile.",
+    "virtual": "Virtual deck (overlay)",
+    "columns": "Columns",
+    "rows": "Rows",
+    "dials": "Dials",
+    "tileSize": "Tile (px)",
+    "overlayShow": "Show overlay",
+    "overlayHide": "Hide overlay",
+    "addVirtual": "Add virtual deck",
+    "newVirtualName": "Virtual deck",
+    "virtualHint": "Grid and tile size of this overlay. Changes take effect immediately.",
+    "virtualSection": "Virtual deck",
+    "addVirtualHint": "A virtual deck sits as an overlay on top of the screen — no window frame, and it never steals the keyboard focus. Grid and overlay switch live in the editor on the right when no key is selected.",
+    "transparent": "Transparent background",
+    "transparentHint": "No panel underneath — only the tiles float above the screen.",
+    "hideEmpty": "Hide empty tiles",
+    "hideEmptyHint": "Unassigned slots stay blank and ignore clicks; their space is kept so nothing jumps around."
   }
 }

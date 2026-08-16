@@ -15,7 +15,8 @@
     "firmware": "Firmware",
     "serial": "Seriennummer",
     "backendOffline": "Backend nicht erreichbar",
-    "backendOfflineHint": "Läuft das Backend? Starte es mit: ./scripts/start-backend.sh"
+    "backendOfflineHint": "Läuft das Backend? Starte es mit: ./scripts/start-backend.sh",
+    "brightnessVirtual": "Ein Overlay hat keine Hintergrundbeleuchtung — die Kacheln sehen so aus, wie sie gestaltet wurden."
   },
   "pages": {
     "title": "Seiten",
@@ -91,7 +92,45 @@
     "preview": "Vorschau",
     "remove": "Belegung entfernen",
     "pageTitle": "Seite",
-    "pageHint": "Eigenschaften der Seite „{{name}}“. Wähle eine Taste, um deren Belegung zu bearbeiten."
+    "pageHint": "Eigenschaften der Seite „{{name}}“. Wähle eine Taste, um deren Belegung zu bearbeiten.",
+    "plugin": "Plugin",
+    "keyLogic": "Tastenlogik",
+    "keyLogicHint": "Drücken, doppelt drücken (binnen {{double}} ms) oder halten (ab {{long}} ms). Ohne zweiten Zweig löst die Taste weiterhin sofort aus.",
+    "branches": {
+      "press": "Drücken",
+      "double": "Doppeldruck",
+      "long": "Halten",
+      "left": "Linksdrehung",
+      "right": "Rechtsdrehung"
+    },
+    "add": {
+      "double": "Doppeldruck belegen",
+      "long": "Halten belegen",
+      "left": "Linksdrehung belegen",
+      "right": "Rechtsdrehung belegen"
+    },
+    "remove_double": "Doppeldruck entfernen",
+    "remove_long": "Halten entfernen",
+    "labelFont": "Schriftart",
+    "labelFontDefault": "Standard",
+    "labelAlign": "Ausrichtung",
+    "labelAligns": {
+      "center": "Mittig",
+      "left": "Links",
+      "right": "Rechts"
+    },
+    "labelStyle": "Schriftschnitt",
+    "labelStyles": {
+      "bold": "Fett",
+      "italic": "Kursiv",
+      "underline": "Unterstrichen"
+    },
+    "dialLogic": "Dial-Belegung",
+    "dialLogicHint": "Ohne belegte Drehrichtung regelt die Grundaktion stufenlos. Wer eine Richtung belegt, löst damit stattdessen aus — wie ein kurzer Druck.",
+    "turnEvery": "Auslösen alle … Rasten",
+    "turnEveryHint": "Ein zügiger Dreh sind schnell ein Dutzend Rasten. 1 löst bei jeder aus.",
+    "remove_left": "Linksdrehung entfernen",
+    "remove_right": "Rechtsdrehung entfernen"
   },
   "icons": {
     "title": "Icon auswählen",
@@ -128,7 +167,15 @@
     "accentHint": "Leer = Akzentfarbe des Plugins",
     "presets": "Vorlagen",
     "image": "Bild",
-    "transparentHint": "Lässt das Hintergrundbild der Seite durchscheinen. Ohne Seitenbild bleibt das Segment schwarz — dann ändert sich nichts."
+    "transparentHint": "Lässt das Hintergrundbild der Seite durchscheinen. Ohne Seitenbild bleibt das Segment schwarz — dann ändert sich nichts.",
+    "imageHint": "PNG, JPG, WEBP, GIF oder SVG. Animierte GIFs laufen auf der Taste ab.",
+    "fit": "Einpassung",
+    "fits": {
+      "cover": "Füllend",
+      "contain": "Ganz zeigen",
+      "stretch": "Verzerren"
+    },
+    "opacity": "Deckkraft"
   },
   "plugins": {
     "title": "Plugins",
@@ -208,7 +255,13 @@
     "importConfirm": "Aktuelle Konfiguration wirklich überschreiben?",
     "importFailed": "Import fehlgeschlagen: {{error}}",
     "importDone": "Import erfolgreich",
-    "general": "Allgemein"
+    "general": "Allgemein",
+    "doublePressMs": "Doppeldruck-Fenster",
+    "doublePressHint": "Nur Tasten mit belegtem Doppeldruck warten so lange.",
+    "animations": "Animierte Tastenbilder abspielen",
+    "animationsHint": "Kostet USB-Bandbreite — jedes Einzelbild geht zum Gerät.",
+    "animationFps": "Bilder je Sekunde",
+    "perDeckHint": "Diese Einstellungen gelten für das oben gewählte Deck."
   },
   "errors": {
     "title": "Probleme",
@@ -229,7 +282,9 @@
     "none": "Keine",
     "default": "Standard",
     "loading": "Lädt …",
-    "reset": "Zurücksetzen"
+    "reset": "Zurücksetzen",
+    "remove": "Entfernen",
+    "choose": "Auswählen"
   },
   "screensaver": {
     "title": "Bildschirmschoner",
@@ -271,5 +326,73 @@
     "opacity": "Deckkraft",
     "opacityHint": "Unter 100 % tritt das Bild zurück, damit Symbole und Beschriftungen lesbar bleiben.",
     "slotHint": "Sichtbar ist das Bild nur dort, wo für das Segment kein eigener Hintergrund gewählt wurde. Wer einem Dial eine Farbe gibt, überdeckt es damit absichtlich."
+  },
+  "multi": {
+    "title": "Schritte",
+    "empty": "Noch keine Schritte — Aktion aus der Bibliothek hierher ziehen",
+    "delay": "Pause",
+    "delayMs": "Dauer (ms)",
+    "enabled": "Schritt aktiv",
+    "addAction": "Aktion",
+    "addDelay": "Pause",
+    "chainOn": "Kette „an“",
+    "chainOff": "Kette „aus“",
+    "dropHint": "Auf einen Schritt gezogen wird davor eingefügt.",
+    "dropZone": "Aktion hierher ziehen (hängt hinten an)"
+  },
+  "stack": {
+    "title": "Dial-Stack",
+    "hint": "Mehrere Belegungen auf einem Dial. Am Gerät schaltet langes Drücken weiter.",
+    "add": "Eintrag",
+    "cycle": "Weiterschalten"
+  },
+  "creator": {
+    "open": "Tastenbild gestalten",
+    "title": "Tastenbild gestalten",
+    "previewHint": "So kommt das Bild auf der Taste an (288 × 288).",
+    "image": "Bild",
+    "fromUploads": "Aus eigenen Bildern",
+    "scale": "Größe",
+    "offsetX": "Verschieben ↔",
+    "offsetY": "Verschieben ↕",
+    "rotation": "Drehen",
+    "background": "Hintergrund",
+    "text": "Text",
+    "textPlaceholder": "Beschriftung",
+    "outline": "Rand für Lesbarkeit",
+    "applyAsKey": "Als Tastenbild übernehmen",
+    "applyAsIcon": "Als Symbol übernehmen",
+    "imageError": "Bild konnte nicht geladen werden."
+  },
+  "hotkey": {
+    "record": "Aufnehmen",
+    "cancel": "Abbrechen",
+    "pressNow": "Jetzt Kombination drücken …"
+  },
+  "decks": {
+    "title": "Decks",
+    "hint": "Jedes Gerät hat eigene Seiten, eigene Helligkeit und einen eigenen Bildschirmschoner. Zugeordnet wird über die Seriennummer.",
+    "switch": "Deck wählen",
+    "notConnected": "nicht verbunden",
+    "name": "Name",
+    "edit": "Bearbeiten",
+    "forget": "Entfernen",
+    "forgetConfirm": "„{{name}}“ mitsamt Zuordnung entfernen? Die Belegung bleibt als Profil erhalten.",
+    "virtual": "Virtuelles Deck (Overlay)",
+    "columns": "Spalten",
+    "rows": "Reihen",
+    "dials": "Dials",
+    "tileSize": "Kachel (px)",
+    "overlayShow": "Overlay zeigen",
+    "overlayHide": "Overlay verstecken",
+    "addVirtual": "Virtuelles Deck anlegen",
+    "newVirtualName": "Virtuelles Deck",
+    "virtualHint": "Raster und Kachelgröße dieses Overlays. Änderungen sind sofort zu sehen.",
+    "virtualSection": "Virtuelles Deck",
+    "addVirtualHint": "Ein virtuelles Deck liegt als Overlay über dem Bildschirm — ohne Fensterrahmen und ohne den Tastaturfokus zu stehlen. Raster und Overlay-Schalter stehen im Editor rechts, wenn keine Taste ausgewählt ist.",
+    "transparent": "Hintergrund transparent",
+    "transparentHint": "Ohne Platte darunter — es schweben nur die Kacheln über dem Bildschirm.",
+    "hideEmpty": "Leere Kacheln ausblenden",
+    "hideEmptyHint": "Unbelegte Plätze bleiben frei und nehmen keine Klicks an; der Platz bleibt erhalten, damit nichts springt."
   }
 }

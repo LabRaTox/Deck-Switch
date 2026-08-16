@@ -1,4 +1,6 @@
 """Prüft alle OBS-Aktionen gegen einen simulierten obs-websocket-Server."""
+import _wache  # bricht ab, statt in die echte Config zu schreiben
+_wache.sichere_umgebung()
 import asyncio, json, pathlib, sys
 sys.path.insert(0, "/home/labratox/Projekte/StreamDeck/backend/plugins/obs")
 from deckswitch.plugins.base import Manifest, Services, SlotContext

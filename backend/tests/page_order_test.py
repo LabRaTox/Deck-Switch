@@ -9,6 +9,8 @@ sortierten Reihenfolge folgt.
     env XDG_CONFIG_HOME=/tmp/sd-test XDG_DATA_HOME=/tmp/sd-test \\
         ../.venv/bin/python tests/page_order_test.py
 """
+import _wache  # bricht ab, statt in die echte Config zu schreiben
+_wache.sichere_umgebung()
 import asyncio
 import json
 import sys

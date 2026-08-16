@@ -16,7 +16,8 @@ import type { ScreensaverEntry } from "../types";
 export function ScreensaverCard() {
   const { t, i18n } = useTranslation();
   const config = useStore((s) => s.config);
-  const patchConfig = useStore((s) => s.patchConfig);
+  const settings = useStore((s) => s.deckSettings());
+  const patchDeck = useStore((s) => s.patchDeckSettings);
 
   const [entries, setEntries] = useState<ScreensaverEntry[]>([]);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -28,14 +29,15 @@ export function ScreensaverCard() {
     void load();
   }, []);
 
-  if (!config) return null;
-  const saver = config.device.screensaver;
+  if (!config || !settings) return null;
+  // Der Schoner gehört dem Gerät: Zwei Decks dürfen verschiedene zeigen.
+  const saver = settings.screensaver;
 
   const patchSaver = (change: Partial<typeof saver>) =>
-    patchConfig((draft) => {
-      draft.device.screensaver = { ...draft.device.screensaver, ...change };
-      return draft;
-    });
+    patchDeck((draft) => ({
+      ...draft,
+      screensaver: { ...draft.screensaver, ...change },
+    }));
 
   const upload = async (file: File) => {
     setBusy(true);

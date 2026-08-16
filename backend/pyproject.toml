@@ -12,6 +12,10 @@ dependencies = [
     "pydantic>=2.6",
     "simpleobsws>=1.4",
     "dbus-next>=0.2.3",
+    # Tastenkombinationen und Text: virtuelle Tastatur über /dev/uinput …
+    "evdev>=1.7",
+    # … und die Zuordnung Zeichen → Taste aus der aktiven Belegung.
+    "xkbcommon>=1.0",
 ]
 
 [project.scripts]

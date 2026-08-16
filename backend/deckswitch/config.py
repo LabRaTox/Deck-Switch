@@ -14,7 +14,9 @@ Belegungs-Sets), auch wenn die GUI-Umschaltung nicht v1-kritisch ist.
 from __future__ import annotations
 
 import json
+import logging
 import shutil
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal
@@ -22,6 +24,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from . import paths
+
+log = logging.getLogger(__name__)
+
+#: So viele frühere Stände bleiben liegen (ein Eintrag je Stunde).
+BACKUP_KEEP = 30
 
 CONFIG_VERSION = 1
 
@@ -75,6 +82,12 @@ class Background(BaseModel):
     accent: str | None = None
     #: Dateiname unterhalb von UPLOADS_DIR (bei kind="image").
     upload: str | None = None
+    #: Einpassung bei kind="image": ``cover`` füllt und beschneidet,
+    #: ``contain`` zeigt das ganze Bild, ``stretch`` verzerrt.
+    fit: Literal["cover", "contain", "stretch"] = "cover"
+    #: Deckkraft des Bildes in Prozent — darunter tritt es hinter Icon und
+    #: Beschriftung zurück, statt mit ihnen um Aufmerksamkeit zu ringen.
+    opacity: int = 100
 
 
 class Appearance(BaseModel):
@@ -96,6 +109,14 @@ class Appearance(BaseModel):
     label_color: str = "#ffffff"
     label_position: Literal["bottom", "top", "center"] = "bottom"
     show_label: bool = True
+    #: Schriftfamilie wie sie fontconfig kennt („Noto Sans“). Leer = Standard.
+    #: Bewusst der Familienname und kein Pfad: Der Pfad hinge an der
+    #: installierten Version, der Name überlebt ein Schriftpaket-Update.
+    label_font: str = ""
+    label_bold: bool = False
+    label_italic: bool = False
+    label_underline: bool = False
+    label_align: Literal["center", "left", "right"] = "center"
     background: Background = Field(default_factory=Background)
 
     def icon_for_state(self, state: str | None) -> IconRef | None:
@@ -109,6 +130,27 @@ class Appearance(BaseModel):
 # --------------------------------------------------------------------------
 
 
+class Step(BaseModel):
+    """Ein Schritt einer Aktionskette (Multi-Aktion).
+
+    Zwei Sorten: ``action`` löst eine ganz normale Plugin-Action aus,
+    ``delay`` wartet. Die Pause ist bewusst ein eigener Schritt und keine
+    Eigenschaft der Aktion — so lässt sie sich verschieben, mehrfach
+    einsetzen und einzeln abschalten, genau wie bei Elgato.
+    """
+
+    id: str = Field(default_factory=_new_id)
+    kind: Literal["action", "delay"] = "action"
+    plugin_id: str = ""
+    action_id: str = ""
+    settings: dict[str, Any] = Field(default_factory=dict)
+    #: Wartezeit bei ``kind="delay"``.
+    delay_ms: int = 200
+    #: Abgeschaltete Schritte bleiben in der Kette stehen, laufen aber nicht
+    #: mit — praktisch beim Suchen, welcher Schritt hakt.
+    enabled: bool = True
+
+
 class Slot(BaseModel):
     """Eine belegte Taste bzw. ein belegter Dial."""
 
@@ -120,6 +162,54 @@ class Slot(BaseModel):
     #: Optionale zweite Action bei langem Druck (>``long_press_ms``).
     #: Nur eine Ebene tief gedacht — ein Long-Press-Slot hat selbst keinen.
     long_press: "Slot | None" = None
+    #: Optionale dritte Action bei Doppeldruck (zweiter Druck binnen
+    #: ``double_press_ms``). Zusammen mit ``long_press`` ergibt das die drei
+    #: Wege, die Elgato „Key Logic“ nennt: drücken, doppelt drücken, halten.
+    double_press: "Slot | None" = None
+
+    # -- Drehrichtungen (nur Dials) ----------------------------------------
+    # Ohne diese beiden bekommt die Grundaktion das Drehen als Delta und
+    # regelt stufenlos — Lautstärke, Helligkeit, Position. Wer hier etwas
+    # hinterlegt, tauscht das Regeln gegen ein Auslösen: Jede Drehung wirkt
+    # dann wie ein kurzer Druck auf diese Action.
+    #
+    # Die Richtungen sind unabhängig voneinander. Ist nur eine belegt, geht
+    # die andere weiterhin an die Grundaktion — so lässt sich „links leiser,
+    # rechts nächster Titel“ bauen, auch wenn das selten gemeint ist.
+
+    #: Action beim Drehen gegen den Uhrzeigersinn.
+    turn_left: "Slot | None" = None
+    #: Action beim Drehen im Uhrzeigersinn.
+    turn_right: "Slot | None" = None
+    #: Nach wie vielen Rasten ausgelöst wird. Ein zügiger Dreh erzeugt
+    #: schnell ein Dutzend Rasten — „nächster Titel“ darf nicht ein Dutzend
+    #: Mal feuern. Gezählt statt nach Zeit gedrosselt: So führt dieselbe
+    #: Handbewegung immer zum selben Ergebnis, egal wie schnell sie war.
+    turn_every: int = 2
+
+    # -- Multi-Aktion ------------------------------------------------------
+    # Nur belegt, wenn die Belegung auf dem Plugin ``multi`` liegt. Die
+    # Schritte stehen hier und nicht in ``settings``, weil sie *Verweise auf
+    # Actions* sind: So sind sie typisiert, und beim Entfernen eines Plugins
+    # findet die App auch die Schritte, die darauf zeigen.
+
+    #: Schritte der Kette. Beim Umschalter (``action_id="switch"``) ist das
+    #: die Kette für den Weg „aus → an“.
+    steps: list[Step] = Field(default_factory=list)
+    #: Zweite Kette des Umschalters („an → aus“).
+    steps_off: list[Step] = Field(default_factory=list)
+    #: Kette wiederholen, bis erneut gedrückt wird.
+    repeat: bool = False
+    #: Zustand des Umschalters — gehört in die Config, damit eine Taste nach
+    #: einem Neustart nicht plötzlich verkehrt herum steht.
+    toggled: bool = False
+
+    # -- Dial-Stack --------------------------------------------------------
+
+    #: Weitere Belegungen desselben Dials. Der Slot selbst ist Eintrag 1,
+    #: hier stehen die Einträge 2..n. Umgeschaltet wird mit langem Druck auf
+    #: den Dial; welcher Eintrag gerade oben liegt, führt die Runtime.
+    stack: list["Slot"] = Field(default_factory=list)
 
 
 class TouchWallpaper(BaseModel):
@@ -281,6 +371,16 @@ class DeviceSettings(BaseModel):
     idle_brightness: int = 15
     #: Schwelle, ab der ein Druck als "lang" gilt.
     long_press_ms: int = 500
+    #: Fenster, in dem ein zweiter Druck als Doppeldruck zählt. Nur Tasten
+    #: mit hinterlegtem Doppeldruck warten so lange — alle anderen lösen
+    #: weiterhin sofort aus.
+    double_press_ms: int = 280
+    #: Animierte Tastenbilder (GIF, animiertes WebP/PNG) abspielen. Kostet
+    #: USB-Bandbreite: jedes Bild geht einzeln zum Gerät.
+    animations: bool = True
+    #: Obergrenze der Bildrate für animierte Kacheln. Mehr als das schafft
+    #: der USB-Weg zum Deck ohnehin nicht sinnvoll.
+    animation_fps: int = 10
     #: Intervall des periodischen ``on_tick``-Aufrufs.
     tick_interval_s: float = 1.0
     #: Wischen über den Touchstrip blättert zur nächsten/vorherigen Seite.
@@ -294,6 +394,63 @@ class DeviceSettings(BaseModel):
     swipe_wraps: bool = True
     #: Bildschirmschoner nach längerer Ruhe.
     screensaver: Screensaver = Field(default_factory=Screensaver)
+
+
+class DeckBinding(BaseModel):
+    """Ein Gerät und was daran hängt.
+
+    Mehrere Decks sind untereinander unabhängig: Jedes zeigt sein eigenes
+    Profil, hat eigene Helligkeit, eigenen Bildschirmschoner und eigene
+    Zeiten. Verknüpft wird über die **Seriennummer** — die bleibt gleich,
+    auch wenn das Gerät an einem anderen USB-Anschluss steckt oder in einer
+    anderen Reihenfolge erkannt wird.
+
+    Ein leeres ``serial`` ist der Platzhalter für „das Gerät, das als
+    erstes kommt". So funktioniert eine Config aus der Zeit vor mehreren
+    Decks unverändert weiter: Sie hat genau eine Bindung ohne Seriennummer,
+    und das erste angeschlossene Deck übernimmt sie samt Belegung.
+    """
+
+    serial: str = ""
+    #: Anzeigename. Leer = Modellbezeichnung des Geräts.
+    name: str = ""
+    deck_type: str = ""
+    profile_id: str = ""
+    device: DeviceSettings = Field(default_factory=DeviceSettings)
+    #: Reihenfolge in der GUI.
+    order: int = 0
+
+    #: ``hardware`` hängt am USB, ``virtual`` ist ein Overlay auf dem
+    #: Bildschirm. Für alles darüber — Seiten, Tastenlogik, Multi-Aktionen —
+    #: ist der Unterschied belanglos: Die Deck-Sitzung weiß nicht, woher ihre
+    #: Eingaben kommen und wohin ihre Bilder gehen.
+    kind: Literal["hardware", "virtual"] = "hardware"
+    #: Nur bei ``virtual``: Größe des Rasters. Frei wählbar — ein Overlay hat
+    #: keine feste Tastenzahl.
+    columns: int = 4
+    rows: int = 2
+    #: Zahl der Dials unter den Tasten. 0 = keine.
+    dials: int = 0
+    #: Kantenlänge einer Kachel in Pixeln, in der gerendert wird.
+    key_size: int = 120
+    #: Overlay ohne eigenen Grund — es schweben dann nur die Kacheln über
+    #: dem Bildschirm, ohne Platte darunter.
+    overlay_transparent: bool = False
+    #: Unbelegte Kacheln gar nicht erst zeigen. Auf einem Gerät muss jede
+    #: Taste sichtbar bleiben, ein Overlay darf dagegen genau so groß sein
+    #: wie das, was darauf liegt.
+    hide_empty: bool = False
+    #: Wo das Overlay zuletzt abgelegt wurde. ``-1`` heißt „noch nie
+    #: verschoben" — dann sucht sich der Overlay-Dienst eine Stelle. Die
+    #: Position gehört zum Deck und nicht zur auslösenden Taste: Wer das
+    #: Overlay einmal dorthin gezogen hat, wo es ihm passt, will es dort
+    #: wiederfinden, egal von welcher Taste aus er es ruft.
+    overlay_x: int = -1
+    overlay_y: int = -1
+
+    @property
+    def is_virtual(self) -> bool:
+        return self.kind == "virtual"
 
 
 class AppSettings(BaseModel):
@@ -310,7 +467,12 @@ class AppSettings(BaseModel):
 class Config(BaseModel):
     version: int = CONFIG_VERSION
     app: AppSettings = Field(default_factory=AppSettings)
+    #: Vorlage für neu hinzukommende Geräte — und die Einstellungen des
+    #: einen Decks in Configs, die noch keine ``decks`` kennen.
     device: DeviceSettings = Field(default_factory=DeviceSettings)
+    #: Seriennummer → Bindung. Wird beim ersten Start aus ``device`` und dem
+    #: aktiven Profil erzeugt.
+    decks: dict[str, DeckBinding] = Field(default_factory=dict)
     active_profile_id: str = ""
     profiles: dict[str, Profile] = Field(default_factory=dict)
     #: Globale Einstellungen pro Plugin (OBS-Host, Discord-App-ID, …) —
@@ -332,11 +494,48 @@ class Config(BaseModel):
             self.active_profile_id = profile.id
         return profile
 
-    def page(self, page_id: str | None = None) -> Page:
-        profile = self.active_profile()
+    def page(self, page_id: str | None = None, profile_id: str | None = None) -> Page:
+        profile = self.profile(profile_id) if profile_id else self.active_profile()
         if page_id and page_id in profile.pages:
             return profile.pages[page_id]
         return profile.root_page()
+
+    def profile(self, profile_id: str | None) -> Profile:
+        """Ein bestimmtes Profil — mit Rückfall auf das aktive.
+
+        Der Rückfall ist kein Kaschieren: Ein Deck kann auf ein Profil
+        zeigen, das jemand gelöscht hat. Dann ist ein sichtbares Ersatzprofil
+        deutlich besser als ein schwarzes Gerät.
+        """
+        if profile_id and profile_id in self.profiles:
+            return self.profiles[profile_id]
+        return self.active_profile()
+
+    # -- Deck-Bindungen ----------------------------------------------------
+
+    def decks_in_order(self) -> list[DeckBinding]:
+        return sorted(self.decks.values(), key=lambda b: (b.order, b.name, b.serial))
+
+    def ensure_decks(self) -> None:
+        """Legt beim ersten Start die Bindung für das eine Deck an.
+
+        Configs aus der Zeit vor mehreren Geräten haben genau ein Profil und
+        keine Bindung. Die bekommen hier einen Platzhalter ohne
+        Seriennummer — das erste angeschlossene Deck übernimmt ihn.
+        """
+        if self.decks:
+            return
+        profile = self.active_profile()
+        self.decks[""] = DeckBinding(
+            serial="", profile_id=profile.id, device=self.device.model_copy(deep=True)
+        )
+
+    def new_profile_for_deck(self, name: str) -> Profile:
+        """Ein frisches, leeres Profil für ein neu hinzugekommenes Gerät."""
+        profile = _make_default_profile()
+        profile.name = name or "Deck"
+        self.profiles[profile.id] = profile
+        return profile
 
 
 Slot.model_rebuild()
@@ -396,10 +595,43 @@ class ConfigStore:
         if config is not None:
             self.config = config
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._rotate_backup()
         tmp = self.path.with_suffix(".tmp")
         payload = self.config.model_dump(mode="json", exclude_none=False)
         tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.path)
+
+    def _rotate_backup(self) -> None:
+        """Legt den bisherigen Stand beiseite, bevor er überschrieben wird.
+
+        Eine Belegung ist Handarbeit von Stunden und steht in genau einer
+        Datei. Wer sie überschreibt — ein Fehlgriff, ein Import, ein Testlauf
+        ohne eigenes ``XDG_CONFIG_HOME`` — hat sie sonst ersatzlos verloren.
+        Deshalb wandert vor jedem Schreiben eine Kopie in den Verlauf.
+
+        Höchstens einmal je Stunde, damit häufiges Speichern (jeder Regler am
+        Deck ruft ``save``) den Verlauf nicht in Minuten leerdrückt.
+        """
+        if not self.path.is_file():
+            return
+        ordner = paths.BACKUP_DIR
+        ordner.mkdir(parents=True, exist_ok=True)
+
+        stempel = time.strftime("%Y%m%d-%H", time.localtime())
+        ziel = ordner / f"config-{stempel}.json"
+        if ziel.exists():
+            return  # für diese Stunde ist der Ausgangsstand schon gesichert
+
+        try:
+            shutil.copy2(self.path, ziel)
+        except OSError:
+            log.warning("Sicherung der Config nicht möglich", exc_info=True)
+            return
+
+        # Verlauf begrenzen: die jüngsten behalten, ältere gehen.
+        alle = sorted(ordner.glob("config-*.json"))
+        for veraltet in alle[:-BACKUP_KEEP]:
+            veraltet.unlink(missing_ok=True)
 
     # -- Export/Import -----------------------------------------------------
 

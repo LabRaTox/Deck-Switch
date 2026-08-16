@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { api } from "../api/client";
 import { localized } from "../i18n";
 import { useStore } from "../store";
 import type { Background } from "../types";
@@ -15,6 +17,7 @@ const KINDS: Background["kind"][] = [
   "gradient",
   "noise",
   "accent",
+  "image",
 ];
 
 /**
@@ -25,8 +28,27 @@ const KINDS: Background["kind"][] = [
 export function BackgroundEditor({ value, onChange }: Props) {
   const { t, i18n } = useTranslation();
   const presets = useStore((s) => s.backgroundPresets);
+  const [uploads, setUploads] = useState<{ filename: string; url: string }[]>([]);
+  const [busy, setBusy] = useState(false);
 
   const patch = (changes: Partial<Background>) => onChange({ ...value, ...changes });
+
+  // Die Bilderliste erst holen, wenn sie gebraucht wird — sonst lädt jede
+  // ausgewählte Kachel sie mit, obwohl die meisten keinen Bildhintergrund
+  // haben.
+  useEffect(() => {
+    if (value.kind !== "image") return;
+    let cancelled = false;
+    api
+      .uploads()
+      .then((list) => {
+        if (!cancelled) setUploads(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [value.kind]);
 
   return (
     <div className="background-editor">
@@ -133,6 +155,86 @@ export function BackgroundEditor({ value, onChange }: Props) {
         </div>
       )}
 
+      {value.kind === "image" && (
+        <>
+          <div className="field">
+            <label htmlFor="bg-upload">{t("background.image")}</label>
+            <select
+              id="bg-upload"
+              value={value.upload ?? ""}
+              onChange={(event) => patch({ upload: event.target.value || null })}
+            >
+              <option value="">—</option>
+              {uploads.map((entry) => (
+                <option key={entry.filename} value={entry.filename}>
+                  {entry.filename}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+              disabled={busy}
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setBusy(true);
+                try {
+                  const { filename } = await api.upload(file, "icon");
+                  setUploads(await api.uploads());
+                  patch({ upload: filename });
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+            <small className="help">{t("background.imageHint")}</small>
+          </div>
+
+          {value.upload && (
+            <img
+              className="background-preview"
+              src={api.uploadUrl(value.upload)}
+              alt=""
+            />
+          )}
+
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="bg-fit">{t("background.fit")}</label>
+              <select
+                id="bg-fit"
+                value={value.fit}
+                onChange={(event) =>
+                  patch({ fit: event.target.value as Background["fit"] })
+                }
+              >
+                <option value="cover">{t("background.fits.cover")}</option>
+                <option value="contain">{t("background.fits.contain")}</option>
+                <option value="stretch">{t("background.fits.stretch")}</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="bg-opacity">
+                {t("background.opacity")} ({value.opacity}%)
+              </label>
+              <input
+                id="bg-opacity"
+                type="range"
+                min={10}
+                max={100}
+                value={value.opacity}
+                onChange={(event) => patch({ opacity: Number(event.target.value) })}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
       {value.kind === "accent" && (
         <div className="field">
           <label htmlFor="bg-accent">{t("background.accent")}</label>
@@ -185,6 +287,12 @@ function presetStyle(background: Partial<Background>): React.CSSProperties {
         background: background.color ?? "#141416",
         backgroundImage:
           "repeating-linear-gradient(45deg, #ffffff08 0 2px, transparent 2px 4px)",
+      };
+    case "image":
+      return {
+        background: "#111114",
+        backgroundImage:
+          "repeating-linear-gradient(135deg, #ffffff10 0 6px, transparent 6px 12px)",
       };
     default:
       return { background: background.color ?? "#000000" };

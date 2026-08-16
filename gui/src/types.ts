@@ -21,6 +21,10 @@ export interface Background {
   intensity: number;
   accent?: string | null;
   upload?: string | null;
+  /** Einpassung eines Hintergrundbildes. */
+  fit: "cover" | "contain" | "stretch";
+  /** Deckkraft des Bildes in Prozent. */
+  opacity: number;
 }
 
 export interface Appearance {
@@ -31,7 +35,24 @@ export interface Appearance {
   label_color: string;
   label_position: "bottom" | "top" | "center";
   show_label: boolean;
+  /** Schriftfamilie wie fontconfig sie kennt; leer = Standard. */
+  label_font: string;
+  label_bold: boolean;
+  label_italic: boolean;
+  label_underline: boolean;
+  label_align: "center" | "left" | "right";
   background: Background;
+}
+
+/** Ein Schritt einer Multi-Aktion: eine Aktion oder eine Pause. */
+export interface Step {
+  id: string;
+  kind: "action" | "delay";
+  plugin_id: string;
+  action_id: string;
+  settings: Record<string, unknown>;
+  delay_ms: number;
+  enabled: boolean;
 }
 
 export interface Slot {
@@ -39,7 +60,24 @@ export interface Slot {
   action_id: string;
   settings: Record<string, unknown>;
   appearance: Appearance;
+  /** Zweite Aktion beim Halten. */
   long_press?: Slot | null;
+  /** Dritte Aktion beim Doppeldruck. */
+  double_press?: Slot | null;
+  /** Nur Dials: Aktion beim Drehen gegen den Uhrzeigersinn. */
+  turn_left?: Slot | null;
+  /** Nur Dials: Aktion beim Drehen im Uhrzeigersinn. */
+  turn_right?: Slot | null;
+  /** Nach wie vielen Rasten eine Drehrichtung auslöst. */
+  turn_every: number;
+  /** Schritte einer Multi-Aktion (Plugin „multi“). */
+  steps: Step[];
+  /** Zweite Kette des Umschalters. */
+  steps_off: Step[];
+  repeat: boolean;
+  toggled: boolean;
+  /** Weitere Belegungen desselben Dials — Eintrag 2..n eines Stacks. */
+  stack: Slot[];
 }
 
 export interface TouchWallpaper {
@@ -102,11 +140,51 @@ export interface DeviceSettings {
   idle_dim_after_s: number;
   idle_brightness: number;
   long_press_ms: number;
+  /** Fenster, in dem ein zweiter Druck als Doppeldruck zählt. */
+  double_press_ms: number;
   tick_interval_s: number;
   swipe_switches_page: boolean;
   swipe_min_distance: number;
   swipe_wraps: boolean;
+  /** Animierte Tastenbilder abspielen. */
+  animations: boolean;
+  animation_fps: number;
   screensaver: Screensaver;
+}
+
+/** Ein Gerät und was daran hängt — je Deck ein Profil. */
+export interface DeckBinding {
+  serial: string;
+  name: string;
+  deck_type: string;
+  profile_id: string;
+  device: DeviceSettings;
+  order: number;
+}
+
+/** Zustand eines Decks, wie ihn das Backend meldet (DeviceInfo + Bindung). */
+export interface DeckInfo extends DeviceInfo {
+  id: string;
+  name: string;
+  profile_id: string;
+  current_page_id: string;
+  screensaver?: boolean;
+  settings: DeviceSettings;
+  order: number;
+  /** `hardware` hängt am USB, `virtual` liegt als Overlay auf dem Bildschirm. */
+  kind: "hardware" | "virtual";
+  columns: number;
+  rows: number;
+  dials: number;
+  tile_size: number;
+  /** Overlay ohne eigenen Grund — nur die Kacheln schweben. */
+  overlay_transparent?: boolean;
+  /** Unbelegte Kacheln gar nicht erst zeigen. */
+  hide_empty?: boolean;
+  /** Nur bei virtuellen Decks: ob das Overlay gerade zu sehen ist. */
+  overlay_visible?: boolean;
+  overlay_available?: boolean;
+  overlay_reason?: string;
 }
 
 export interface AppSettings {
@@ -114,12 +192,15 @@ export interface AppSettings {
   active_iconset: string;
   host: string;
   port: number;
+  plugin_order: string[];
 }
 
 export interface Config {
   version: number;
   app: AppSettings;
+  /** Vorlage für neue Geräte; die geltenden Werte stehen je Deck. */
   device: DeviceSettings;
+  decks: Record<string, DeckBinding>;
   active_profile_id: string;
   profiles: Record<string, Profile>;
   plugin_settings: Record<string, Record<string, unknown>>;
@@ -249,6 +330,8 @@ export interface BackgroundPreset {
 
 export interface BackendState {
   device: DeviceInfo;
+  decks: DeckInfo[];
+  active_deck: string;
   config: Config;
   current_page_id: string;
   plugins: PluginInfo[];
@@ -270,4 +353,11 @@ export interface AutostartStatus {
 export interface Selection {
   inputType: InputType;
   index: number;
+}
+
+/** Ob die App Tastendrücke schicken kann — und mit welcher Belegung. */
+export interface InputStatus {
+  available: boolean;
+  reason: string;
+  layout: string;
 }

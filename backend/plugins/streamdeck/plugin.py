@@ -22,15 +22,16 @@ class StreamdeckPlugin(ActionPlugin):
         self._activate(action_id, settings, ctx)
 
     def on_dial_rotate(self, action_id, settings, delta, ctx):
-        runtime = self.services.runtime
         if action_id == "brightness":
-            self._change_brightness(delta * int(ctx.setting("step", 5)))
+            self._change_brightness(ctx, delta * int(ctx.setting("step", 5)))
         elif action_id in ("next_page", "prev_page", "page_number", "goto_page"):
             # Am Dial fühlt sich Blättern per Drehen natürlicher an als Drücken.
-            self._step_page(delta, wrap=bool(ctx.setting("wrap", True)))
+            self._step_page(ctx, delta, wrap=bool(ctx.setting("wrap", True)))
 
     def _activate(self, action_id, settings, ctx) -> None:
-        runtime = self.services.runtime
+        # Über ``ctx`` und nicht über ``self``: Bei mehreren Decks muss die
+        # Navigation das Gerät treffen, auf dem gedrückt wurde.
+        runtime = ctx.services.runtime
         if action_id == "home":
             runtime.navigate_home()
         elif action_id == "back":
@@ -42,16 +43,56 @@ class StreamdeckPlugin(ActionPlugin):
                 return
             runtime.navigate(page_id)
         elif action_id == "next_page":
-            self._step_page(1, wrap=bool(ctx.setting("wrap", True)))
+            self._step_page(ctx, 1, wrap=bool(ctx.setting("wrap", True)))
         elif action_id == "prev_page":
-            self._step_page(-1, wrap=bool(ctx.setting("wrap", True)))
+            self._step_page(ctx, -1, wrap=bool(ctx.setting("wrap", True)))
         elif action_id == "brightness":
-            self._toggle_brightness()
+            self._toggle_brightness(ctx)
+        elif action_id == "overlay":
+            self._overlay(settings, ctx)
+
+    def _overlay(self, settings, ctx) -> None:
+        """Zeigt oder versteckt ein virtuelles Deck.
+
+        Der Weg über eine Taste ist bewusst der erste: Einen globalen
+        Kurzbefehl zum Herbeirufen gibt es unter Wayland nicht geschenkt —
+        ein Deck, das man ohnehin in der Hand hat, tut es genauso.
+        """
+        dienst = self.services.overlay
+        ziel = (settings.get("deck") or "").strip()
+        if not ziel:
+            self.notify_error("Kein virtuelles Deck ausgewählt")
+            return
+
+        modus = settings.get("mode") or "toggle"
+        am_zeiger = bool(settings.get("at_cursor", True))
+
+        async def schalten():
+            try:
+                if modus == "show":
+                    await dienst.show(ziel, at_cursor=am_zeiger)
+                elif modus == "hide":
+                    dienst.hide(ziel)
+                else:
+                    await dienst.toggle(ziel, at_cursor=am_zeiger)
+            except Exception as exc:
+                self.notify_error(str(exc))
+            ctx.request_redraw()
+
+        self.run_async(schalten())
+
+    def get_state(self, action_id, settings, ctx):
+        if action_id != "overlay":
+            return None
+        ziel = (settings.get("deck") or "").strip()
+        sichtbar = bool(ziel) and self.services.overlay.is_visible(ziel)
+        return "visible" if sichtbar else "hidden"
 
     # -- Zustand und Beschriftung -----------------------------------------
 
     def get_label(self, action_id, settings, ctx):
-        runtime = self.services.runtime
+        runtime = ctx.services.runtime
+        pages = self.services.config.profile(ctx.profile_id).pages
         if action_id == "page_number":
             mode = ctx.setting("format", "number_of_total")
             siblings = runtime.sibling_pages()
@@ -59,16 +100,14 @@ class StreamdeckPlugin(ActionPlugin):
             if mode == "number":
                 return str(current)
             if mode == "name":
-                page = self.services.config.active_profile().pages.get(
-                    runtime.current_page_id()
-                )
+                page = pages.get(runtime.current_page_id())
                 return page.name if page else str(current)
             return f"{current}/{len(siblings)}"
         if action_id == "folder" and not ctx.appearance.label_text:
-            page = self.services.config.active_profile().pages.get(settings.get("page_id", ""))
+            page = pages.get(settings.get("page_id", ""))
             return page.name if page else None
         if action_id == "brightness" and not ctx.appearance.label_text:
-            return f"{self.services.config.device.brightness}%"
+            return f"{runtime.device_settings.brightness}%"
         return None
 
     def on_tick(self, action_id, settings, ctx):
@@ -126,30 +165,47 @@ class StreamdeckPlugin(ActionPlugin):
         render = self.services.render
         image = render.background(ctx.size, ctx.appearance, accent=ACCENT)
         value = self.services.config.device.brightness
+        # Gleiches Segment-Layout wie beim Lautstärke-Dial: Balken unten in
+        # eigener Zone, Text oben, Icon links dazwischen. Alle Maße hängen an
+        # der Höhe — auf einem virtuellen Deck ist ein Segment kleiner.
+        balken = render.bar_box(ctx.size)
+        rand = balken[0]
+        hoehe = ctx.size[1]
+        inhalt = balken[1] - rand
         icon = self.services.icons.resolve(
             ctx.appearance.icon_for_state(None),
-            size=max(24, ctx.size[1] - 46),
+            size=max(16, min(inhalt, round(min(ctx.size) * ctx.appearance.icon_size / 100))),
             fallback_name="sun",
             fallback_set=self.services.config.app.active_iconset,
             color=ctx.appearance.label_color,
         )
-        image.alpha_composite(icon, (10, (ctx.size[1] - icon.height) // 2 - 6))
-        render.draw_text(image, f"{value}%", y=6, size=ctx.appearance.label_size,
-                         color=ctx.appearance.label_color)
-        render.draw_bar(
+        image.alpha_composite(icon, (rand, rand + (inhalt - icon.height) // 2))
+        render.draw_text_at(
             image,
-            value / 100,
-            box=(10 + icon.width + 10, ctx.size[1] - 30, ctx.size[0] - 12, ctx.size[1] - 20),
-            color="#fbbf24",
+            f"{value}%",
+            x=ctx.size[0] - rand,
+            y=rand,
+            size=max(9, min(ctx.appearance.label_size, round(hoehe * 0.30))),
+            color=ctx.appearance.label_color,
+            align="right",
         )
+        render.draw_bar(image, value / 100, box=balken, color="#fbbf24")
         return image
 
     # -- GUI ---------------------------------------------------------------
 
     def get_dynamic_options(self, source, context=None):
+        if source == "virtual_decks":
+            return [
+                {"value": deck.key, "label": deck.label}
+                for deck in self.services.runtime.decks_in_order()
+                if deck.binding.is_virtual
+            ]
         if source != "pages":
             return []
-        profile = self.services.config.active_profile()
+        # Welche Seiten zur Auswahl stehen, hängt am Deck: Jedes Gerät hat
+        # sein eigenes Profil und damit seinen eigenen Seitenbaum.
+        profile = self.services.runtime.profile_for((context or {}).get("__deck"))
         options = []
         for page_id in _ordered_page_ids(profile):
             page = profile.pages[page_id]
@@ -161,24 +217,28 @@ class StreamdeckPlugin(ActionPlugin):
 
     # -- Intern ------------------------------------------------------------
 
-    def _step_page(self, delta: int, *, wrap: bool) -> None:
+    def _step_page(self, ctx, delta: int, *, wrap: bool) -> None:
         # Dieselbe Mechanik, die auch das Wischen über den Touchstrip nutzt.
-        self.services.runtime.step_page(delta, wrap=wrap)
+        ctx.services.runtime.step_page(delta, wrap=wrap)
 
-    def _change_brightness(self, delta: int) -> None:
-        device = self.services.config.device
-        device.brightness = max(5, min(100, device.brightness + delta))
-        self.services.runtime.device.set_brightness(device.brightness)
-        self.services.runtime.save_config()
-        self.services.runtime.request_redraw()
+    def _change_brightness(self, ctx, delta: int) -> None:
+        # Die Helligkeit gehört dem Deck, nicht der App: Zwei angeschlossene
+        # Geräte dürfen unterschiedlich hell leuchten.
+        runtime = ctx.services.runtime
+        settings = runtime.device_settings
+        settings.brightness = max(5, min(100, settings.brightness + delta))
+        runtime.device.set_brightness(settings.brightness)
+        runtime.save_config()
+        runtime.request_redraw()
 
-    def _toggle_brightness(self) -> None:
+    def _toggle_brightness(self, ctx) -> None:
         """Auf einer Taste: zwischen gedimmt und hell umschalten."""
-        device = self.services.config.device
-        device.brightness = 30 if device.brightness > 40 else 80
-        self.services.runtime.device.set_brightness(device.brightness)
-        self.services.runtime.save_config()
-        self.services.runtime.request_redraw()
+        runtime = ctx.services.runtime
+        settings = runtime.device_settings
+        settings.brightness = 30 if settings.brightness > 40 else 80
+        runtime.device.set_brightness(settings.brightness)
+        runtime.save_config()
+        runtime.request_redraw()
 
 
 def _ordered_page_ids(profile) -> list[str]:

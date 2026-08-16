@@ -41,6 +41,11 @@ export function makeSlot(
       label_color: "#ffffff",
       label_position: "bottom",
       show_label: true,
+      label_font: "",
+      label_bold: false,
+      label_italic: false,
+      label_underline: false,
+      label_align: "center",
       background: {
         kind: "solid",
         color: "#000000",
@@ -49,9 +54,20 @@ export function makeSlot(
         intensity: 12,
         accent: null,
         upload: null,
+        fit: "cover",
+        opacity: 100,
       },
     },
     long_press: null,
+    double_press: null,
+    turn_left: null,
+    turn_right: null,
+    turn_every: 2,
+    steps: [],
+    steps_off: [],
+    repeat: false,
+    toggled: false,
+    stack: [],
   };
 }
 

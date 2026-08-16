@@ -11,7 +11,11 @@ import type { AutostartStatus } from "../types";
 export function SettingsView() {
   const { t } = useTranslation();
   const config = useStore((s) => s.config);
-  const patchConfig = useStore((s) => s.patchConfig);
+  const patchApp = useStore((s) => s.patchAppSettings);
+  const patchDeck = useStore((s) => s.patchDeckSettings);
+  const device = useStore((s) => s.deckSettings());
+  const decks = useStore((s) => s.decks);
+  const activeDeck = useStore((s) => s.activeDeck);
   const load = useStore((s) => s.load);
 
   const [sets, setSets] = useState<{ id: string; name: string; count: number }[]>([]);
@@ -23,7 +27,7 @@ export function SettingsView() {
     api.iconSets().then(setSets).catch(() => undefined);
   }, []);
 
-  if (!config) return null;
+  if (!config || !device) return null;
 
   const importFile = async (file: File) => {
     try {
@@ -57,10 +61,7 @@ export function SettingsView() {
             id="language"
             value={config.app.language}
             onChange={(event) =>
-              void patchConfig((draft) => {
-                draft.app.language = event.target.value as "de" | "en";
-                return draft;
-              })
+              void patchApp({ language: event.target.value as "de" | "en" })
             }
           >
             {SUPPORTED_LANGUAGES.map((language) => (
@@ -76,12 +77,7 @@ export function SettingsView() {
           <select
             id="iconset"
             value={config.app.active_iconset}
-            onChange={(event) =>
-              void patchConfig((draft) => {
-                draft.app.active_iconset = event.target.value;
-                return draft;
-              })
-            }
+            onChange={(event) => void patchApp({ active_iconset: event.target.value })}
           >
             {sets.map((entry) => (
               <option key={entry.id} value={entry.id}>
@@ -94,75 +90,112 @@ export function SettingsView() {
         <AutostartField />
       </section>
 
-      <section className="settings-card">
-        <h3>{t("settings.device")}</h3>
+      <DecksCard />
 
-        <NumberField
-          label={`${t("settings.brightness")} (%)`}
-          value={config.device.brightness}
-          min={5}
-          max={100}
-          onChange={(value) => {
-            void patchConfig((draft) => {
-              draft.device.brightness = value;
-              return draft;
-            });
-            void api.setBrightness(value).catch(() => undefined);
-          }}
-        />
+      <section className="settings-card">
+        <h3>
+          {t("settings.device")}
+          {decks.length > 1 && (
+            <small className="card-subtitle">
+              {decks.find((deck) => deck.id === activeDeck)?.name ?? ""}
+            </small>
+          )}
+        </h3>
+        {decks.length > 1 && <p className="hint">{t("settings.perDeckHint")}</p>}
+
+        {/* Ein Overlay hat kein Licht zu regeln. */}
+        {decks.find((deck) => deck.id === activeDeck)?.kind !== "virtual" && (
+          <NumberField
+            label={`${t("settings.brightness")} (%)`}
+            value={device.brightness}
+            min={5}
+            max={100}
+            onChange={(value) => {
+              void patchDeck((draft) => ({ ...draft, brightness: value }));
+              void api.setBrightness(value).catch(() => undefined);
+            }}
+          />
+        )}
 
         <NumberField
           label={`${t("settings.idleDim")} (${t("settings.seconds")})`}
           help={t("settings.idleDimHint")}
-          value={config.device.idle_dim_after_s}
+          value={device.idle_dim_after_s}
           min={0}
           max={7200}
           onChange={(value) =>
-            void patchConfig((draft) => {
-              draft.device.idle_dim_after_s = value;
-              return draft;
-            })
+            void patchDeck((draft) => ({ ...draft, idle_dim_after_s: value }))
           }
         />
 
         <NumberField
           label={`${t("settings.idleBrightness")} (%)`}
-          value={config.device.idle_brightness}
+          value={device.idle_brightness}
           min={0}
           max={100}
           onChange={(value) =>
-            void patchConfig((draft) => {
-              draft.device.idle_brightness = value;
-              return draft;
-            })
+            void patchDeck((draft) => ({ ...draft, idle_brightness: value }))
           }
         />
 
         <NumberField
           label={`${t("settings.longPressMs")} (${t("settings.milliseconds")})`}
-          value={config.device.long_press_ms}
+          value={device.long_press_ms}
           min={150}
           max={3000}
           step={50}
           onChange={(value) =>
-            void patchConfig((draft) => {
-              draft.device.long_press_ms = value;
-              return draft;
-            })
+            void patchDeck((draft) => ({ ...draft, long_press_ms: value }))
           }
         />
 
         <NumberField
+          label={`${t("settings.doublePressMs")} (${t("settings.milliseconds")})`}
+          help={t("settings.doublePressHint")}
+          value={device.double_press_ms}
+          min={120}
+          max={1000}
+          step={20}
+          onChange={(value) =>
+            void patchDeck((draft) => ({ ...draft, double_press_ms: value }))
+          }
+        />
+
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={device.animations}
+            onChange={(event) =>
+              void patchDeck((draft) => ({
+                ...draft,
+                animations: event.target.checked,
+              }))
+            }
+          />
+          <span>{t("settings.animations")}</span>
+        </label>
+        <small className="help">{t("settings.animationsHint")}</small>
+
+        {device.animations && (
+          <NumberField
+            label={t("settings.animationFps")}
+            value={device.animation_fps}
+            min={1}
+            max={30}
+            onChange={(value) =>
+              void patchDeck((draft) => ({ ...draft, animation_fps: value }))
+            }
+          />
+        )}
+
+        <NumberField
           label={`${t("settings.tickInterval")} (${t("settings.seconds")})`}
-          value={config.device.tick_interval_s}
+          value={device.tick_interval_s}
           min={0.2}
           max={10}
           step={0.1}
           onChange={(value) =>
-            void patchConfig((draft) => {
-              draft.device.tick_interval_s = value;
-              return draft;
-            })
+            void patchDeck((draft) => ({ ...draft, tick_interval_s: value }))
           }
         />
       </section>
@@ -175,43 +208,40 @@ export function SettingsView() {
         <label className="checkbox">
           <input
             type="checkbox"
-            checked={config.device.swipe_switches_page}
+            checked={device.swipe_switches_page}
             onChange={(event) =>
-              void patchConfig((draft) => {
-                draft.device.swipe_switches_page = event.target.checked;
-                return draft;
-              })
+              void patchDeck((draft) => ({
+                ...draft,
+                swipe_switches_page: event.target.checked,
+              }))
             }
           />
           <span>{t("settings.swipeSwitchesPage")}</span>
         </label>
         <small className="help">{t("settings.swipeHint")}</small>
 
-        {config.device.swipe_switches_page && (
+        {device.swipe_switches_page && (
           <>
             <NumberField
               label={`${t("settings.swipeDistance")} (${t("settings.pixels")})`}
-              value={config.device.swipe_min_distance}
+              value={device.swipe_min_distance}
               min={20}
               max={400}
               step={10}
               onChange={(value) =>
-                void patchConfig((draft) => {
-                  draft.device.swipe_min_distance = value;
-                  return draft;
-                })
+                void patchDeck((draft) => ({ ...draft, swipe_min_distance: value }))
               }
             />
 
             <label className="checkbox">
               <input
                 type="checkbox"
-                checked={config.device.swipe_wraps}
+                checked={device.swipe_wraps}
                 onChange={(event) =>
-                  void patchConfig((draft) => {
-                    draft.device.swipe_wraps = event.target.checked;
-                    return draft;
-                  })
+                  void patchDeck((draft) => ({
+                    ...draft,
+                    swipe_wraps: event.target.checked,
+                  }))
                 }
               />
               <span>{t("settings.swipeWraps")}</span>
@@ -260,6 +290,95 @@ export function SettingsView() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Die angeschlossenen (und die früher einmal angeschlossenen) Decks.
+ *
+ * Sichtbar nur, wenn es mehr als eines gibt oder eines fehlt — bei genau
+ * einem Gerät wäre die Liste eine Zeile mit dem, was oben rechts ohnehin
+ * steht.
+ */
+function DecksCard() {
+  const { t } = useTranslation();
+  const decks = useStore((s) => s.decks);
+  const activeDeck = useStore((s) => s.activeDeck);
+  const selectDeck = useStore((s) => s.selectDeck);
+  const renameDeck = useStore((s) => s.renameDeck);
+  const forgetDeck = useStore((s) => s.forgetDeck);
+  const createVirtual = useStore((s) => s.createVirtualDeck);
+
+  return (
+    <section className="settings-card">
+      <h3>{t("decks.title")}</h3>
+      <p className="hint">{t("decks.hint")}</p>
+
+      <ul className="deck-list">
+        {decks.map((deck) => {
+          const virtuell = deck.kind === "virtual";
+          return (
+            <li key={deck.id} className={deck.id === activeDeck ? "active" : ""}>
+              <span className={deck.connected ? "dot ok" : "dot bad"} />
+              <input
+                type="text"
+                value={deck.name}
+                aria-label={t("decks.name")}
+                onChange={(event) => void renameDeck(deck.id, event.target.value)}
+              />
+              <small>
+                {virtuell ? t("decks.virtual") : deck.deck_type || "—"}
+                {!virtuell && deck.serial ? ` · ${deck.serial}` : ""}
+                {virtuell || deck.connected ? "" : ` · ${t("decks.notConnected")}`}
+              </small>
+
+              <div className="row">
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={deck.id === activeDeck}
+                  onClick={() => void selectDeck(deck.id)}
+                >
+                  {t("decks.edit")}
+                </button>
+
+                {(virtuell || !deck.connected) && decks.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn small danger"
+                    onClick={() => {
+                      if (window.confirm(t("decks.forgetConfirm", { name: deck.name })))
+                        void forgetDeck(deck.id);
+                    }}
+                  >
+                    {t("decks.forget")}
+                  </button>
+                )}
+              </div>
+
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="row">
+        <button
+          type="button"
+          className="btn"
+          onClick={() =>
+            void createVirtual({
+              name: t("decks.newVirtualName"),
+              columns: 4,
+              rows: 2,
+              dials: 0,
+            })
+          }
+        >
+          + {t("decks.addVirtual")}
+        </button>
+      </div>
+      <small className="help">{t("decks.addVirtualHint")}</small>
+    </section>
   );
 }
 

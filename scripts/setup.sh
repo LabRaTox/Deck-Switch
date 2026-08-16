@@ -37,11 +37,15 @@ if ! command -v pacman >/dev/null 2>&1; then
     echo "  distribution, install the equivalents of these by hand and"
     echo "  skip this script:"
     echo "    python, nodejs, npm, rust, base-devel, webkit2gtk-4.1,"
-    echo "    hidapi, libusb, noto-fonts, wireplumber, libpulse"
+    echo "    hidapi, libusb, noto-fonts, wireplumber, libpulse,"
+    echo "    libxkbcommon, pipewire-audio"
     exit 1
 fi
 
-PACKAGES="python webkit2gtk-4.1 base-devel rust hidapi libusb nodejs npm noto-fonts wireplumber libpulse"
+# libxkbcommon: Zeichen → Taste für „Text tippen" und Tastenkombinationen.
+# pipewire-audio: pw-play für das Soundboard.
+# qt6-declarative + layer-shell-qt: das virtuelle Deck als Overlay.
+PACKAGES="python webkit2gtk-4.1 base-devel rust hidapi libusb nodejs npm noto-fonts wireplumber libpulse libxkbcommon pipewire-audio qt6-declarative layer-shell-qt"
 
 MISSING=""
 for pkg in $PACKAGES; do

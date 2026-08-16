@@ -43,6 +43,10 @@ BUILTIN_PLUGINS_DIR: Path = Path(__file__).resolve().parent.parent / "plugins"
 
 LOG_FILE: Path = DATA_DIR / "deckswitch.log"
 
+#: Frühere Stände der Konfiguration. Eine Belegung ist Handarbeit und steht
+#: in genau einer Datei — vor jedem Überschreiben wandert eine Kopie hierhin.
+BACKUP_DIR: Path = DATA_DIR / "backups"
+
 
 #: Wie die Ordner hießen, bevor die Software DECK//SWITCH wurde. Wer von
 #: einer älteren Fassung kommt, hat seine Belegungen dort liegen.

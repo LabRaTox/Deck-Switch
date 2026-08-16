@@ -52,10 +52,24 @@ FONT_FALLBACK_PATHS_BOLD = [
 ]
 
 
-@lru_cache(maxsize=4)
-def _resolve_font(bold: bool) -> str | None:
-    """Sucht eine Schriftdatei über fontconfig, sonst über feste Pfade."""
-    patterns = FONT_PATTERNS_BOLD if bold else FONT_PATTERNS_REGULAR
+@lru_cache(maxsize=64)
+def _resolve_font(family: str = "", bold: bool = False, italic: bool = False) -> str | None:
+    """Sucht eine Schriftdatei über fontconfig, sonst über feste Pfade.
+
+    ``family`` ist der Familienname, wie ihn auch die Schriftauswahl in der
+    GUI anbietet. Leer heißt „irgendeine brauchbare serifenlose".
+    """
+    style = ""
+    if bold:
+        style += ":bold"
+    if italic:
+        style += ":italic"
+
+    patterns = (
+        [f"{family}{style}"]
+        if family
+        else [f"{p}{style}" for p in FONT_PATTERNS_REGULAR]
+    )
 
     if shutil.which("fc-match"):
         for pattern in patterns:
@@ -81,9 +95,11 @@ def _resolve_font(bold: bool) -> str | None:
     return None
 
 
-@lru_cache(maxsize=64)
-def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
-    path = _resolve_font(bold)
+@lru_cache(maxsize=128)
+def load_font(
+    size: int, bold: bool = False, family: str = "", italic: bool = False
+) -> ImageFont.FreeTypeFont:
+    path = _resolve_font(family, bold, italic)
     if path is not None:
         try:
             return ImageFont.truetype(path, size)
@@ -92,9 +108,35 @@ def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
 
     log.warning(
         "Keine TrueType-Schrift gefunden — Beschriftungen bleiben winzig. "
-        "Abhilfe: ein Schriftpaket installieren (z. B. noto-fonts bzw. fonts-noto-core)."
+        "Abhilfe: ein Schriftpaket installieren (z. B. noto-fonts)."
     )
     return ImageFont.load_default()
+
+
+@lru_cache(maxsize=1)
+def list_font_families() -> list[str]:
+    """Alle installierten Schriftfamilien — für die Auswahl in der GUI."""
+    if not shutil.which("fc-list"):
+        return []
+    try:
+        result = subprocess.run(
+            ["fc-list", ":", "family"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+
+    families: set[str] = set()
+    for line in result.stdout.splitlines():
+        # Eine Zeile listet alle Namen einer Datei, durch Komma getrennt —
+        # oft derselbe Name mehrfach übersetzt. Der erste reicht.
+        name = line.split(",")[0].strip()
+        if name:
+            families.add(name)
+    return sorted(families, key=str.lower)
 
 
 class RenderService:
@@ -111,6 +153,7 @@ class RenderService:
         label_override: str | None = None,
         accent: str | None = None,
         icon_override: Image.Image | None = None,
+        reserve_bottom: int = 0,
     ) -> Image.Image:
         """Standard-Layout: Hintergrund → Icon → Label.
 
@@ -119,13 +162,21 @@ class RenderService:
         Es wird unverändert übernommen; die Größe bestimmt :meth:`icon_px`.
         """
         appearance = ctx.appearance
-        image = self.background(ctx.size, appearance, accent=accent)
+        frame_time = getattr(ctx, "frame_time", 0.0)
+        image = self.background(ctx.size, appearance, accent=accent, frame_time=frame_time)
 
         label = label_override if label_override is not None else appearance.label_text
         show_label = appearance.show_label and bool(label)
 
         icon_ref = appearance.icon_for_state(state)
         fallback_name = self._fallback_icon_name(ctx, state)
+
+        # ``none`` heißt ausdrücklich „kein Symbol" — auch nicht das aus dem
+        # Manifest. Genau das braucht ein fertig gestaltetes Tastenbild:
+        # Symbol und Text stecken schon darin.
+        if icon_ref is not None and icon_ref.kind == "none":
+            icon_ref = None
+            fallback_name = None
 
         self.compose(
             image,
@@ -137,6 +188,7 @@ class RenderService:
                 fallback_name=fallback_name,
                 fallback_set=self._active_set(ctx),
                 color=appearance.label_color if icon_ref is None else None,
+                frame_time=frame_time,
             )
             if (icon_ref is not None or fallback_name)
             else None,
@@ -144,17 +196,29 @@ class RenderService:
             label_size=appearance.label_size,
             label_color=appearance.label_color,
             label_position=appearance.label_position,
+            label_font=appearance.label_font,
+            label_bold=appearance.label_bold,
+            label_italic=appearance.label_italic,
+            label_underline=appearance.label_underline,
+            label_align=appearance.label_align,
+            reserve_bottom=reserve_bottom,
         )
         return image
 
     def background(
-        self, size: tuple[int, int], appearance: Appearance, *, accent: str | None = None
+        self,
+        size: tuple[int, int],
+        appearance: Appearance,
+        *,
+        accent: str | None = None,
+        frame_time: float = 0.0,
     ) -> Image.Image:
         return backgrounds.render_background(
             size,
             appearance.background,
             accent=accent,
             upload_loader=self.icons.load_upload_image,
+            frame_time=frame_time,
         )
 
     def compose(
@@ -166,16 +230,30 @@ class RenderService:
         label_size: int = 16,
         label_color: str = "#ffffff",
         label_position: str = "bottom",
+        label_font: str = "",
+        label_bold: bool = False,
+        label_italic: bool = False,
+        label_underline: bool = False,
+        label_align: str = "center",
+        reserve_bottom: int = 0,
     ) -> Image.Image:
         """Legt Icon und Label auf ein bestehendes Hintergrundbild.
 
         Getrennt von :meth:`render_slot`, damit ein Plugin eigenen Content
         zeichnen und trotzdem dasselbe Label-Layout erben kann.
+
+        ``reserve_bottom`` hält unten Platz frei — für einen Pegelbalken.
+        Ohne das legte sich der Balken schlicht über das Label, denn das
+        steht standardmäßig genau dort.
         """
         width, height = image.size
+        # Nutzbare Höhe: Was unten reserviert ist, gibt es fürs Layout nicht.
+        nutzbar = max(1, height - max(0, reserve_bottom))
         draw = ImageDraw.Draw(image)
 
-        font = load_font(max(6, int(label_size)))
+        font = load_font(
+            max(6, int(label_size)), bold=label_bold, family=label_font, italic=label_italic
+        )
         lines = self._wrap(draw, label, font, width - 6) if label else []
         line_height = int(label_size * 1.15)
         text_block = len(lines) * line_height
@@ -184,9 +262,9 @@ class RenderService:
         if label_position == "top":
             text_top = pad
         elif label_position == "center":
-            text_top = (height - text_block) // 2
+            text_top = (nutzbar - text_block) // 2
         else:
-            text_top = height - text_block - pad
+            text_top = nutzbar - text_block - pad
 
         # Das Icon sitzt immer mittig auf der Kachel — unabhängig davon, wo
         # das Label steht. Es am Restplatz auszurichten ließe es beim
@@ -194,7 +272,7 @@ class RenderService:
         # stattdessen darüber und bleibt durch seinen dunklen Rand lesbar.
         if icon is not None:
             icon_x = (width - icon.width) // 2
-            icon_y = (height - icon.height) // 2
+            icon_y = (nutzbar - icon.height) // 2
             image.alpha_composite(icon, (max(0, icon_x), max(0, icon_y)))
 
         if lines:
@@ -202,14 +280,47 @@ class RenderService:
             for i, line in enumerate(lines):
                 y = text_top + i * line_height
                 bbox = draw.textbbox((0, 0), line, font=font)
-                x = (width - (bbox[2] - bbox[0])) // 2 - bbox[0]
+                text_width = bbox[2] - bbox[0]
+                if label_align == "left":
+                    x = pad - bbox[0]
+                elif label_align == "right":
+                    x = width - pad - text_width - bbox[0]
+                else:
+                    x = (width - text_width) // 2 - bbox[0]
                 # Dünner dunkler Rand hält den Text auch auf hellen
                 # Hintergründen lesbar.
                 draw.text((x, y), line, font=font, fill=color,
                           stroke_width=1, stroke_fill=(0, 0, 0, 190))
+                if label_underline:
+                    # Pillow kennt kein Unterstreichen — die Linie wird
+                    # gezogen, wo die Schrift ihre Unterlänge beginnt.
+                    baseline = y + bbox[3] + max(1, label_size // 12)
+                    thickness = max(1, label_size // 12)
+                    draw.line(
+                        [(x + bbox[0], baseline), (x + bbox[0] + text_width, baseline)],
+                        fill=color,
+                        width=thickness,
+                    )
         return image
 
     # -- Bausteine für Plugins --------------------------------------------
+
+    def bar_box(self, size: tuple[int, int]) -> tuple[int, int, int, int]:
+        """Zone für einen Pegelbalken am unteren Rand — proportional.
+
+        Feste Pixelabstände sind hier eine Falle: Der Touchstrip des Geräts
+        ist 200×100 groß, ein virtuelles Deck legt seine Dial-Segmente aber
+        frei fest. Bei halber Höhe saß ein fest gesetzter Balken mitten im
+        Text darüber. Alles hängt deshalb an der tatsächlichen Höhe.
+        """
+        width, height = size
+        rand = max(4, round(height * 0.08))
+        balken = max(4, round(height * 0.11))
+        return (rand, height - rand - balken, width - rand, height - rand)
+
+    def bar_reserve(self, size: tuple[int, int], box: tuple[int, int, int, int]) -> int:
+        """Wie viel Höhe ein Balken unten belegt — für ``reserve_bottom``."""
+        return max(0, size[1] - box[1])
 
     def draw_bar(
         self,

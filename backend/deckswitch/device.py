@@ -105,22 +105,28 @@ class StreamDeckDevice:
 
     # -- Verbindung --------------------------------------------------------
 
-    def open(self) -> bool:
-        """Versucht, das erste gefundene Deck zu öffnen."""
+    def open(self, deck=None) -> bool:
+        """Öffnet ein Deck — ein bestimmtes oder das erste gefundene.
+
+        ``deck`` ist ein noch nicht geöffnetes Gerät aus :func:`enumerate_decks`.
+        Ohne Angabe wird das erste gesuchte genommen; das ist der Weg für
+        Aufrufer, die nur ein Deck kennen (Tests, Einzelgerät-Betrieb).
+        """
         with self._lock:
             if self.deck is not None:
                 return True
-            try:
-                decks = DeviceManager().enumerate()
-            except Exception as exc:
-                self.info = DeviceInfo(error=f"Geräte-Suche fehlgeschlagen: {exc}")
-                return False
+            if deck is None:
+                try:
+                    decks = DeviceManager().enumerate()
+                except Exception as exc:
+                    self.info = DeviceInfo(error=f"Geräte-Suche fehlgeschlagen: {exc}")
+                    return False
 
-            if not decks:
-                self.info = DeviceInfo(error="Kein Stream Deck gefunden")
-                return False
+                if not decks:
+                    self.info = DeviceInfo(error="Kein Stream Deck gefunden")
+                    return False
+                deck = decks[0]
 
-            deck = decks[0]
             try:
                 deck.open()
                 deck.reset()
@@ -267,6 +273,29 @@ class StreamDeckDevice:
             deck.reset()
         except Exception as exc:
             log.debug("Reset ignoriert: %s", exc)
+
+
+def enumerate_decks() -> list:
+    """Alle angeschlossenen Decks, noch ungeöffnet.
+
+    Ein Deck verrät seine Seriennummer erst im geöffneten Zustand — bis
+    dahin unterscheidet sie nur ihr Geräteknoten (:func:`deck_path`). Der
+    reicht, um zu erkennen, was schon offen ist und was neu dazukam.
+    """
+    try:
+        return list(DeviceManager().enumerate())
+    except Exception as exc:
+        log.warning("Geräte-Suche fehlgeschlagen: %s", exc)
+        return []
+
+
+def deck_path(deck) -> str:
+    """Stabile Kennung eines Geräts, ohne es zu öffnen."""
+    try:
+        value = deck.id()
+    except Exception:
+        return ""
+    return value.decode() if isinstance(value, bytes) else str(value)
 
 
 def _flatten(image: Image.Image) -> Image.Image:
