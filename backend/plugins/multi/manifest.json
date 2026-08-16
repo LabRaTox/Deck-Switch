@@ -1,0 +1,95 @@
+{
+  "id": "multi",
+  "name": {
+    "de": "Multi-Aktion",
+    "en": "Multi action"
+  },
+  "version": "1.0.0",
+  "type": "action",
+  "entry": "plugin.py",
+  "class": "MultiPlugin",
+  "accent": "#a855f7",
+  "description": {
+    "de": "Mehrere Aktionen auf einer Taste — nacheinander, mit Pausen dazwischen.",
+    "en": "Several actions on one key — one after another, with pauses in between."
+  },
+  "actions": [
+    {
+      "id": "chain",
+      "name": {
+        "de": "Multi-Aktion",
+        "en": "Multi action"
+      },
+      "description": {
+        "de": "Führt mehrere Aktionen nacheinander aus.",
+        "en": "Runs several actions in sequence."
+      },
+      "inputs": ["key", "dial"],
+      "default_icon": "player-track-next",
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Bereit",
+            "en": "Idle"
+          }
+        },
+        {
+          "id": "running",
+          "name": {
+            "de": "Läuft",
+            "en": "Running"
+          },
+          "default_icon": "player-play"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "repeat",
+          "type": "bool",
+          "label": {
+            "de": "Wiederholen, bis erneut gedrückt wird",
+            "en": "Repeat until pressed again"
+          },
+          "default": false,
+          "help": {
+            "de": "Die Kette läuft in Schleife. Ein zweiter Druck hält sie an.",
+            "en": "The chain loops. A second press stops it."
+          }
+        }
+      ]
+    },
+    {
+      "id": "switch",
+      "name": {
+        "de": "Multi-Aktion (Umschalter)",
+        "en": "Multi action switch"
+      },
+      "description": {
+        "de": "Zwei Ketten im Wechsel — einmal drücken hin, einmal zurück.",
+        "en": "Two chains, alternating — press once for each direction."
+      },
+      "inputs": ["key", "dial"],
+      "default_icon": "toggle-left",
+      "states": [
+        {
+          "id": "off",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          },
+          "default_icon": "toggle-left"
+        },
+        {
+          "id": "on",
+          "name": {
+            "de": "An",
+            "en": "On"
+          },
+          "default_icon": "toggle-right"
+        }
+      ],
+      "settings_schema": []
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Stream Deck URL-Handler
+Comment=Nimmt streamdeck://-Adressen entgegen
+# __HANDLER__ wird von scripts/install-url-handler.sh ersetzt.
+Exec=__HANDLER__ %u
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/streamdeck;
+Categories=Utility;

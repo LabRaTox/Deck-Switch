@@ -1,0 +1,35 @@
+[project]
+name = "deckswitch"
+version = "0.1.0"
+description = "Eigene Stream Deck+ Steuerungssoftware für CachyOS"
+requires-python = ">=3.11"
+dependencies = [
+    "streamdeck>=0.9.5",
+    "pillow>=10.0",
+    "cairosvg>=2.7",
+    "fastapi>=0.110",
+    # Ohne das lehnt FastAPI beim Start jede Route mit Datei-Upload ab —
+    # das Backend kommt dann gar nicht erst hoch. Auf einem System, auf dem
+    # schon damit gearbeitet wurde, ist es meist zufällig vorhanden; auf
+    # einer frischen Installation fehlte es (gemessen in einem sauberen
+    # Arch-Container am 2026-08-16).
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "simpleobsws>=1.4",
+    "dbus-next>=0.2.3",
+    # Tastenkombinationen und Text: virtuelle Tastatur über /dev/uinput …
+    "evdev>=1.7",
+    # … und die Zuordnung Zeichen → Taste aus der aktiven Belegung.
+    "xkbcommon>=1.0",
+]
+
+[project.scripts]
+deckswitch = "deckswitch.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["deckswitch*"]

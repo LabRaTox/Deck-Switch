@@ -1,0 +1,296 @@
+{
+  "id": "audio",
+  "name": "Audio",
+  "version": "1.0.0",
+  "type": "action",
+  "entry": "plugin.py",
+  "class": "AudioPlugin",
+  "accent": "#3b82f6",
+  "description": {
+    "de": "Lautstärke, Mikrofon und Ausgabegeräte über PipeWire.",
+    "en": "Volume, microphone and output devices via PipeWire."
+  },
+  "actions": [
+    {
+      "id": "volume",
+      "name": {
+        "de": "Lautstärke",
+        "en": "Volume"
+      },
+      "description": {
+        "de": "Drehen ändert die Lautstärke, Druck schaltet stumm.",
+        "en": "Rotate to change volume, push to mute."
+      },
+      "inputs": [
+        "dial",
+        "key"
+      ],
+      "default_icon": "volume",
+      "default_label": {
+        "de": "Lautstärke",
+        "en": "Volume"
+      },
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Normal",
+            "en": "Normal"
+          },
+          "default_icon": "volume"
+        },
+        {
+          "id": "muted",
+          "name": {
+            "de": "Stumm",
+            "en": "Muted"
+          },
+          "default_icon": "volume-3"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "target",
+          "type": "select",
+          "label": {
+            "de": "Gerät",
+            "en": "Device"
+          },
+          "default": "@DEFAULT_AUDIO_SINK@",
+          "options_source": "sinks_with_default",
+          "help": {
+            "de": "Standardgerät folgt der Systemeinstellung.",
+            "en": "Default device follows the system setting."
+          }
+        },
+        {
+          "key": "step",
+          "type": "number",
+          "label": {
+            "de": "Schrittweite (%)",
+            "en": "Step size (%)"
+          },
+          "default": 2,
+          "min": 1,
+          "max": 25,
+          "step": 1
+        },
+        {
+          "key": "show_bar",
+          "type": "bool",
+          "label": {
+            "de": "Balken anzeigen",
+            "en": "Show bar"
+          },
+          "default": true
+        },
+        {
+          "key": "show_percent",
+          "type": "bool",
+          "label": {
+            "de": "Prozentwert anzeigen",
+            "en": "Show percentage"
+          },
+          "default": true
+        },
+        {
+          "key": "bar_color",
+          "type": "color",
+          "label": {
+            "de": "Balkenfarbe",
+            "en": "Bar colour"
+          },
+          "default": "#3b82f6"
+        }
+      ]
+    },
+    {
+      "id": "mic_mute",
+      "name": {
+        "de": "Mikrofon stumm",
+        "en": "Mic mute"
+      },
+      "description": {
+        "de": "Schaltet das Mikrofon stumm bzw. wieder frei.",
+        "en": "Toggles microphone mute."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "microphone",
+      "default_label": {
+        "de": "Mic",
+        "en": "Mic"
+      },
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Offen",
+            "en": "Live"
+          },
+          "default_icon": "microphone"
+        },
+        {
+          "id": "muted",
+          "name": {
+            "de": "Stumm",
+            "en": "Muted"
+          },
+          "default_icon": "microphone-off"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "target",
+          "type": "select",
+          "label": {
+            "de": "Mikrofon",
+            "en": "Microphone"
+          },
+          "default": "@DEFAULT_AUDIO_SOURCE@",
+          "options_source": "sources_with_default"
+        },
+        {
+          "key": "push_to_talk",
+          "type": "bool",
+          "label": {
+            "de": "Push-to-Talk (nur solange gedrückt offen)",
+            "en": "Push-to-talk"
+          },
+          "default": false
+        },
+        {
+          "key": "muted_tint",
+          "type": "color",
+          "label": {
+            "de": "Farbe bei Stumm",
+            "en": "Colour when muted"
+          },
+          "default": "#ef4444"
+        }
+      ]
+    },
+    {
+      "id": "output_device",
+      "name": {
+        "de": "Ausgabegerät wechseln",
+        "en": "Switch output"
+      },
+      "description": {
+        "de": "Setzt das Gerät als Standard und zieht laufende Streams mit.",
+        "en": "Sets the device as default and moves running streams over."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "device-speaker",
+      "states": [
+        {
+          "id": "active",
+          "name": {
+            "de": "Aktiv",
+            "en": "Active"
+          }
+        },
+        {
+          "id": "inactive",
+          "name": {
+            "de": "Inaktiv",
+            "en": "Inactive"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "sink",
+          "type": "select",
+          "label": {
+            "de": "Gerät",
+            "en": "Device"
+          },
+          "options_source": "sinks",
+          "help": {
+            "de": "Eine Taste pro Gerät belegen.",
+            "en": "Assign one key per device."
+          }
+        },
+        {
+          "key": "move_streams",
+          "type": "bool",
+          "label": {
+            "de": "Laufende Streams mitziehen",
+            "en": "Move running streams"
+          },
+          "default": true,
+          "help": {
+            "de": "Ohne das würde nur neue Wiedergabe auf dem neuen Gerät landen.",
+            "en": "Without this only new playback would use the new device."
+          }
+        },
+        {
+          "key": "active_badge",
+          "type": "color",
+          "label": {
+            "de": "Rahmen wenn aktiv",
+            "en": "Border when active"
+          },
+          "default": "#22c55e"
+        }
+      ]
+    },
+    {
+      "id": "app_volume",
+      "name": {
+        "de": "App-Lautstärke",
+        "en": "App volume"
+      },
+      "description": {
+        "de": "Lautstärke eines einzelnen Programms (nach Name gesucht).",
+        "en": "Volume of a single application (matched by name)."
+      },
+      "inputs": [
+        "dial"
+      ],
+      "default_icon": "app-window",
+      "settings_schema": [
+        {
+          "key": "app_name",
+          "type": "text",
+          "label": {
+            "de": "Programmname",
+            "en": "Application name"
+          },
+          "placeholder": "Spotify",
+          "help": {
+            "de": "Teilstring des Namens, wie ihn PipeWire meldet.",
+            "en": "Substring of the name as reported by PipeWire."
+          }
+        },
+        {
+          "key": "step",
+          "type": "number",
+          "label": {
+            "de": "Schrittweite (%)",
+            "en": "Step size (%)"
+          },
+          "default": 5,
+          "min": 1,
+          "max": 25
+        },
+        {
+          "key": "bar_color",
+          "type": "color",
+          "label": {
+            "de": "Balkenfarbe",
+            "en": "Bar colour"
+          },
+          "default": "#a855f7"
+        }
+      ]
+    }
+  ],
+  "icon": "icon.png"
+}
