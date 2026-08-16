@@ -1,6 +1,6 @@
 # Aufbau, Entwicklung und Grenzen
 
-Zurück zur [Übersicht](../README.de.md).
+*[English version](../en/development.md)* · Zurück zur [Übersicht](../../README.de.md).
 
 ## Aufbau
 

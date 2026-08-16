@@ -1,5 +1,7 @@
 # Eigene Plugins schreiben
 
+*[English version](../en/plugin-development.md)* · Zurück zur [Übersicht](../../README.de.md).
+
 Es gibt zwei Sorten: **Action-Plugins** steuern Tasten, Dials und
 Touchstrip-Segmente, **Iconset-Plugins** liefern nur SVGs für den
 Icon-Picker.

@@ -1,6 +1,6 @@
 # Decks: Hardware, Overlay und Netz
 
-Zurück zur [Übersicht](../README.de.md).
+*[English version](../en/decks.md)* · Zurück zur [Übersicht](../../README.de.md).
 
 Ein „Deck" ist in DECK//SWITCH nicht zwingend ein Gerät am USB-Anschluss.
 Es gibt drei Bauarten, und für alles oberhalb der Bedienung sind sie

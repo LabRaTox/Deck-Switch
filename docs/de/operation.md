@@ -1,6 +1,6 @@
 # Bedienung
 
-Zurück zur [Übersicht](../README.de.md).
+*[English version](../en/operation.md)* · Zurück zur [Übersicht](../../README.de.md).
 
 ## Editor
 

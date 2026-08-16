@@ -1,5 +1,7 @@
 # Discord einrichten
 
+*[English version](../en/discord-setup.md)* · Zurück zur [Übersicht](../../README.de.md).
+
 Das Discord-Plugin steuert den **laufenden Discord-Client** über dessen
 lokale RPC-Schnittstelle — also genau das, was man von einem Stream Deck
 erwartet: das eigene Mikrofon muten, sich selbst taub schalten, den

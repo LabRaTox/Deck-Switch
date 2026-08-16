@@ -23,7 +23,8 @@ gui/src-tauri/gen/schemas/
 # Lokale Laufzeitdaten
 *.log
 
-# Internes Planungsdokument — beschreibt das Zielsystem des Autors und ist
-# gegenüber dem Stand der Software überholt (kennt weder Multi-Aktionen noch
-# virtuelle Decks oder Netz-Decks). Bleibt lokal.
+# Interne Planungsdokumente. Beide beschreiben Absichten, nicht den Stand
+# der Software — für Außenstehende wären sie eher irreführend als hilfreich.
+# Bleiben lokal.
 streamdeck-app-spec.md
+docs/marketplace-plan.md

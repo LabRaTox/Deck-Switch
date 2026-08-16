@@ -3,7 +3,7 @@
 **Independent control software for the Elgato Stream Deck on Linux** — no
 official Elgato software required, with its own plugin system.
 
-*[Deutsche Fassung](README.de.md) — the detailed documentation is in German.*
+*[Deutsche Fassung](README.de.md)*
 
 Built and tested against a **Stream Deck +** on **CachyOS / Arch Linux**
 with KDE Plasma on Wayland.
@@ -66,7 +66,9 @@ separate touch strip wallpaper per page.
 **Plugins**
 Seven built-in plugins (audio, OBS, Discord, system, soundboard, multi
 action, navigation), two installable ones (Spotify, weather) and an open API
-for your own. Icon sets are plugins too.
+for your own. Icon sets are plugins too. Installation happens from a ZIP,
+a URL or a `streamdeck://` link in the browser — a **marketplace** for
+finding and installing plugins straight from the app is planned.
 
 **Plugin overview and settings**
 
@@ -75,8 +77,8 @@ for your own. Icon sets are plugins too.
   <img src="docs/screenshots/einstellungen.png" alt="Settings" width="49%">
 </p>
 
-Details (in German): [Operation](docs/bedienung.md) ·
-[Decks](docs/decks.md) · [Plugins](docs/plugins.md)
+Details: [Operation](docs/en/operation.md) ·
+[Decks](docs/en/decks.md) · [Plugins](docs/en/plugins.md)
 
 ---
 
@@ -165,16 +167,17 @@ on it.
 
 ## Documentation
 
-The detailed documentation is written in German.
+Available in both languages — [`docs/en/`](docs/en/) and
+[`docs/de/`](docs/de/).
 
 | | |
 | --- | --- |
-| [Bedienung](docs/bedienung.md) | editor, key logic, multi actions, dials, appearance |
-| [Decks](docs/decks.md) | multiple devices, virtual deck, network deck |
-| [Plugins](docs/plugins.md) | built-in and installable ones, installation |
-| [Plugin-Entwicklung](docs/plugin-entwicklung.md) | writing your own plugins |
-| [Discord einrichten](docs/discord-setup.md) | one-time setup |
-| [Aufbau und Entwicklung](docs/entwicklung.md) | project layout, tests, security, limits |
+| [Operation](docs/en/operation.md) | editor, key logic, multi actions, dials, appearance |
+| [Decks](docs/en/decks.md) | multiple devices, virtual deck, network deck |
+| [Plugins](docs/en/plugins.md) | built-in and installable ones, installation |
+| [Writing plugins](docs/en/plugin-development.md) | the plugin API |
+| [Setting up Discord](docs/en/discord-setup.md) | one-time setup |
+| [Layout and development](docs/en/development.md) | project layout, tests, security, limits |
 
 ## License
 

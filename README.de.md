@@ -67,6 +67,9 @@ ein eigenes Hintergrundbild für den Touchstrip.
 Sieben eingebaute Plugins (Audio, OBS, Discord, System, Soundboard,
 Multi-Aktion, Navigation), zwei nachinstallierbare (Spotify, Wetter) und
 eine offene API für eigene. Iconsets sind ebenfalls Plugins.
+Nachinstalliert wird aus einem ZIP, von einer Adresse oder über einen
+`streamdeck://`-Link im Browser — ein **Marktplatz**, über den sich Plugins
+direkt aus der App finden und installieren lassen, ist geplant.
 
 **Plugin-Übersicht und Einstellungen**
 
@@ -75,8 +78,8 @@ eine offene API für eigene. Iconsets sind ebenfalls Plugins.
   <img src="docs/screenshots/einstellungen.png" alt="Einstellungen" width="49%">
 </p>
 
-Einzelheiten: [Bedienung](docs/bedienung.md) ·
-[Decks](docs/decks.md) · [Plugins](docs/plugins.md)
+Einzelheiten: [Bedienung](docs/de/operation.md) ·
+[Decks](docs/de/decks.md) · [Plugins](docs/de/plugins.md)
 
 ---
 
@@ -166,14 +169,16 @@ Geräteanbindung ruht darauf.
 
 ## Dokumentation
 
+Alles zweisprachig — [`docs/de/`](docs/de/) und [`docs/en/`](docs/en/).
+
 | | |
 | --- | --- |
-| [Bedienung](docs/bedienung.md) | Editor, Tastenlogik, Multi-Aktionen, Dials, Aussehen |
-| [Decks](docs/decks.md) | mehrere Geräte, virtuelles Deck, Netz-Deck |
-| [Plugins](docs/plugins.md) | eingebaute und nachinstallierbare, Installation |
-| [Plugin-Entwicklung](docs/plugin-entwicklung.md) | eigene Plugins schreiben |
-| [Discord einrichten](docs/discord-setup.md) | einmalige Einrichtung |
-| [Aufbau und Entwicklung](docs/entwicklung.md) | Projektstruktur, Tests, Sicherheit, Grenzen |
+| [Bedienung](docs/de/operation.md) | Editor, Tastenlogik, Multi-Aktionen, Dials, Aussehen |
+| [Decks](docs/de/decks.md) | mehrere Geräte, virtuelles Deck, Netz-Deck |
+| [Plugins](docs/de/plugins.md) | eingebaute und nachinstallierbare, Installation |
+| [Eigene Plugins schreiben](docs/de/plugin-development.md) | die Plugin-API |
+| [Discord einrichten](docs/de/discord-setup.md) | einmalige Einrichtung |
+| [Aufbau und Entwicklung](docs/de/development.md) | Projektstruktur, Tests, Sicherheit, Grenzen |
 
 ## Lizenz
 

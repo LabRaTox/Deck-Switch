@@ -1,6 +1,6 @@
 # Plugins
 
-Zurück zur [Übersicht](../README.de.md).
+*[English version](../en/plugins.md)* · Zurück zur [Übersicht](../../README.de.md).
 
 ## Eingebaute Plugins
 
@@ -114,7 +114,7 @@ Die Logos liegen unter `~/.local/share/deckswitch/cache/discord-guilds/`.
 ## Nachinstallierbare Plugins
 
 Diese beiden gehören **nicht** zum Lieferumfang, ihre Quellen liegen aber in
-[plugin-sources/](../plugin-sources/).
+[plugin-sources/](../../plugin-sources/).
 
 | Plugin | Aktionen |
 | --- | --- |
@@ -154,6 +154,11 @@ Jede Belegung kann über *Abweichender Ort* eine eigene Stadt bekommen — so
 liegen Heimatort und Urlaubsziel nebeneinander auf dem Deck.
 
 ## Nachinstallieren
+
+> Ein **Marktplatz**, über den sich Plugins direkt aus der App durchsuchen
+> und installieren lassen, ist geplant. Bis dahin gehen die drei Wege
+> unten — und der `streamdeck://`-Link ist bereits die Schnittstelle, über
+> die ein Marktplatz später anbinden wird.
 
 Unter *Plugins → Installieren* gibt es drei Wege:
 
@@ -219,7 +224,7 @@ Aktions-Symbol:
 
 ## Eigene Plugins schreiben
 
-Siehe [plugin-entwicklung.md](plugin-entwicklung.md). Kurz: ein Ordner unter
+Siehe [plugin-development.md](plugin-development.md). Kurz: ein Ordner unter
 `~/.local/share/deckswitch/plugins/` mit `manifest.json` und einer
 Python-Datei, die von `ActionPlugin` erbt. Iconsets brauchen nur ein
 Manifest und einen Ordner voller SVGs.
