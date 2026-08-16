@@ -1,0 +1,135 @@
+{
+  "id": "sound",
+  "name": {
+    "de": "Soundboard",
+    "en": "Sound board"
+  },
+  "version": "1.0.0",
+  "type": "action",
+  "entry": "plugin.py",
+  "class": "SoundPlugin",
+  "accent": "#f97316",
+  "description": {
+    "de": "Klänge auf Knopfdruck — wahlweise auf einem eigenen Ausgabegerät.",
+    "en": "Sounds at the push of a key — optionally on a separate output device."
+  },
+  "actions": [
+    {
+      "id": "play",
+      "name": {
+        "de": "Klang abspielen",
+        "en": "Play sound"
+      },
+      "description": {
+        "de": "Spielt eine Audiodatei ab, auf Wunsch nur im Stream.",
+        "en": "Plays an audio file, optionally only into the stream."
+      },
+      "inputs": ["key", "dial"],
+      "default_icon": "music",
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Bereit",
+            "en": "Idle"
+          }
+        },
+        {
+          "id": "playing",
+          "name": {
+            "de": "Läuft",
+            "en": "Playing"
+          },
+          "default_icon": "player-stop"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "path",
+          "type": "file",
+          "label": {
+            "de": "Audiodatei",
+            "en": "Audio file"
+          },
+          "help": {
+            "de": "WAV, FLAC, OGG, Opus oder MP3.",
+            "en": "WAV, FLAC, OGG, Opus or MP3."
+          }
+        },
+        {
+          "key": "sink",
+          "type": "select",
+          "label": {
+            "de": "Ausgabegerät",
+            "en": "Output device"
+          },
+          "options_source": "sinks",
+          "help": {
+            "de": "Leer = Standardgerät. Ein eigenes Ziel schickt den Klang nur dorthin.",
+            "en": "Empty = default device. A separate target sends the sound there only."
+          }
+        },
+        {
+          "key": "volume",
+          "type": "number",
+          "label": {
+            "de": "Lautstärke (%)",
+            "en": "Volume (%)"
+          },
+          "default": 100,
+          "min": 0,
+          "max": 150,
+          "step": 5
+        },
+        {
+          "key": "mode",
+          "type": "select",
+          "label": {
+            "de": "Beim erneuten Drücken",
+            "en": "On a second press"
+          },
+          "default": "restart",
+          "options": [
+            {
+              "value": "restart",
+              "label": {
+                "de": "Von vorn beginnen",
+                "en": "Start over"
+              }
+            },
+            {
+              "value": "toggle",
+              "label": {
+                "de": "Anhalten",
+                "en": "Stop"
+              }
+            }
+          ]
+        },
+        {
+          "key": "loop",
+          "type": "bool",
+          "label": {
+            "de": "In Schleife",
+            "en": "Loop"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "stop_all",
+      "name": {
+        "de": "Alles anhalten",
+        "en": "Stop everything"
+      },
+      "description": {
+        "de": "Beendet alle laufenden Klänge des Soundboards.",
+        "en": "Stops every sound the board is currently playing."
+      },
+      "inputs": ["key", "dial"],
+      "default_icon": "player-stop",
+      "settings_schema": []
+    }
+  ]
+}

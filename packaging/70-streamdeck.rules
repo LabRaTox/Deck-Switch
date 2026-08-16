@@ -1,0 +1,30 @@
+# udev-Regeln für Elgato Stream Deck (Vendor 0fd9)
+#
+# Ohne diese Regel gehört der HID-Knoten root:root 0600, das Backend könnte
+# das Gerät also nur als root öffnen.
+#
+# TAG+="uaccess" übergibt den Zugriff per systemd-logind an den aktuell lokal
+# eingeloggten User (ACL statt weltweit lesbarem 0666) — der saubere Weg auf
+# einem Single-User-Desktop wie CachyOS/KDE.
+#
+# Installation:
+#   sudo install -m 644 packaging/70-streamdeck.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger --subsystem-match=usb --subsystem-match=hidraw
+# Danach das Gerät einmal ab- und wieder anstecken (oder neu einloggen).
+
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0fd9", TAG+="uaccess"
+
+# Virtuelle Tastatur für „Tastenkombination" und „Text tippen".
+#
+# Unter Wayland gibt es keinen anderen Weg, Tastendrücke zu schicken: Die
+# Protokolle dafür bietet KWin nicht an, und xdotool erreicht nur
+# XWayland-Fenster. Ein virtuelles Eingabegerät über /dev/uinput geht am
+# Compositor vorbei direkt an den Kernel — genau wie eine echte Tastatur.
+#
+# ``uaccess`` reicht hier nicht: uinput ist kein Gerät der Sitzung, sondern
+# ein Kernel-Knoten. Deshalb die Gruppe ``input``, in der ein Desktop-Nutzer
+# ohnehin meist steht. Wer nicht drin ist:
+#   sudo usermod -aG input "$USER"   (danach ab- und wieder anmelden)
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

@@ -1,0 +1,14 @@
+{
+  "id": "iconset-tabler",
+  "name": "Tabler Icons",
+  "version": "3.46.0",
+  "type": "iconset",
+  "author": "Paweł Kuna",
+  "license": "MIT",
+  "description": {
+    "de": "Basis-Iconset: 5130 Outline-Icons, MIT-lizenziert.",
+    "en": "Base icon set: 5130 outline icons, MIT licensed."
+  },
+  "icons_dir": "icons",
+  "icon": "icon.png"
+}

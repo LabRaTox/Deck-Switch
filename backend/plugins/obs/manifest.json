@@ -1,0 +1,1123 @@
+{
+  "id": "obs",
+  "name": "OBS",
+  "version": "2.0.0",
+  "type": "action",
+  "entry": "plugin.py",
+  "class": "ObsPlugin",
+  "accent": "#ef4444",
+  "description": {
+    "de": "Steuert OBS Studio über obs-websocket: Szenen, Stream, Aufnahme, Quellen, Filter und mehr.",
+    "en": "Controls OBS Studio via obs-websocket: scenes, stream, recording, sources, filters and more."
+  },
+  "config_schema": [
+    {
+      "key": "host",
+      "type": "text",
+      "label": {
+        "de": "Host",
+        "en": "Host"
+      },
+      "default": "127.0.0.1"
+    },
+    {
+      "key": "port",
+      "type": "number",
+      "label": {
+        "de": "Port",
+        "en": "Port"
+      },
+      "default": 4455,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "key": "password",
+      "type": "password",
+      "label": {
+        "de": "Passwort",
+        "en": "Password"
+      },
+      "default": "",
+      "help": {
+        "de": "In OBS unter Werkzeuge → WebSocket-Servereinstellungen.",
+        "en": "In OBS under Tools → WebSocket Server Settings."
+      }
+    },
+    {
+      "key": "screenshot_dir",
+      "type": "path",
+      "label": {
+        "de": "Ordner für Screenshots",
+        "en": "Screenshot folder"
+      },
+      "default": "~/Bilder/OBS",
+      "help": {
+        "de": "Wird bei Bedarf angelegt.",
+        "en": "Created if missing."
+      }
+    },
+    {
+      "key": "auto_connect",
+      "type": "bool",
+      "label": {
+        "de": "Automatisch verbinden",
+        "en": "Connect automatically"
+      },
+      "default": true
+    }
+  ],
+  "actions": [
+    {
+      "id": "record",
+      "name": {
+        "de": "Aufnahme",
+        "en": "Record"
+      },
+      "description": {
+        "de": "Startet oder stoppt die Aufnahme.",
+        "en": "Start or stop recording."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "player-record",
+      "states": [
+        {
+          "id": "on",
+          "name": {
+            "de": "Läuft",
+            "en": "Recording"
+          },
+          "default_icon": "player-stop"
+        },
+        {
+          "id": "paused",
+          "name": {
+            "de": "Pausiert",
+            "en": "Paused"
+          },
+          "default_icon": "player-pause"
+        },
+        {
+          "id": "off",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          },
+          "default_icon": "player-record"
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "show_time",
+          "type": "bool",
+          "label": {
+            "de": "Laufzeit anzeigen",
+            "en": "Show duration"
+          },
+          "default": true
+        },
+        {
+          "key": "confirm",
+          "type": "bool",
+          "label": {
+            "de": "Zweimal drücken zum Stoppen",
+            "en": "Press twice to stop"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "record_pause",
+      "name": {
+        "de": "Aufnahme pausieren",
+        "en": "Record pause"
+      },
+      "description": {
+        "de": "Pausiert eine laufende Aufnahme oder setzt sie fort.",
+        "en": "Pause an active recording or resume it."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "player-pause",
+      "states": [
+        {
+          "id": "paused",
+          "name": {
+            "de": "Pausiert",
+            "en": "Paused"
+          },
+          "default_icon": "player-play"
+        },
+        {
+          "id": "recording",
+          "name": {
+            "de": "Läuft",
+            "en": "Recording"
+          },
+          "default_icon": "player-pause"
+        },
+        {
+          "id": "idle",
+          "name": {
+            "de": "Keine Aufnahme",
+            "en": "Not recording"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": []
+    },
+    {
+      "id": "stream",
+      "name": {
+        "de": "Stream",
+        "en": "Stream"
+      },
+      "description": {
+        "de": "Startet oder stoppt den Stream.",
+        "en": "Start or stop streaming."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "broadcast",
+      "states": [
+        {
+          "id": "on",
+          "name": {
+            "de": "Live",
+            "en": "Live"
+          },
+          "default_icon": "broadcast"
+        },
+        {
+          "id": "off",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          },
+          "default_icon": "broadcast-off"
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "show_time",
+          "type": "bool",
+          "label": {
+            "de": "Laufzeit anzeigen",
+            "en": "Show duration"
+          },
+          "default": true
+        },
+        {
+          "key": "confirm",
+          "type": "bool",
+          "label": {
+            "de": "Zweimal drücken zum Stoppen",
+            "en": "Press twice to stop"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "replay_buffer",
+      "name": {
+        "de": "Wiedergabepuffer",
+        "en": "Replay buffer"
+      },
+      "description": {
+        "de": "Startet oder stoppt den Wiedergabepuffer.",
+        "en": "Start or stop the replay buffer."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "player-track-prev",
+      "states": [
+        {
+          "id": "on",
+          "name": {
+            "de": "Aktiv",
+            "en": "Active"
+          }
+        },
+        {
+          "id": "off",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": []
+    },
+    {
+      "id": "save_replay",
+      "name": {
+        "de": "Replay speichern",
+        "en": "Save replay"
+      },
+      "description": {
+        "de": "Speichert den Inhalt des aktiven Wiedergabepuffers.",
+        "en": "Save a replay of the active buffer."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "device-floppy",
+      "states": [
+        {
+          "id": "ready",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          }
+        },
+        {
+          "id": "saved",
+          "name": {
+            "de": "Gespeichert",
+            "en": "Saved"
+          },
+          "default_icon": "check"
+        },
+        {
+          "id": "inactive",
+          "name": {
+            "de": "Puffer aus",
+            "en": "Buffer off"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": []
+    },
+    {
+      "id": "scene_collection",
+      "name": {
+        "de": "Szenensammlung",
+        "en": "Scene collection"
+      },
+      "description": {
+        "de": "Wechselt zu einer Szenensammlung.",
+        "en": "Switch to a scene collection."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "folders",
+      "states": [
+        {
+          "id": "active",
+          "name": {
+            "de": "Aktiv",
+            "en": "Active"
+          }
+        },
+        {
+          "id": "inactive",
+          "name": {
+            "de": "Inaktiv",
+            "en": "Inactive"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "collection",
+          "type": "select",
+          "label": {
+            "de": "Sammlung",
+            "en": "Collection"
+          },
+          "options_source": "scene_collections"
+        }
+      ]
+    },
+    {
+      "id": "scene",
+      "name": {
+        "de": "Szene",
+        "en": "Scene"
+      },
+      "description": {
+        "de": "Wechselt zu einer Szene.",
+        "en": "Switch to a scene."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "photo",
+      "states": [
+        {
+          "id": "active",
+          "name": {
+            "de": "Aktiv",
+            "en": "Active"
+          }
+        },
+        {
+          "id": "preview",
+          "name": {
+            "de": "In der Vorschau",
+            "en": "In preview"
+          }
+        },
+        {
+          "id": "inactive",
+          "name": {
+            "de": "Inaktiv",
+            "en": "Inactive"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "scene",
+          "type": "select",
+          "label": {
+            "de": "Szene",
+            "en": "Scene"
+          },
+          "options_source": "scenes"
+        },
+        {
+          "key": "preview",
+          "type": "bool",
+          "label": {
+            "de": "In die Vorschau statt live (Studio-Modus)",
+            "en": "To preview instead of program (studio mode)"
+          },
+          "default": false
+        },
+        {
+          "key": "active_badge",
+          "type": "color",
+          "label": {
+            "de": "Rahmen wenn aktiv",
+            "en": "Border when active"
+          },
+          "default": "#ef4444"
+        }
+      ]
+    },
+    {
+      "id": "source",
+      "name": {
+        "de": "Quelle",
+        "en": "Source"
+      },
+      "description": {
+        "de": "Blendet eine Quelle ein oder aus.",
+        "en": "Show or hide a source."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "eye",
+      "states": [
+        {
+          "id": "on",
+          "name": {
+            "de": "Sichtbar",
+            "en": "Visible"
+          },
+          "default_icon": "eye"
+        },
+        {
+          "id": "off",
+          "name": {
+            "de": "Ausgeblendet",
+            "en": "Hidden"
+          },
+          "default_icon": "eye-off"
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "scene",
+          "type": "select",
+          "label": {
+            "de": "Szene",
+            "en": "Scene"
+          },
+          "options_source": "scenes",
+          "help": {
+            "de": "Leer lassen für die aktuelle Szene.",
+            "en": "Leave empty for the current scene."
+          }
+        },
+        {
+          "key": "source",
+          "type": "select",
+          "label": {
+            "de": "Quelle",
+            "en": "Source"
+          },
+          "options_source": "scene_items",
+          "options_depend_on": [
+            "scene"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mute",
+      "name": {
+        "de": "Ton stumm",
+        "en": "Mute"
+      },
+      "description": {
+        "de": "Schaltet den Ton einer Quelle stumm.",
+        "en": "Mute or unmute source audio."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "volume",
+      "states": [
+        {
+          "id": "muted",
+          "name": {
+            "de": "Stumm",
+            "en": "Muted"
+          },
+          "default_icon": "volume-3"
+        },
+        {
+          "id": "live",
+          "name": {
+            "de": "Ton an",
+            "en": "Unmuted"
+          },
+          "default_icon": "volume"
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "input",
+          "type": "select",
+          "label": {
+            "de": "Audioquelle",
+            "en": "Audio source"
+          },
+          "options_source": "audio_inputs"
+        },
+        {
+          "key": "mode",
+          "type": "select",
+          "label": {
+            "de": "Verhalten",
+            "en": "Behaviour"
+          },
+          "default": "toggle",
+          "options": [
+            {
+              "value": "toggle",
+              "label": {
+                "de": "Umschalten",
+                "en": "Toggle"
+              }
+            },
+            {
+              "value": "push_to_talk",
+              "label": {
+                "de": "Push-to-Talk",
+                "en": "Push to talk"
+              }
+            },
+            {
+              "value": "push_to_mute",
+              "label": {
+                "de": "Push-to-Mute",
+                "en": "Push to mute"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "name": {
+        "de": "Medien",
+        "en": "Media"
+      },
+      "description": {
+        "de": "Steuert die Wiedergabe einer Medienquelle.",
+        "en": "Control playback for a media source."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "player-play",
+      "states": [
+        {
+          "id": "playing",
+          "name": {
+            "de": "Läuft",
+            "en": "Playing"
+          },
+          "default_icon": "player-pause"
+        },
+        {
+          "id": "paused",
+          "name": {
+            "de": "Pausiert",
+            "en": "Paused"
+          },
+          "default_icon": "player-play"
+        },
+        {
+          "id": "stopped",
+          "name": {
+            "de": "Gestoppt",
+            "en": "Stopped"
+          },
+          "default_icon": "player-play"
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "input",
+          "type": "select",
+          "label": {
+            "de": "Medienquelle",
+            "en": "Media source"
+          },
+          "options_source": "media_inputs"
+        },
+        {
+          "key": "action",
+          "type": "select",
+          "label": {
+            "de": "Aktion",
+            "en": "Action"
+          },
+          "default": "play_pause",
+          "options": [
+            {
+              "value": "play_pause",
+              "label": {
+                "de": "Abspielen / Pause",
+                "en": "Play / pause"
+              }
+            },
+            {
+              "value": "restart",
+              "label": {
+                "de": "Neu starten",
+                "en": "Restart"
+              }
+            },
+            {
+              "value": "stop",
+              "label": {
+                "de": "Stoppen",
+                "en": "Stop"
+              }
+            },
+            {
+              "value": "next",
+              "label": {
+                "de": "Nächstes",
+                "en": "Next"
+              }
+            },
+            {
+              "value": "previous",
+              "label": {
+                "de": "Vorheriges",
+                "en": "Previous"
+              }
+            }
+          ]
+        },
+        {
+          "key": "show_time",
+          "type": "bool",
+          "label": {
+            "de": "Restzeit anzeigen",
+            "en": "Show remaining time"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "studio_mode",
+      "name": {
+        "de": "Studio-Modus",
+        "en": "Studio mode"
+      },
+      "description": {
+        "de": "Schaltet den Studio-Modus ein oder aus.",
+        "en": "Turn studio mode on or off."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "layout-columns",
+      "states": [
+        {
+          "id": "on",
+          "name": {
+            "de": "An",
+            "en": "On"
+          }
+        },
+        {
+          "id": "off",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": []
+    },
+    {
+      "id": "preview_scene",
+      "name": {
+        "de": "Vorschau live schalten",
+        "en": "Preview scene"
+      },
+      "description": {
+        "de": "Schaltet die Vorschau im Studio-Modus live.",
+        "en": "Push your preview scene live when in studio mode."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "arrow-big-right-lines",
+      "states": [
+        {
+          "id": "ready",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          }
+        },
+        {
+          "id": "inactive",
+          "name": {
+            "de": "Kein Studio-Modus",
+            "en": "Studio mode off"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "show_scene",
+          "type": "bool",
+          "label": {
+            "de": "Name der Vorschau-Szene anzeigen",
+            "en": "Show name of preview scene"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "filter",
+      "name": {
+        "de": "Filter",
+        "en": "Filter"
+      },
+      "description": {
+        "de": "Schaltet einen Filter einer Quelle ein oder aus.",
+        "en": "Show or hide a source filter."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "filter",
+      "states": [
+        {
+          "id": "on",
+          "name": {
+            "de": "Aktiv",
+            "en": "Enabled"
+          },
+          "default_icon": "filter"
+        },
+        {
+          "id": "off",
+          "name": {
+            "de": "Aus",
+            "en": "Disabled"
+          },
+          "default_icon": "filter-off"
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "source",
+          "type": "select",
+          "label": {
+            "de": "Quelle",
+            "en": "Source"
+          },
+          "options_source": "filterable_sources"
+        },
+        {
+          "key": "filter",
+          "type": "select",
+          "label": {
+            "de": "Filter",
+            "en": "Filter"
+          },
+          "options_source": "filters",
+          "options_depend_on": [
+            "source"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "screenshot",
+      "name": {
+        "de": "Screenshot",
+        "en": "Screenshot"
+      },
+      "description": {
+        "de": "Speichert ein Bild der aktuellen Ausgabe.",
+        "en": "Take a screenshot of the output scene."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "camera",
+      "states": [
+        {
+          "id": "ready",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          }
+        },
+        {
+          "id": "saved",
+          "name": {
+            "de": "Gespeichert",
+            "en": "Saved"
+          },
+          "default_icon": "check"
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "source",
+          "type": "select",
+          "label": {
+            "de": "Quelle",
+            "en": "Source"
+          },
+          "options_source": "scenes",
+          "help": {
+            "de": "Leer lassen für die aktuelle Szene.",
+            "en": "Leave empty for the current scene."
+          }
+        },
+        {
+          "key": "format",
+          "type": "select",
+          "label": {
+            "de": "Format",
+            "en": "Format"
+          },
+          "default": "png",
+          "options": [
+            {
+              "value": "png",
+              "label": "PNG"
+            },
+            {
+              "value": "jpg",
+              "label": "JPG"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transition",
+      "name": {
+        "de": "Übergang",
+        "en": "Transition"
+      },
+      "description": {
+        "de": "Wechselt den aktiven Szenenübergang.",
+        "en": "Switch the active scene transition."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "transition-right",
+      "states": [
+        {
+          "id": "active",
+          "name": {
+            "de": "Aktiv",
+            "en": "Active"
+          }
+        },
+        {
+          "id": "inactive",
+          "name": {
+            "de": "Inaktiv",
+            "en": "Inactive"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "transition",
+          "type": "select",
+          "label": {
+            "de": "Übergang",
+            "en": "Transition"
+          },
+          "options_source": "transitions"
+        },
+        {
+          "key": "duration",
+          "type": "number",
+          "label": {
+            "de": "Dauer (ms, 0 = unverändert)",
+            "en": "Duration (ms, 0 = keep)"
+          },
+          "default": 0,
+          "min": 0,
+          "max": 20000,
+          "step": 50
+        }
+      ]
+    },
+    {
+      "id": "chapter_marker",
+      "name": {
+        "de": "Kapitelmarke",
+        "en": "Chapter marker"
+      },
+      "description": {
+        "de": "Setzt eine Kapitelmarke in der laufenden Aufnahme (OBS 30.2+, Hybrid-MP4).",
+        "en": "Insert a chapter marker during an active recording (OBS 30.2+, hybrid MP4)."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "bookmark",
+      "states": [
+        {
+          "id": "ready",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          }
+        },
+        {
+          "id": "saved",
+          "name": {
+            "de": "Gesetzt",
+            "en": "Inserted"
+          },
+          "default_icon": "bookmark-filled"
+        },
+        {
+          "id": "idle",
+          "name": {
+            "de": "Keine Aufnahme",
+            "en": "Not recording"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "name",
+          "type": "text",
+          "label": {
+            "de": "Name der Marke",
+            "en": "Marker name"
+          },
+          "placeholder": {
+            "de": "leer = automatisch",
+            "en": "empty = automatic"
+          }
+        }
+      ]
+    },
+    {
+      "id": "virtual_cam",
+      "name": {
+        "de": "Virtuelle Kamera",
+        "en": "Virtual camera"
+      },
+      "description": {
+        "de": "Startet oder stoppt die virtuelle Kamera.",
+        "en": "Start or stop the virtual camera."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "device-camera-phone",
+      "states": [
+        {
+          "id": "on",
+          "name": {
+            "de": "An",
+            "en": "On"
+          }
+        },
+        {
+          "id": "off",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          }
+        },
+        {
+          "id": "offline",
+          "name": {
+            "de": "Nicht verbunden",
+            "en": "Disconnected"
+          }
+        }
+      ],
+      "settings_schema": []
+    }
+  ],
+  "icon": "icon.png"
+}

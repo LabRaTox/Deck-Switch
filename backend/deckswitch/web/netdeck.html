@@ -1,0 +1,407 @@
+<!doctype html>
+<!--
+  DECK//SWITCH — Netz-Deck im Browser.
+
+  Bewusst eine einzelne Datei ohne Bauschritt und ohne Bibliotheken: Wer sie
+  öffnet, ist meist auf einem fremden Gerät im selben Netz und soll nichts
+  installieren müssen. Und je weniger hier passiert, desto weniger kann in
+  einer Anwendung schiefgehen, die von außen erreichbar ist.
+
+  Die Seite kann nichts ändern — sie zeigt Kacheln und meldet Druck und
+  Drehung zurück. Mehr bietet der Server auch gar nicht an.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="color-scheme" content="dark">
+<title>DECK//SWITCH</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; min-height: 100dvh;
+    background: #0e0e11; color: #e5e7eb;
+    font-family: system-ui, sans-serif;
+    display: grid; justify-items: center; align-items: center; padding: 1rem;
+    /* Verhindert, dass ein Tastendruck die Seite mitzieht. */
+    touch-action: manipulation; user-select: none;
+  }
+  /* Wortmarke wie in der Anwendung: Schrägstriche in der Akzentfarbe. */
+  .marke { display: flex; align-items: center; gap: .55rem; }
+  .marke svg { width: 1.9em; height: 1.9em; display: block; flex: none; }
+  .marke b { font-size: 1.25rem; font-weight: 700; letter-spacing: .06em; }
+  .marke .schraeg { color: #3b82f6; }
+
+  /* -- Anmeldung -- */
+  form { display: grid; gap: .9rem; width: min(22rem, 100%); }
+  h1 { margin: 0 0 .3rem; }
+  input, button {
+    font: inherit; border-radius: .6rem; border: 1px solid #2a2a31;
+    background: #17171c; color: inherit; padding: .7rem .9rem;
+  }
+  button { background: #3b82f6; border-color: #3b82f6; color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; }
+  .fehler { color: #f87171; font-size: .9rem; min-height: 1.2em; }
+
+  /* -- Deck -- */
+  /* Zwei Zonen: Die Kopfzeile sitzt oben am Rand und behält die volle
+     Breite, das Deck steht in der Mitte des übrigen Bildschirms. Deshalb
+     füllt der Container die Fensterhöhe, statt sich um seinen Inhalt zu
+     legen. */
+  #deck { display: none; width: 100%; }
+  #deck.an {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: .8rem;
+    min-height: calc(100dvh - 2rem);
+  }
+  .kopf {
+    display: flex; gap: .8rem; align-items: center; justify-content: space-between;
+    width: 100%; padding-bottom: .2rem;
+  }
+  /* Das Deck selbst: mittig im verbleibenden Raum, waagerecht wie senkrecht. */
+  .flaeche-deck {
+    display: grid; gap: .8rem;
+    align-content: center; justify-items: center; justify-self: center;
+    width: 100%;
+  }
+  .deckname { font-size: .8rem; color: #9ca3af; font-weight: 400; }
+  /* Abmelden ist ein Knopf und sieht auch so aus — als schlichter Text
+     war nicht zu erkennen, dass man ihn drücken kann. */
+  .kopf .abmelden {
+    background: #17171c; border: 1px solid #2a2a31; color: #e5e7eb;
+    padding: .45rem .8rem; border-radius: .6rem; font-size: .85rem; font-weight: 500;
+  }
+  .kopf .abmelden:active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+
+  .raster { display: grid; gap: .5rem; width: 100%; }
+  .kachel {
+    aspect-ratio: 1; border-radius: 12%; overflow: hidden;
+    background: #000; border: none; padding: 0; position: relative;
+    transition: transform .08s ease, filter .08s ease;
+  }
+  .kachel.leer { background: #131317; }
+  .kachel img { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .kachel:active { transform: scale(.95); filter: brightness(1.25); }
+
+  .dials { display: grid; gap: .5rem; width: 100%; }
+  .segment { display: grid; grid-template-columns: auto 1fr auto; gap: .4rem; align-items: stretch; }
+  .segment .flaeche {
+    aspect-ratio: 2 / 1; border-radius: 8%; overflow: hidden; background: #000;
+    border: none; padding: 0; transition: transform .08s ease, filter .08s ease;
+  }
+  .segment .flaeche:active { transform: scale(.97); filter: brightness(1.25); }
+  .segment .flaeche img { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .dreh {
+    width: 2.8rem; border-radius: .6rem; background: #17171c;
+    border: 1px solid #2a2a31; color: #e5e7eb; font-size: 1.2rem;
+  }
+  .dreh:active { background: #3b82f6; border-color: #3b82f6; }
+
+  .hinweis { font-size: .8rem; color: #6b7280; text-align: center; }
+</style>
+
+<form id="anmeldung">
+  <h1 class="marke">
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <defs>
+        <linearGradient id="huelle" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#3b82f6"/>
+          <stop offset="1" stop-color="#8b5cf6"/>
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="15" fill="url(#huelle)"/>
+      <rect x="11" y="14" width="12" height="12" rx="3" fill="#fff"/>
+      <rect x="26" y="14" width="12" height="12" rx="3" fill="#fff"/>
+      <rect x="41" y="14" width="12" height="12" rx="3" fill="#fff"/>
+      <rect x="11" y="29" width="12" height="12" rx="3" fill="#fff"/>
+      <rect x="26" y="29" width="12" height="12" rx="3" fill="#fff"/>
+      <rect x="41" y="29" width="12" height="12" rx="3" fill="#fff"/>
+      <rect x="11" y="44" width="42" height="5" fill="#fff" fill-opacity=".725"/>
+    </svg>
+    <div>
+      <b>DECK<span class="schraeg">//</span>SWITCH</b>
+      <!-- Vom Server eingesetzt: Vor der Anmeldung kennt die Seite den
+           Namen sonst nicht, und wer zwei Decks bekommt, soll schon beim
+           Passworteingeben sehen, vor welchem er sitzt. -->
+      <div class="deckname">{{DECKNAME}}</div>
+    </div>
+  </h1>
+  <input id="passwort" type="password" placeholder="Passwort" autocomplete="current-password"
+         autofocus enterkeyhint="go">
+  <button type="submit">Verbinden</button>
+  <div class="fehler" id="fehler"></div>
+</form>
+
+<div id="deck">
+  <div class="kopf">
+    <div class="marke">
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="huelle2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#3b82f6"/>
+            <stop offset="1" stop-color="#8b5cf6"/>
+          </linearGradient>
+        </defs>
+        <rect width="64" height="64" rx="15" fill="url(#huelle2)"/>
+        <rect x="11" y="14" width="12" height="12" rx="3" fill="#fff"/>
+        <rect x="26" y="14" width="12" height="12" rx="3" fill="#fff"/>
+        <rect x="41" y="14" width="12" height="12" rx="3" fill="#fff"/>
+        <rect x="11" y="29" width="12" height="12" rx="3" fill="#fff"/>
+        <rect x="26" y="29" width="12" height="12" rx="3" fill="#fff"/>
+        <rect x="41" y="29" width="12" height="12" rx="3" fill="#fff"/>
+        <rect x="11" y="44" width="42" height="5" fill="#fff" fill-opacity=".725"/>
+      </svg>
+      <div>
+        <b>DECK<span class="schraeg">//</span>SWITCH</b>
+        <div class="deckname" id="name"></div>
+      </div>
+    </div>
+    <button type="button" class="abmelden" id="abmelden">Abmelden</button>
+  </div>
+  <div class="flaeche-deck" id="flaeche">
+    <div class="raster" id="raster"></div>
+    <div class="dials" id="dialleiste"></div>
+    <div class="hinweis" id="hinweis"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// Der Deck-Schlüssel steckt im Pfad: /deck/<schlüssel>
+const DECK = decodeURIComponent(location.pathname.split("/").filter(Boolean).pop() || "");
+const anmeldung = document.getElementById("anmeldung");
+const deckAnsicht = document.getElementById("deck");
+const fehlerFeld = document.getElementById("fehler");
+const rasterEl = document.getElementById("raster");
+const dialEl = document.getElementById("dialleiste");
+const hinweisEl = document.getElementById("hinweis");
+const flaecheEl = document.getElementById("flaeche");
+
+let token = sessionStorage.getItem("deckswitch-token-" + DECK) || "";
+let fassungen = {};          // "key:0" -> Fassungsnummer
+let bilder = {};             // "key:0" -> <img>
+let blobs = {};              // "key:0" -> Blob-URL, zum Freigeben
+let letzterAufbau = "";      // Raster nur neu bauen, wenn es sich ändert
+let laufend = false;
+
+// -- Server ----------------------------------------------------------------
+
+async function ruf(pfad, optionen = {}) {
+  const kopf = Object.assign({}, optionen.headers || {});
+  if (token) kopf["Authorization"] = "Bearer " + token;
+  const antwort = await fetch(pfad, Object.assign({}, optionen, { headers: kopf }));
+  if (antwort.status === 401 || antwort.status === 403) {
+    abmelden("Die Sitzung ist abgelaufen.");
+    throw new Error("nicht angemeldet");
+  }
+  return antwort;
+}
+
+// -- Anmelden --------------------------------------------------------------
+
+anmeldung.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const knopf = anmeldung.querySelector("button");
+  const passwort = document.getElementById("passwort").value;
+  knopf.disabled = true;
+  fehlerFeld.textContent = "";
+  try {
+    const antwort = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deck: DECK, password: passwort }),
+    });
+    if (!antwort.ok) {
+      const daten = await antwort.json().catch(() => ({}));
+      fehlerFeld.textContent = daten.detail || "Anmeldung fehlgeschlagen";
+      return;
+    }
+    const daten = await antwort.json();
+    token = daten.token;
+    sessionStorage.setItem("deckswitch-token-" + DECK, token);
+    document.getElementById("passwort").value = "";
+    starte(daten.name);
+  } catch (err) {
+    fehlerFeld.textContent = "Keine Verbindung zum Deck";
+  } finally {
+    knopf.disabled = false;
+  }
+});
+
+document.getElementById("abmelden").addEventListener("click", () => {
+  ruf("/api/logout", { method: "POST" }).catch(() => {});
+  abmelden("");
+});
+
+function abmelden(grund) {
+  laufend = false;
+  token = "";
+  sessionStorage.removeItem("deckswitch-token-" + DECK);
+  Object.values(blobs).forEach(URL.revokeObjectURL);
+  blobs = {}; bilder = {}; fassungen = {}; letzterAufbau = "";
+  rasterEl.innerHTML = ""; dialEl.innerHTML = "";
+  deckAnsicht.classList.remove("an");
+  anmeldung.style.display = "";
+  fehlerFeld.textContent = grund || "";
+}
+
+function starte(name) {
+  anmeldung.style.display = "none";
+  deckAnsicht.classList.add("an");
+  document.getElementById("name").textContent = name || "Deck";
+  laufend = true;
+  schleife();
+}
+
+// -- Anzeige ---------------------------------------------------------------
+
+function baueRaster(daten) {
+  const kennung = [daten.columns, daten.rows, daten.dials].join("x");
+  if (kennung === letzterAufbau) return;
+  letzterAufbau = kennung;
+
+  Object.values(blobs).forEach(URL.revokeObjectURL);
+  blobs = {}; bilder = {}; fassungen = {};
+  rasterEl.innerHTML = ""; dialEl.innerHTML = "";
+
+  // Breite so wählen, dass die Kacheln auf ein Handy passen, ohne winzig
+  // zu werden: Das Raster füllt die Breite, die Höhe folgt dem Seitenmaß.
+  //
+  // Begrenzt wird die Deckfläche, nicht die Kopfzeile: Die gehört an den
+  // oberen Rand und über die volle Breite, das Deck in die Mitte.
+  rasterEl.style.gridTemplateColumns = `repeat(${daten.columns}, 1fr)`;
+  flaecheEl.style.maxWidth = Math.min(daten.columns * 150, 900) + "px";
+
+  for (let i = 0; i < daten.columns * daten.rows; i++) {
+    const knopf = document.createElement("button");
+    knopf.className = "kachel leer";
+    knopf.type = "button";
+    const bild = document.createElement("img");
+    bild.alt = "";
+    knopf.appendChild(bild);
+    bilder["key:" + i] = bild;
+    hefteDruck(knopf, "key", i);
+    rasterEl.appendChild(knopf);
+  }
+
+  for (let i = 0; i < daten.dials; i++) {
+    const zeile = document.createElement("div");
+    zeile.className = "segment";
+
+    const runter = document.createElement("button");
+    runter.className = "dreh"; runter.type = "button"; runter.textContent = "−";
+    hefteDrehung(runter, i, -1);
+
+    const flaeche = document.createElement("button");
+    flaeche.className = "flaeche"; flaeche.type = "button";
+    const bild = document.createElement("img");
+    bild.alt = "";
+    flaeche.appendChild(bild);
+    bilder["dial:" + i] = bild;
+    hefteDruck(flaeche, "dial", i);
+
+    const hoch = document.createElement("button");
+    hoch.className = "dreh"; hoch.type = "button"; hoch.textContent = "+";
+    hefteDrehung(hoch, i, 1);
+
+    zeile.append(runter, flaeche, hoch);
+    dialEl.appendChild(zeile);
+  }
+
+  hinweisEl.textContent = daten.dials
+    ? "Tippen drückt, − und + drehen den Regler."
+    : "";
+}
+
+async function ladeKachel(art, index, fassung) {
+  const schluessel = art + ":" + index;
+  const bild = bilder[schluessel];
+  if (!bild) return;
+  try {
+    const antwort = await ruf(`/api/tile/${art}/${index}.png?v=${fassung}`);
+    if (!antwort.ok) return;
+    const blob = await antwort.blob();
+    // Alte Adresse freigeben, sonst wächst der Speicher mit jedem Bild.
+    if (blobs[schluessel]) URL.revokeObjectURL(blobs[schluessel]);
+    blobs[schluessel] = URL.createObjectURL(blob);
+    bild.src = blobs[schluessel];
+    if (bild.parentElement) bild.parentElement.classList.remove("leer");
+  } catch (err) { /* beim nächsten Durchlauf wieder */ }
+}
+
+async function schleife() {
+  while (laufend) {
+    try {
+      const antwort = await ruf("/api/deck");
+      if (antwort.ok) {
+        const daten = await antwort.json();
+        baueRaster(daten);
+        const neu = daten.versions || {};
+        for (const schluessel of Object.keys(neu)) {
+          if (fassungen[schluessel] !== neu[schluessel]) {
+            fassungen[schluessel] = neu[schluessel];
+            const [art, index] = schluessel.split(":");
+            ladeKachel(art, index, neu[schluessel]);
+          }
+        }
+      }
+    } catch (err) {
+      if (!laufend) return;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+// -- Eingaben --------------------------------------------------------------
+
+function melde(art, index, aktion, delta) {
+  ruf("/api/input", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input_type: art, index: index, action: aktion, delta: delta || 0 }),
+  }).catch(() => {});
+}
+
+/* Drücken und Loslassen einzeln melden — nicht als fertigen Klick. Nur so
+   greifen Halten, Doppeldruck und Push-to-Talk genau wie am Gerät. */
+function hefteDruck(element, art, index) {
+  let unten = false;
+  element.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    unten = true;
+    melde(art, index, "down");
+  });
+  const los = () => {
+    if (!unten) return;
+    unten = false;
+    melde(art, index, "up");
+  };
+  element.addEventListener("pointerup", los);
+  element.addEventListener("pointercancel", los);
+  element.addEventListener("pointerleave", los);
+}
+
+/* Halten dreht weiter — sonst müsste man für jede Stufe einzeln tippen. */
+function hefteDrehung(element, index, richtung) {
+  let timer = null;
+  const start = (e) => {
+    e.preventDefault();
+    melde("dial", index, "rotate", richtung);
+    timer = setInterval(() => melde("dial", index, "rotate", richtung), 180);
+  };
+  const stopp = () => { if (timer) { clearInterval(timer); timer = null; } };
+  element.addEventListener("pointerdown", start);
+  element.addEventListener("pointerup", stopp);
+  element.addEventListener("pointercancel", stopp);
+  element.addEventListener("pointerleave", stopp);
+}
+
+// Ein gemerktes Token gleich ausprobieren — wer die Seite neu lädt, soll
+// nicht jedes Mal das Passwort tippen.
+if (token) {
+  ruf("/api/deck")
+    .then((antwort) => antwort.ok ? antwort.json() : null)
+    .then((daten) => { if (daten) starte(daten.name); })
+    .catch(() => {});
+}
+</script>
