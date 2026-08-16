@@ -2,7 +2,11 @@
 import _wache  # bricht ab, statt in die echte Config zu schreiben
 _wache.sichere_umgebung()
 import asyncio, json, pathlib, sys
-sys.path.insert(0, "/home/labratox/Projekte/StreamDeck/backend/plugins/obs")
+# Vom Ort dieser Datei aus, nicht von einem festen Pfad: Sonst läuft
+# die Suite nur in genau einem Arbeitsverzeichnis eines einzigen
+# Rechners.
+PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[1] / "plugins" / "obs"
+sys.path.insert(0, str(PLUGIN_DIR))
 from deckswitch.plugins.base import Manifest, Services, SlotContext
 from deckswitch.config import Appearance, Slot, default_config
 import plugin as obsmod
@@ -29,7 +33,7 @@ class FakeRuntime:
     def notify(self, *a, **k): pass
 
 manifest = Manifest.model_validate(json.loads(
-    pathlib.Path("/home/labratox/Projekte/StreamDeck/backend/plugins/obs/manifest.json").read_text()))
+    (PLUGIN_DIR / "manifest.json").read_text()))
 
 class Probe(obsmod.ObsPlugin):
     def __init__(self, *a, **k):

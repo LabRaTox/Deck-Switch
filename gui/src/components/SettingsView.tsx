@@ -308,6 +308,7 @@ function DecksCard() {
   const renameDeck = useStore((s) => s.renameDeck);
   const forgetDeck = useStore((s) => s.forgetDeck);
   const createVirtual = useStore((s) => s.createVirtualDeck);
+  const createNetwork = useStore((s) => s.createNetworkDeck);
 
   return (
     <section className="settings-card">
@@ -317,6 +318,8 @@ function DecksCard() {
       <ul className="deck-list">
         {decks.map((deck) => {
           const virtuell = deck.kind === "virtual";
+          const imNetz = deck.kind === "network";
+          const ohneGeraet = virtuell || imNetz;
           return (
             <li key={deck.id} className={deck.id === activeDeck ? "active" : ""}>
               <span className={deck.connected ? "dot ok" : "dot bad"} />
@@ -327,9 +330,17 @@ function DecksCard() {
                 onChange={(event) => void renameDeck(deck.id, event.target.value)}
               />
               <small>
-                {virtuell ? t("decks.virtual") : deck.deck_type || "—"}
-                {!virtuell && deck.serial ? ` · ${deck.serial}` : ""}
-                {virtuell || deck.connected ? "" : ` · ${t("decks.notConnected")}`}
+                {virtuell
+                  ? t("decks.virtual")
+                  : imNetz
+                    ? t("decks.network")
+                    : deck.deck_type || "—"}
+                {!ohneGeraet && deck.serial ? ` · ${deck.serial}` : ""}
+                {ohneGeraet || deck.connected ? "" : ` · ${t("decks.notConnected")}`}
+                {/* Ohne Passwort steht das Deck still — das gehört in die
+                    Liste, nicht nur in die Detailansicht. */}
+                {imNetz && !deck.has_password ? ` · ${t("decks.networkNoPasswordShort")}` : ""}
+                {imNetz && deck.network_running ? ` · ${t("decks.networkLive")}` : ""}
               </small>
 
               <div className="row">
@@ -342,7 +353,7 @@ function DecksCard() {
                   {t("decks.edit")}
                 </button>
 
-                {(virtuell || !deck.connected) && decks.length > 1 && (
+                {(ohneGeraet || !deck.connected) && decks.length > 1 && (
                   <button
                     type="button"
                     className="btn small danger"
@@ -376,8 +387,24 @@ function DecksCard() {
         >
           + {t("decks.addVirtual")}
         </button>
+
+        <button
+          type="button"
+          className="btn"
+          onClick={() =>
+            void createNetwork({
+              name: t("decks.newNetworkName"),
+              columns: 4,
+              rows: 2,
+              dials: 0,
+            })
+          }
+        >
+          + {t("decks.addNetwork")}
+        </button>
       </div>
       <small className="help">{t("decks.addVirtualHint")}</small>
+      <small className="help">{t("decks.addNetworkHint")}</small>
     </section>
   );
 }

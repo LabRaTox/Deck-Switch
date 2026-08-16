@@ -171,6 +171,25 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  /** Legt ein Netz-Deck an — bedient wird es im Browser eines anderen Rechners. */
+  createNetworkDeck: (payload: {
+    name: string;
+    columns: number;
+    rows: number;
+    dials: number;
+  }) =>
+    request<DeckInfo>("/api/decks/network", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  /** Passwort eines Netz-Decks setzen. Leer entfernt es und sperrt das Deck. */
+  setDeckPassword: (key: string, password: string) =>
+    request<{ has_password: boolean; urls: string[] }>(
+      `/api/decks/${encodeURIComponent(key)}/password`,
+      { method: "POST", body: JSON.stringify({ password }) },
+    ),
+
   /** Overlay zeigen, verstecken oder umschalten (`visible: null`). */
   setOverlay: (key: string, visible: boolean | null, atCursor = true) =>
     request<{ visible: boolean }>(`/api/decks/${encodeURIComponent(key)}/overlay`, {

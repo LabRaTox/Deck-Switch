@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { localized } from "../i18n";
 import { useStore } from "../store";
-import type { WallpaperEntry } from "../types";
+import type { DeckInfo, WallpaperEntry } from "../types";
 
 /**
  * Eigenschaften der aktuellen Seite — sichtbar, solange keine Taste
@@ -64,7 +64,7 @@ export function PageProperties() {
 
       {/* Ein Overlay hat keinen durchgehenden Touchstrip — dort wäre
           ein Streifenbild eine Einstellung ohne Wirkung. */}
-      {deck?.kind !== "virtual" && (
+      {deck?.kind === "hardware" && (
         <>
         <h3 className="section-title">{t("wallpaper.title")}</h3>
 
@@ -188,7 +188,12 @@ function VirtualDeckSection() {
   const setGrid = useStore((s) => s.setDeckGrid);
   const toggleOverlay = useStore((s) => s.toggleOverlay);
 
-  if (!deck || deck.kind !== "virtual") return null;
+  // Raster und Kachelgröße gelten für jedes Deck ohne Gehäuse — ob es auf
+  // dem eigenen Bildschirm liegt oder im Browser eines anderen Rechners,
+  // ändert daran nichts.
+  const ohneGeraet = deck?.kind === "virtual" || deck?.kind === "network";
+  if (!deck || !ohneGeraet) return null;
+  const istOverlay = deck.kind === "virtual";
 
   const felder = [
     { schluessel: "columns" as const, label: t("decks.columns"), min: 1, max: 16, wert: deck.columns },
@@ -198,8 +203,10 @@ function VirtualDeckSection() {
 
   return (
     <>
-      <h3 className="section-title">{t("decks.virtualSection")}</h3>
-      <p className="hint">{t("decks.virtualHint")}</p>
+      <h3 className="section-title">
+        {istOverlay ? t("decks.virtualSection") : t("decks.networkSection")}
+      </h3>
+      <p className="hint">{istOverlay ? t("decks.virtualHint") : t("decks.networkHint")}</p>
 
       <div className="field-row">
         {felder.map((feld) => (
@@ -249,6 +256,8 @@ function VirtualDeckSection() {
         </div>
       </div>
 
+      {istOverlay && (
+      <>
       <label className="checkbox">
         <input
           type="checkbox"
@@ -284,6 +293,119 @@ function VirtualDeckSection() {
       </div>
       {deck.overlay_available === false && (
         <small className="help error-text">{deck.overlay_reason}</small>
+      )}
+      </>
+      )}
+
+      {!istOverlay && <NetzZugang deck={deck} />}
+    </>
+  );
+}
+
+/**
+ * Zugang zu einem Netz-Deck: Passwort, Schalter, Adresse.
+ *
+ * Ohne Passwort wird das Deck gar nicht erst angeboten — das steht hier
+ * deutlich, denn es ist der Unterschied zwischen „nur ich" und „jeder im
+ * Netz".
+ */
+function NetzZugang({ deck }: { deck: DeckInfo }) {
+  const { t } = useTranslation();
+  const setPassword = useStore((s) => s.setDeckPassword);
+  const setGrid = useStore((s) => s.setDeckGrid);
+  const [eingabe, setEingabe] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const speichern = async (wert: string) => {
+    setBusy(true);
+    try {
+      await setPassword(deck.id, wert);
+      setEingabe("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <h3 className="section-title">{t("decks.networkAccess")}</h3>
+
+      <div className="field">
+        <label htmlFor="net-password">{t("decks.password")}</label>
+        <div className="slider-row">
+          <input
+            id="net-password"
+            type="password"
+            autoComplete="new-password"
+            placeholder={deck.has_password ? t("decks.passwordSet") : t("decks.passwordNone")}
+            value={eingabe}
+            onChange={(event) => setEingabe(event.target.value)}
+          />
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || eingabe.length < 4}
+            onClick={() => void speichern(eingabe)}
+          >
+            {t("decks.passwordSave")}
+          </button>
+        </div>
+      </div>
+      <small className="help">{t("decks.passwordHint")}</small>
+
+      {deck.has_password && (
+        <div className="row">
+          <button
+            type="button"
+            className="btn small danger"
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm(t("decks.passwordClearConfirm"))) void speichern("");
+            }}
+          >
+            {t("decks.passwordClear")}
+          </button>
+        </div>
+      )}
+
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={deck.network_enabled ?? false}
+          disabled={!deck.has_password}
+          onChange={(event) =>
+            void setGrid(deck.id, { network_enabled: event.target.checked })
+          }
+        />
+        <span>{t("decks.networkEnabled")}</span>
+      </label>
+      <small className="help">{t("decks.networkEnabledHint")}</small>
+
+      {/* Die Adresse gibt es nur, solange wirklich gelauscht wird — eine
+          Adresse anzuzeigen, hinter der nichts steht, wäre irreführend. */}
+      {deck.network_urls && deck.network_urls.length > 0 ? (
+        <>
+          <h4 className="section-title">{t("decks.networkAddress")}</h4>
+          <ul className="net-urls">
+            {deck.network_urls.map((url) => (
+              <li key={url}>
+                <code>{url}</code>
+                <button
+                  type="button"
+                  className="btn small"
+                  onClick={() => void navigator.clipboard?.writeText(url)}
+                >
+                  {t("decks.copy")}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <small className="help">{t("decks.networkAddressHint")}</small>
+        </>
+      ) : (
+        <small className="help">
+          {deck.has_password ? t("decks.networkOff") : t("decks.networkNoPassword")}
+        </small>
       )}
     </>
   );

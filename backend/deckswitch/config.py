@@ -421,12 +421,13 @@ class DeckBinding(BaseModel):
     order: int = 0
 
     #: ``hardware`` hängt am USB, ``virtual`` ist ein Overlay auf dem
-    #: Bildschirm. Für alles darüber — Seiten, Tastenlogik, Multi-Aktionen —
-    #: ist der Unterschied belanglos: Die Deck-Sitzung weiß nicht, woher ihre
-    #: Eingaben kommen und wohin ihre Bilder gehen.
-    kind: Literal["hardware", "virtual"] = "hardware"
-    #: Nur bei ``virtual``: Größe des Rasters. Frei wählbar — ein Overlay hat
-    #: keine feste Tastenzahl.
+    #: Bildschirm, ``network`` ein Deck, das jemand anderes im selben Netz
+    #: im Browser bedient. Für alles darüber — Seiten, Tastenlogik,
+    #: Multi-Aktionen — ist der Unterschied belanglos: Die Deck-Sitzung weiß
+    #: nicht, woher ihre Eingaben kommen und wohin ihre Bilder gehen.
+    kind: Literal["hardware", "virtual", "network"] = "hardware"
+    #: Nicht bei ``hardware``: Größe des Rasters. Frei wählbar — ein Deck
+    #: ohne Gehäuse hat keine feste Tastenzahl.
     columns: int = 4
     rows: int = 2
     #: Zahl der Dials unter den Tasten. 0 = keine.
@@ -448,9 +449,34 @@ class DeckBinding(BaseModel):
     overlay_x: int = -1
     overlay_y: int = -1
 
+    # -- Nur bei ``network`` -----------------------------------------------
+
+    #: Passwort als abgeleiteter Schlüssel, nie im Klartext. Leer heißt: noch
+    #: keins gesetzt — dann bleibt das Deck im Netz gesperrt. Ein Deck, das
+    #: fremde Rechner steuert, darf nicht versehentlich offen stehen.
+    password_hash: str = ""
+    #: Ob das Deck im Netz angeboten wird. Ausgeschaltet bleibt es ein
+    #: gewöhnliches Deck, das nur lokal existiert.
+    network_enabled: bool = True
+
     @property
     def is_virtual(self) -> bool:
+        """Kein Gerät am USB — die Bilder entstehen im Speicher.
+
+        Gilt für Overlay *und* Netz-Deck: Beide hängen an derselben
+        :class:`~deckswitch.virtualdeck.VirtualDevice`. Nur die Bedienung
+        unterscheidet sich, und die steht außerhalb der Deck-Sitzung.
+        """
+        return self.kind in ("virtual", "network")
+
+    @property
+    def is_overlay(self) -> bool:
+        """Wird als Fläche auf dem eigenen Bildschirm gezeigt."""
         return self.kind == "virtual"
+
+    @property
+    def is_network(self) -> bool:
+        return self.kind == "network"
 
 
 class AppSettings(BaseModel):
@@ -459,6 +485,11 @@ class AppSettings(BaseModel):
     active_iconset: str = "iconset-tabler"
     host: str = "127.0.0.1"
     port: int = 8770
+    #: Eigener Port für Netz-Decks. Bewusst getrennt vom Port oben: Der
+    #: bedient die Oberfläche und darf deshalb das Gerät und die gesamte
+    #: Konfiguration ändern — der gehört ausschließlich auf ``127.0.0.1``.
+    #: Ins Netz geht nur die zweite, viel kleinere Anwendung.
+    network_port: int = 8771
     #: Vom User festgelegte Reihenfolge der Plugins (IDs). Was hier fehlt —
     #: etwa ein frisch installiertes Plugin — wird hinten angehängt.
     plugin_order: list[str] = Field(default_factory=list)

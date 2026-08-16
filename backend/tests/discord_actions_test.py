@@ -11,7 +11,11 @@ Aufruf:
 import _wache  # bricht ab, statt in die echte Config zu schreiben
 _wache.sichere_umgebung()
 import asyncio, json, pathlib, sys, tempfile
-sys.path.insert(0, "/home/labratox/Projekte/StreamDeck/backend/plugins/discord")
+# Vom Ort dieser Datei aus, nicht von einem festen Pfad: Sonst läuft
+# die Suite nur in genau einem Arbeitsverzeichnis eines einzigen
+# Rechners.
+PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[1] / "plugins" / "discord"
+sys.path.insert(0, str(PLUGIN_DIR))
 from PIL import Image
 from deckswitch.plugins.base import Manifest, Services, SlotContext
 from deckswitch.config import Appearance, IconRef, Slot, default_config
@@ -33,7 +37,7 @@ class FakeRuntime:
     def notify(self, *a, **k): pass
 
 manifest = Manifest.model_validate(json.loads(
-    pathlib.Path("/home/labratox/Projekte/StreamDeck/backend/plugins/discord/manifest.json").read_text()))
+    (PLUGIN_DIR / "manifest.json").read_text()))
 
 class Probe(dcmod.DiscordPlugin):
     def __init__(self, *a, **k):

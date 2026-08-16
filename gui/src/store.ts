@@ -53,6 +53,13 @@ interface StoreState {
   renameDeck: (key: string, name: string) => Promise<void>;
   forgetDeck: (key: string) => Promise<void>;
   /** Legt ein virtuelles Deck an (Overlay statt Hardware). */
+  createNetworkDeck: (payload: {
+    name: string;
+    columns: number;
+    rows: number;
+    dials: number;
+  }) => Promise<void>;
+  setDeckPassword: (key: string, password: string) => Promise<void>;
   createVirtualDeck: (payload: {
     name: string;
     columns: number;
@@ -69,6 +76,8 @@ interface StoreState {
       tile_size?: number;
       overlay_transparent?: boolean;
       hide_empty?: boolean;
+      /** Nur bei Netz-Decks: ob sie im Netz angeboten werden. */
+      network_enabled?: boolean;
     },
   ) => Promise<void>;
   /** Overlay zeigen/verstecken. `null` schaltet um. */
@@ -248,6 +257,24 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       await api.createVirtualDeck(payload);
       await get().load();
+    } catch (error) {
+      get().pushError(toError(error, "deck"));
+    }
+  },
+
+  createNetworkDeck: async (payload) => {
+    try {
+      await api.createNetworkDeck(payload);
+      await get().load();
+    } catch (error) {
+      get().pushError(toError(error, "deck"));
+    }
+  },
+
+  setDeckPassword: async (key, password) => {
+    try {
+      await api.setDeckPassword(key, password);
+      set({ decks: await api.decks() });
     } catch (error) {
       get().pushError(toError(error, "deck"));
     }

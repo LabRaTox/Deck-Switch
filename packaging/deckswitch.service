@@ -1,6 +1,6 @@
 [Unit]
 Description=DECK//SWITCH Backend
-Documentation=file:%h/Projekte/StreamDeck/README.md
+Documentation=file:__REPO__/README.md
 # Erst starten, wenn die grafische Sitzung steht: die udev-Regel vergibt den
 # Gerätezugriff per uaccess an den eingeloggten User.
 After=graphical-session.target pipewire.service

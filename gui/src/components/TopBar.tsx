@@ -20,10 +20,11 @@ export function TopBar() {
   const connected = Boolean(device?.connected);
   const brightness = settings?.brightness ?? 70;
   // Über die Deckliste und nicht über ``device``: Dort steht die Bauart.
-  // Ein Overlay hat keine Hintergrundbeleuchtung — der Regler hätte nichts
-  // zu regeln, und ein wirkungsloses Bedienelement ist schlimmer als keins.
-  const virtuell =
-    decks.find((deck) => deck.id === activeDeck)?.kind === "virtual";
+  // Weder ein Overlay noch ein Netz-Deck hat eine Hintergrundbeleuchtung —
+  // der Regler hätte nichts zu regeln, und ein wirkungsloses Bedienelement
+  // ist schlimmer als keins.
+  const bauart = decks.find((deck) => deck.id === activeDeck)?.kind;
+  const virtuell = bauart === "virtual" || bauart === "network";
 
   return (
     <header className="topbar">

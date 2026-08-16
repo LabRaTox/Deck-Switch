@@ -2269,3 +2269,29 @@ input[type="checkbox"] {
 .brightness.disabled {
   opacity: 0.45;
 }
+
+/* Adressen eines Netz-Decks. Die URL ist zum Abtippen oder Kopieren da —
+   deshalb Monospace und ausreichend Platz, statt sie abzuschneiden. */
+.net-urls {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.net-urls li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2, #17171c);
+  border: 1px solid var(--line, #2a2a31);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.net-urls code {
+  flex: 1;
+  font-size: 12px;
+  word-break: break-all;
+}

@@ -35,7 +35,9 @@ from . import device as device_module
 from . import events as ev
 from . import paths
 from .config import Config, ConfigLoadError, ConfigStore, DeckBinding, Page, Profile, Slot
+from .netserver import NetzService
 from .virtualdeck import DECK_TYPE as VIRTUAL_DECK_TYPE
+from .virtualdeck import NETWORK_DECK_TYPE
 from .virtualdeck import VirtualDevice
 from .deck import Deck
 from .events import EventBus
@@ -82,6 +84,7 @@ class Runtime:
         self.sound.on_finished = lambda owner: self.request_redraw()
         #: Zeigt und versteckt die Overlays der virtuellen Decks.
         self.overlay = OverlayService(self)
+        self.netz = NetzService(self)
 
         self._loop: asyncio.AbstractEventLoop | None = None
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sd-hook")
@@ -122,6 +125,11 @@ class Runtime:
         for deck in self.decks.values():
             deck.start()
 
+        # Netz-Decks anbieten, falls welche eingerichtet sind. Steht bewusst
+        # hinter dem Start der Decks: Erst wenn gerendert wird, gibt es auch
+        # Kacheln zu holen.
+        await self.netz.sync()
+
         self._tasks = [
             asyncio.create_task(self._connection_loop(), name="connection"),
         ]
@@ -136,6 +144,9 @@ class Runtime:
 
         for deck in list(self.decks.values()):
             await deck.stop()
+
+        with contextlib.suppress(Exception):
+            await self.netz.stop()
 
         self.audio.stop_watcher()
         self.sound.close()
@@ -205,6 +216,42 @@ class Runtime:
             name=name,
             deck_type=VIRTUAL_DECK_TYPE,
             kind="virtual",
+            profile_id=profile.id,
+            device=self.config.device.model_copy(deep=True),
+            order=len(self.config.decks),
+            columns=max(1, min(16, columns)),
+            rows=max(1, min(8, rows)),
+            dials=max(0, min(8, dials)),
+        )
+        self.config.decks[serial] = binding
+        self._sync_decks()
+        self.save_config()
+        self.bus.publish(ev.EVT_DECKS_CHANGED, decks=self.decks_payload())
+        return self.decks[serial]
+
+    def create_network_deck(
+        self,
+        name: str = "Netz-Deck",
+        *,
+        columns: int = 4,
+        rows: int = 2,
+        dials: int = 0,
+    ) -> Deck:
+        """Legt ein Deck an, das über das Netz bedient wird.
+
+        Technisch dasselbe wie ein Overlay-Deck: Die Bilder entstehen im
+        Speicher, Seiten und Tastenlogik gelten unverändert. Nur sitzt am
+        anderen Ende ein Browser statt einer Fläche auf dem Bildschirm.
+
+        Ohne Passwort wird es noch nicht angeboten — das setzt man danach.
+        """
+        serial = f"net-{uuid.uuid4().hex[:8]}"
+        profile = self.config.new_profile_for_deck(name)
+        binding = DeckBinding(
+            serial=serial,
+            name=name,
+            deck_type=NETWORK_DECK_TYPE,
+            kind="network",
             profile_id=profile.id,
             device=self.config.device.model_copy(deep=True),
             order=len(self.config.decks),
@@ -395,9 +442,18 @@ class Runtime:
             if deck.binding.is_virtual:
                 eintrag["overlay_transparent"] = deck.binding.overlay_transparent
                 eintrag["hide_empty"] = deck.binding.hide_empty
+            if deck.binding.is_overlay:
                 eintrag["overlay_visible"] = self.overlay.is_visible(deck.key)
                 eintrag["overlay_available"] = self.overlay.available()[0]
                 eintrag["overlay_reason"] = self.overlay.available()[1]
+            if deck.binding.is_network:
+                # Das Passwort selbst verlässt den Rechner nie — die
+                # Oberfläche muss nur wissen, *ob* eines gesetzt ist.
+                eintrag["has_password"] = bool(deck.binding.password_hash)
+                eintrag["network_enabled"] = deck.binding.network_enabled
+                eintrag["network_port"] = self.config.app.network_port
+                eintrag["network_urls"] = self.netz.urls(deck.key)
+                eintrag["network_running"] = self.netz.running
             eintraege.append(eintrag)
         return eintraege
 

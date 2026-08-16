@@ -45,7 +45,10 @@ fi
 # libxkbcommon: Zeichen → Taste für „Text tippen" und Tastenkombinationen.
 # pipewire-audio: pw-play für das Soundboard.
 # qt6-declarative + layer-shell-qt: das virtuelle Deck als Overlay.
-PACKAGES="python webkit2gtk-4.1 base-devel rust hidapi libusb nodejs npm noto-fonts wireplumber libpulse libxkbcommon pipewire-audio qt6-declarative layer-shell-qt"
+# cairo: cairosvg lädt libcairo.so.2 zur Laufzeit. Auf einem Desktop-System
+#   ist es über andere Pakete längst da — auf einer schlanken Installation
+#   nicht, und dann startet das Backend nicht.
+PACKAGES="python webkit2gtk-4.1 base-devel rust hidapi libusb nodejs npm noto-fonts wireplumber libpulse libxkbcommon pipewire-audio qt6-declarative layer-shell-qt cairo"
 
 MISSING=""
 for pkg in $PACKAGES; do

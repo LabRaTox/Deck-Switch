@@ -88,6 +88,21 @@ class VirtualDeckCreate(BaseModel):
     dials: int = 0
 
 
+class NetworkDeckCreate(BaseModel):
+    """Ein neues Deck, das über das Netz bedient wird."""
+
+    name: str = "Netz-Deck"
+    columns: int = 4
+    rows: int = 2
+    dials: int = 0
+
+
+class NetworkPassword(BaseModel):
+    """Passwort setzen — leer entfernt es und sperrt das Deck damit."""
+
+    password: str = ""
+
+
 class OverlayToggle(BaseModel):
     """Overlay eines virtuellen Decks zeigen, verstecken oder umschalten."""
 
@@ -129,6 +144,8 @@ class DeckUpdate(BaseModel):
     tile_size: int | None = None
     overlay_transparent: bool | None = None
     hide_empty: bool | None = None
+    #: Nur bei Netz-Decks: ob sie im Netz angeboten werden.
+    network_enabled: bool | None = None
 
 
 class PageMove(BaseModel):
@@ -254,12 +271,43 @@ def create_app(
         )
         return deck.as_dict()
 
+    @app.post("/api/decks/network")
+    async def create_network_deck(payload: NetworkDeckCreate) -> dict[str, Any]:
+        """Legt ein Deck an, das jemand im selben Netz im Browser bedient.
+
+        Angeboten wird es erst, sobald ein Passwort gesetzt ist.
+        """
+        deck = runtime.create_network_deck(
+            payload.name.strip() or "Netz-Deck",
+            columns=payload.columns,
+            rows=payload.rows,
+            dials=payload.dials,
+        )
+        await runtime.netz.sync()
+        runtime.bus.publish(ev.EVT_DECKS_CHANGED, decks=runtime.decks_payload())
+        return deck.as_dict()
+
+    @app.post("/api/decks/{key}/password")
+    async def set_network_password(key: str, payload: NetworkPassword) -> dict[str, Any]:
+        """Setzt das Passwort eines Netz-Decks oder entfernt es.
+
+        Das Passwort wird nur abgeleitet gespeichert und nie zurückgegeben.
+        Wer es ändert, trennt damit auch alle, die gerade angemeldet sind.
+        """
+        try:
+            gesetzt = runtime.netz.set_password(key, payload.password)
+        except RuntimeError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        await runtime.netz.sync()
+        runtime.bus.publish(ev.EVT_DECKS_CHANGED, decks=runtime.decks_payload())
+        return {"has_password": gesetzt, "urls": runtime.netz.urls(key)}
+
     @app.post("/api/decks/{key}/overlay")
     async def deck_overlay(key: str, payload: OverlayToggle) -> dict[str, Any]:
         """Zeigt das Overlay, versteckt es oder schaltet um."""
         deck = runtime.decks.get(key)
-        if deck is None or not deck.binding.is_virtual:
-            raise HTTPException(404, "Kein virtuelles Deck")
+        if deck is None or not deck.binding.is_overlay:
+            raise HTTPException(404, "Kein Deck mit Overlay")
         try:
             if payload.visible is None:
                 sichtbar = await runtime.overlay.toggle(key, at_cursor=payload.at_cursor)
@@ -409,17 +457,26 @@ def create_app(
             if wert is None:
                 continue
             if not deck.binding.is_virtual:
-                raise HTTPException(400, "Das Raster gilt nur für virtuelle Decks")
+                raise HTTPException(400, "Das Raster gilt nur für Decks ohne Gerät")
             setattr(deck.binding, innen, max(kleinster, min(groesster, int(wert))))
             geaendert = True
         for schalter in ("overlay_transparent", "hide_empty"):
             wert = getattr(payload, schalter)
             if wert is None:
                 continue
-            if not deck.binding.is_virtual:
-                raise HTTPException(400, "Diese Einstellung gilt nur für virtuelle Decks")
+            if not deck.binding.is_overlay:
+                raise HTTPException(400, "Diese Einstellung gilt nur fürs Overlay")
             setattr(deck.binding, schalter, bool(wert))
             geaendert = True
+
+        if payload.network_enabled is not None:
+            if not deck.binding.is_network:
+                raise HTTPException(400, "Diese Einstellung gilt nur für Netz-Decks")
+            deck.binding.network_enabled = bool(payload.network_enabled)
+            runtime.save_config()
+            # An- und Abschalten wirkt sofort: Der Server hört auf zu
+            # lauschen, sobald das letzte Deck aus ist.
+            await runtime.netz.sync()
 
         if geaendert:
             runtime.update_virtual_geometry(deck)
@@ -441,6 +498,10 @@ def create_app(
                 raise HTTPException(404, "Deck nicht gefunden")
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        # Wer gerade an diesem Deck hing, fliegt sofort raus — und war es
+        # das letzte im Netz, hört der Server auf zu lauschen.
+        runtime.netz.sitzungen.alle_verwerfen(key)
+        await runtime.netz.sync()
         return {"forgotten": key}
 
     @app.post("/api/device/brightness")
@@ -1236,9 +1297,33 @@ def create_app(
                 }
             )
             async with runtime.bus.subscribe() as queue:
-                while True:
-                    event = await queue.get()
-                    await socket.send_json({"type": event.type, "data": event.data})
+                # Parallel lauschen, obwohl die GUI nichts schickt: Ein
+                # Endpunkt, der nur sendet, merkt das Ende der Verbindung
+                # erst beim nächsten Ereignis. Ohne angeschlossenes Deck
+                # kommt lange keines — die Aufgabe bliebe hängen und mit ihr
+                # das Herunterfahren des Servers, das auf offene Verbindungen
+                # wartet. Gemessen am 2026-08-16 in einem frischen Container:
+                # Der Shutdown kam nie zum Ende.
+                lauscher = asyncio.create_task(socket.receive())
+                try:
+                    while True:
+                        senden = asyncio.create_task(queue.get())
+                        fertig, offen = await asyncio.wait(
+                            {senden, lauscher}, return_when=asyncio.FIRST_COMPLETED
+                        )
+                        if lauscher in fertig:
+                            # Entweder eine Nachricht oder das Ende — beides
+                            # heißt hier: Diese Runde ist vorbei.
+                            senden.cancel()
+                            nachricht = lauscher.result()
+                            if nachricht.get("type") == "websocket.disconnect":
+                                break
+                            lauscher = asyncio.create_task(socket.receive())
+                            continue
+                        event = senden.result()
+                        await socket.send_json({"type": event.type, "data": event.data})
+                finally:
+                    lauscher.cancel()
         except WebSocketDisconnect:
             pass
         except Exception as exc:

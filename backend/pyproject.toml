@@ -8,6 +8,12 @@ dependencies = [
     "pillow>=10.0",
     "cairosvg>=2.7",
     "fastapi>=0.110",
+    # Ohne das lehnt FastAPI beim Start jede Route mit Datei-Upload ab —
+    # das Backend kommt dann gar nicht erst hoch. Auf einem System, auf dem
+    # schon damit gearbeitet wurde, ist es meist zufällig vorhanden; auf
+    # einer frischen Installation fehlte es (gemessen in einem sauberen
+    # Arch-Container am 2026-08-16).
+    "python-multipart>=0.0.9",
     "uvicorn[standard]>=0.27",
     "pydantic>=2.6",
     "simpleobsws>=1.4",

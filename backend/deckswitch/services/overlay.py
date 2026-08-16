@@ -178,8 +178,8 @@ class OverlayService:
         wird hier bei 0 abgeschnitten.
         """
         deck = self.runtime.decks.get(deck_key)
-        if deck is None or not deck.binding.is_virtual:
-            raise RuntimeError(f"Kein virtuelles Deck: '{deck_key}'")
+        if deck is None or not deck.binding.is_overlay:
+            raise RuntimeError(f"Kein Deck mit Overlay: '{deck_key}'")
         deck.binding.overlay_x = max(0, int(x))
         deck.binding.overlay_y = max(0, int(y))
         self.runtime.save_config()

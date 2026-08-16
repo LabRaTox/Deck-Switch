@@ -33,6 +33,10 @@ log = logging.getLogger(__name__)
 #: Wie das Modell in der GUI heißt.
 DECK_TYPE = "Virtuelles Deck"
 
+#: Dasselbe Gerät, andere Bedienung: Ein Netz-Deck wird nicht auf dem
+#: eigenen Bildschirm gezeigt, sondern von einem anderen Rechner im Netz.
+NETWORK_DECK_TYPE = "Netz-Deck"
+
 #: Eckenradius der Kacheln, als Anteil der kurzen Kante.
 #:
 #: Gerundet wird **hier** und nicht im Overlay: Qt Quick schneidet nur
@@ -83,7 +87,7 @@ class VirtualDevice:
         strip_width = size * max(1, dials) if dials else 0
         return DeviceInfo(
             connected=True,
-            deck_type=DECK_TYPE,
+            deck_type=NETWORK_DECK_TYPE if self.binding.is_network else DECK_TYPE,
             serial=self.binding.serial,
             firmware="—",
             key_count=columns * rows,

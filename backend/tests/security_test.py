@@ -22,6 +22,7 @@ Aufruf:
 import _wache  # bricht ab, statt in die echte Config zu schreiben
 _wache.sichere_umgebung()
 import asyncio
+import contextlib
 import base64
 import os
 import sys
@@ -108,7 +109,18 @@ async def main():
     check("ohne Origin (Kommandozeile) kommt durch", ohne == 101, f"HTTP {ohne}")
 
     server.should_exit = True
-    await task
+    # Mit Grenze: Ein Test, der hängt, blockiert jeden automatischen Lauf und
+    # sagt dabei nicht einmal, was schiefging. Bleibt der Server stehen, ist
+    # das selbst ein Befund — deshalb wird er hart beendet und gemeldet.
+    try:
+        await asyncio.wait_for(task, timeout=10)
+        check("der Server fährt sauber herunter", True)
+    except TimeoutError:
+        server.force_exit = True
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(task, timeout=5)
+        check("der Server fährt sauber herunter", False,
+              "hing an einer offenen Verbindung")
 
     print("\n== Programm beenden ==")
     desktop = DesktopService()

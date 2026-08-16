@@ -172,7 +172,7 @@ export interface DeckInfo extends DeviceInfo {
   settings: DeviceSettings;
   order: number;
   /** `hardware` hängt am USB, `virtual` liegt als Overlay auf dem Bildschirm. */
-  kind: "hardware" | "virtual";
+  kind: "hardware" | "virtual" | "network";
   columns: number;
   rows: number;
   dials: number;
@@ -183,6 +183,13 @@ export interface DeckInfo extends DeviceInfo {
   hide_empty?: boolean;
   /** Nur bei virtuellen Decks: ob das Overlay gerade zu sehen ist. */
   overlay_visible?: boolean;
+  /** Nur bei Netz-Decks: ob ein Passwort gesetzt ist (nie das Passwort selbst). */
+  has_password?: boolean;
+  network_enabled?: boolean;
+  network_port?: number;
+  /** Adressen, unter denen das Deck gerade im Netz erreichbar ist. */
+  network_urls?: string[];
+  network_running?: boolean;
   overlay_available?: boolean;
   overlay_reason?: string;
 }
