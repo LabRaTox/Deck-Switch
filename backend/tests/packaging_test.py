@@ -49,6 +49,22 @@ def main() -> None:
     check("das Paket zieht den passenden Tag",
           "refs/tags/v$pkgver.tar.gz" in text)
 
+    print("\n.SRCINFO ist auf demselben Stand")
+    # Das AUR liest die .SRCINFO, nicht das PKGBUILD. Wer nur das Rezept
+    # anfasst und `makepkg --printsrcinfo` vergisst, veröffentlicht die
+    # alte Version — ohne dass lokal etwas auffiele.
+    srcinfo_datei = PKGBUILD.with_name(".SRCINFO")
+    if not srcinfo_datei.is_file():
+        check(".SRCINFO liegt neben dem PKGBUILD", False, "fehlt")
+    else:
+        srcinfo = srcinfo_datei.read_text(encoding="utf-8")
+        check("pkgver stimmt", f"pkgver = {__version__}" in srcinfo)
+        check("die Prüfsumme ist eingetragen",
+              "sha256sums = SKIP" not in srcinfo,
+              "steht noch auf SKIP" if "sha256sums = SKIP" in srcinfo else "")
+        summe = feld(text, "sha256sums").strip("()'\"")
+        check("und stimmt mit dem PKGBUILD überein", f"sha256sums = {summe}" in srcinfo)
+
     print("\nAlle verpackten Dateien gibt es auch")
     # Jede Datei, die das Rezept aus dem Quellbaum einsammelt. Kommentare
     # fliegen vorher raus, sonst prüfte man Fließtext; gesucht wird dann
