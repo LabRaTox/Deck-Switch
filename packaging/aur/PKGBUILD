@@ -27,9 +27,14 @@ depends=(
   'python-watchfiles'
   'python-httptools'
   'python-uvloop'
+  # Die Streamdeck-Bibliothek deklariert beides nicht selbst — sie lädt es
+  # zur Laufzeit über ctypes. Ohne die Einträge fehlte der USB-Zugriff.
   'hidapi'
   'libusb'
   'cairo'
+  # Wir legen Symbole in /usr/share/icons/hicolor ab; das Verzeichnis
+  # gehört diesem Paket.
+  'hicolor-icon-theme'
   # Das Overlay des virtuellen Decks ist ein eigenes QML-Programm auf der
   # Layer-Shell-Ebene.
   'qt6-declarative'
