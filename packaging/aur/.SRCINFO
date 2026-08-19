@@ -32,6 +32,7 @@ pkgbase = deckswitch
 	depends = hidapi
 	depends = libusb
 	depends = cairo
+	depends = hicolor-icon-theme
 	depends = qt6-declarative
 	depends = layer-shell-qt
 	depends = webkit2gtk-4.1
