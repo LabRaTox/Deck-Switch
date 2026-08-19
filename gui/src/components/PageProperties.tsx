@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { localized } from "../i18n";
 import { useStore } from "../store";
 import type { DeckInfo, WallpaperEntry } from "../types";
+import { HotkeyInput } from "./HotkeyInput";
 
 /**
  * Eigenschaften der aktuellen Seite — sichtbar, solange keine Taste
@@ -279,6 +280,20 @@ function VirtualDeckSection() {
         <span>{t("decks.hideEmpty")}</span>
       </label>
       <small className="help">{t("decks.hideEmptyHint")}</small>
+
+      {/* Ein Deck ohne Gehäuse hat keinen Griff: Wer nur ein virtuelles
+          Deck hat, käme sonst nur über die Oberfläche daran. */}
+      <div className="field">
+        <label htmlFor="overlay-hotkey">{t("decks.hotkey")}</label>
+        <HotkeyInput
+          id="overlay-hotkey"
+          value={deck.overlay_hotkey ?? ""}
+          placeholder="Strg+Alt+D"
+          warning={deck.hotkey_reason || null}
+          onChange={(wert) => void setGrid(deck.id, { overlay_hotkey: wert })}
+        />
+        <small className="help">{t("decks.hotkeyHint")}</small>
+      </div>
 
       <div className="row">
         <button

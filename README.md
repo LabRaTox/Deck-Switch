@@ -47,7 +47,8 @@ which USB port it lands on.
 **Virtual deck**
 A deck as an overlay on your screen with a freely chosen grid — no window
 frame, no Alt-Tab entry, and it never steals keyboard focus. Freely
-placeable; the position is remembered.
+placeable; the position is remembered. Summoned from anywhere by a **global
+shortcut**.
 
 **Network deck**
 A deck operated by someone else on the same network, in a browser — your

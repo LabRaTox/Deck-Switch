@@ -35,6 +35,8 @@ interface StoreState {
   /** Das Deck, das der Editor gerade bearbeitet. */
   activeDeck: string;
   config: Config | null;
+  /** Version des Backends. Leer, solange nichts geladen wurde. */
+  version: string;
   plugins: PluginInfo[];
   errors: BackendError[];
   backgroundPresets: BackgroundPreset[];
@@ -76,6 +78,8 @@ interface StoreState {
       tile_size?: number;
       overlay_transparent?: boolean;
       hide_empty?: boolean;
+      /** Globaler Kurzbefehl fürs Overlay. Leerer Text nimmt ihn weg. */
+      overlay_hotkey?: string;
       /** Nur bei Netz-Decks: ob sie im Netz angeboten werden. */
       network_enabled?: boolean;
     },
@@ -146,6 +150,7 @@ export const useStore = create<StoreState>((set, get) => ({
   decks: [],
   activeDeck: "",
   config: null,
+  version: "",
   plugins: [],
   errors: [],
   backgroundPresets: [],
@@ -181,6 +186,7 @@ export const useStore = create<StoreState>((set, get) => ({
       decks,
       activeDeck: active,
       config: state.config,
+      version: state.version ?? "",
       plugins: state.plugins,
       errors: state.errors,
       backgroundPresets: state.backgrounds,

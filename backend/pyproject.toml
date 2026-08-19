@@ -1,6 +1,8 @@
 [project]
 name = "deckswitch"
-version = "0.1.0"
+# Die Version steht in `deckswitch/__init__.py` und wird von dort gelesen —
+# siehe [tool.setuptools.dynamic] weiter unten.
+dynamic = ["version"]
 description = "Eigene Stream Deck+ Steuerungssoftware für CachyOS"
 requires-python = ">=3.11"
 dependencies = [
@@ -33,3 +35,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["deckswitch*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "deckswitch.__version__" }
