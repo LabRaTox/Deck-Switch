@@ -1,0 +1,7 @@
+# Was makepkg beim Bauen anlegt. Ins AUR-Repo gehören nur PKGBUILD,
+# .SRCINFO und die .install-Datei — alles andere entsteht neu.
+src/
+pkg/
+*.tar.gz
+*.pkg.tar.zst
+*.log
