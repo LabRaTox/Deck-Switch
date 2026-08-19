@@ -1769,6 +1769,16 @@ input[type="checkbox"] {
   user-select: none;
 }
 
+/* Die Karte ganz unten in den Einstellungen: Wortmarke und Version. Enger
+   als die übrigen Karten — sie sagt etwas, sie bietet nichts an. */
+.about-card {
+  gap: 4px;
+}
+
+.about-card .wordmark {
+  font-size: 15px;
+}
+
 .wordmark-slash {
   color: var(--accent);
   /* Die Schrägstriche etwas enger und leicht dünner: Sie sind Trennzeichen,

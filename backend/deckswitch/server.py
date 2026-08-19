@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
+from . import __version__
 from . import events as ev
 from . import paths
 from .config import Config, DeviceSettings, Page, Slot, TouchWallpaper
@@ -196,7 +197,7 @@ def create_app(
     port: int = 8770,
     dev: bool = False,
 ) -> FastAPI:
-    app = FastAPI(title="DECK//SWITCH", version="0.1.0", docs_url="/api/docs")
+    app = FastAPI(title="DECK//SWITCH", version=__version__, docs_url="/api/docs")
     allowed_origins = _allowed_origins(host, port, dev)
 
     # CORS auf die bekannten Herkünfte einschränken. Damit blockt der Browser
@@ -239,6 +240,10 @@ def create_app(
     async def get_state() -> dict[str, Any]:
         primary = runtime.primary
         return {
+            # Die Oberfläche zeigt die Version des *Backends*, nicht ihre
+            # eigene: Bei einem Netz-Deck oder einer halb aktualisierten
+            # Installation ist das die Zahl, die zählt.
+            "version": __version__,
             # ``device`` bleibt das Hauptdeck — für alles, was nur ein Gerät
             # kennt. Die vollständige Liste steht in ``decks``.
             "device": primary.device.info.as_dict(),

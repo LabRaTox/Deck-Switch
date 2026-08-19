@@ -261,7 +261,9 @@
     "animations": "Play animated key images",
     "animationsHint": "Costs USB bandwidth — every frame travels to the device.",
     "animationFps": "Frames per second",
-    "perDeckHint": "These settings apply to the deck selected above."
+    "perDeckHint": "These settings apply to the deck selected above.",
+    "version": "Version {{version}}",
+    "versionUnknown": "Version unknown — the backend has not reported in yet."
   },
   "errors": {
     "title": "Problems",

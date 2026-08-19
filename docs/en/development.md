@@ -100,6 +100,29 @@ Type checking runs **only** through `npm run build` (`tsc -b`). A `tsc
 --noEmit` passes without doing anything in this project, because
 `tsconfig.json` is nothing but a container of project references.
 
+### Version
+
+The application version lives in **`backend/deckswitch/__init__.py`** and
+nowhere else by hand:
+
+* `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`.
+* The server sends it as `version` in `/api/state`; the interface shows the
+  number at the bottom of the settings. It therefore shows the version of
+  the **backend** — with a network deck the interface may well be running on
+  a different machine.
+* `gui/src-tauri/tauri.conf.json` has **no** `version` field; Tauri then
+  takes the number from `Cargo.toml`.
+* Rust and npm cannot read the Python file. The number is repeated there,
+  and `backend/tests/version_test.py` enforces that it matches.
+
+To raise it: `__init__.py`, `gui/src-tauri/Cargo.toml`, `gui/package.json`,
+then run `version_test.py`.
+
+Separate from all of this are **`CONFIG_VERSION`** in `config.py` (schema
+level of the configuration, bumped only for migrations) and the **plugin
+versions** in their manifests — those belong to the respective plugin, not
+to the application.
+
 ### About the scripts
 
 The scripts under `scripts/` are POSIX `sh` and **in English** — output as

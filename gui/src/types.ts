@@ -340,6 +340,8 @@ export interface BackgroundPreset {
 }
 
 export interface BackendState {
+  /** Version des Backends — die einzige, die die Oberfläche kennt. */
+  version: string;
   device: DeviceInfo;
   decks: DeckInfo[];
   active_deck: string;

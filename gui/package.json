@@ -1,13 +1,29 @@
 {
-  "name": "gui",
+  "name": "deckswitch-gui",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Oberfläche von DECK//SWITCH — React-Frontend im Tauri-Fenster",
+  "author": "Heiko Stuhrmann",
+  "license": "MIT",
+  "homepage": "https://github.com/LabRaTox/Deck-Switch#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LabRaTox/Deck-Switch.git",
+    "directory": "gui"
+  },
+  "bugs": {
+    "url": "https://github.com/LabRaTox/Deck-Switch/issues"
+  },
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { SUPPORTED_LANGUAGES } from "../i18n";
 import { useStore } from "../store";
 import { ScreensaverCard } from "./ScreensaverCard";
+import { Wordmark } from "./Wordmark";
 import type { AutostartStatus } from "../types";
 
 /** App- und Geräteeinstellungen sowie Export/Import der Belegung. */
@@ -289,7 +290,31 @@ export function SettingsView() {
           </p>
         )}
       </section>
+
+      <AboutCard />
     </div>
+  );
+}
+
+/**
+ * Wortmarke und Version.
+ *
+ * Die Zahl kommt vom Backend und nicht aus dem Bau der Oberfläche: Wer eine
+ * Fehlermeldung schickt, soll die Version dessen nennen, was die Arbeit
+ * macht — bei einem Netz-Deck sitzt die Oberfläche womöglich auf einem
+ * ganz anderen Rechner.
+ */
+function AboutCard() {
+  const { t } = useTranslation();
+  const version = useStore((s) => s.version);
+
+  return (
+    <section className="settings-card about-card">
+      <Wordmark />
+      <p className="help">
+        {version ? t("settings.version", { version }) : t("settings.versionUnknown")}
+      </p>
+    </section>
   );
 }
 

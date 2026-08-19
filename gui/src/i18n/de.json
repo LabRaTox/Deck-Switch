@@ -261,7 +261,9 @@
     "animations": "Animierte Tastenbilder abspielen",
     "animationsHint": "Kostet USB-Bandbreite — jedes Einzelbild geht zum Gerät.",
     "animationFps": "Bilder je Sekunde",
-    "perDeckHint": "Diese Einstellungen gelten für das oben gewählte Deck."
+    "perDeckHint": "Diese Einstellungen gelten für das oben gewählte Deck.",
+    "version": "Version {{version}}",
+    "versionUnknown": "Version unbekannt — das Backend hat sich noch nicht gemeldet."
   },
   "errors": {
     "title": "Probleme",

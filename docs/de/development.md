@@ -101,6 +101,30 @@ Die Typprüfung läuft **nur** über `npm run build` (`tsc -b`). Ein `tsc
 --noEmit` geht in diesem Projekt wirkungslos durch, weil `tsconfig.json` nur
 ein Container mit Projektreferenzen ist.
 
+### Version
+
+Die Version der Anwendung steht in **`backend/deckswitch/__init__.py`** und
+sonst nirgends von Hand:
+
+* `pyproject.toml` liest sie über `[tool.setuptools.dynamic]` von dort.
+* Der Server schickt sie als `version` in `/api/state`; die Oberfläche zeigt
+  die Zahl unten in den Einstellungen. Sie zeigt damit die Version des
+  **Backends** — bei einem Netz-Deck läuft die Oberfläche womöglich auf
+  einem anderen Rechner.
+* `gui/src-tauri/tauri.conf.json` hat **kein** `version`-Feld; Tauri nimmt
+  dann die Zahl aus `Cargo.toml`.
+* Rust und npm können die Python-Datei nicht lesen. Dort steht die Zahl
+  deshalb noch einmal — `backend/tests/version_test.py` erzwingt, dass sie
+  übereinstimmt.
+
+Zum Anheben also: `__init__.py`, `gui/src-tauri/Cargo.toml`,
+`gui/package.json`, dann `version_test.py` laufen lassen.
+
+Davon getrennt sind **`CONFIG_VERSION`** in `config.py` (Schemastand der
+Konfiguration, zählt nur bei Migrationen hoch) und die **Versionen der
+Plugins** in deren Manifesten — die gehören dem jeweiligen Plugin und
+nicht der Anwendung.
+
 ### Zu den Skripten
 
 Die Skripte unter `scripts/` sind POSIX-`sh` und **auf Englisch** — Ausgaben

@@ -7,9 +7,9 @@ anderen Weg gar nicht. Deshalb bekommt jedes Overlay-Deck eine
 Tastenkombination, die es holt und wieder wegschickt.
 
 **Warum ``kglobalaccel`` und kein Mitlesen der Tastatur.** Gemessen am
-2026-08-19 auf Heikos Sitzung: Plasma nimmt eine Anmeldung über D-Bus an
-und meldet den Tastendruck als Signal zurück. Der Weg hat drei Vorteile
-gegenüber ``/dev/input`` mitzulesen:
+2026-08-19 in einer laufenden Plasma-Sitzung: Plasma nimmt eine Anmeldung
+über D-Bus an und meldet den Tastendruck als Signal zurück. Der Weg hat
+drei Vorteile gegenüber ``/dev/input`` mitzulesen:
 
 * Wir sehen **nur die eine Kombination**, nicht jeden Anschlag.
 * Der Kurzbefehl steht danach in den KDE-Systemeinstellungen unter

@@ -35,6 +35,8 @@ interface StoreState {
   /** Das Deck, das der Editor gerade bearbeitet. */
   activeDeck: string;
   config: Config | null;
+  /** Version des Backends. Leer, solange nichts geladen wurde. */
+  version: string;
   plugins: PluginInfo[];
   errors: BackendError[];
   backgroundPresets: BackgroundPreset[];
@@ -148,6 +150,7 @@ export const useStore = create<StoreState>((set, get) => ({
   decks: [],
   activeDeck: "",
   config: null,
+  version: "",
   plugins: [],
   errors: [],
   backgroundPresets: [],
@@ -183,6 +186,7 @@ export const useStore = create<StoreState>((set, get) => ({
       decks,
       activeDeck: active,
       config: state.config,
+      version: state.version ?? "",
       plugins: state.plugins,
       errors: state.errors,
       backgroundPresets: state.backgrounds,
