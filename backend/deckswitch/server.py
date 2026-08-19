@@ -1352,7 +1352,7 @@ def create_app(
     # Ausgelieferte GUI (falls gebaut)
     # ======================================================================
 
-    gui_dist = Path(__file__).resolve().parent.parent.parent / "gui" / "dist"
+    gui_dist = paths.GUI_DIST
     if gui_dist.is_dir():
         app.mount("/", StaticFiles(directory=str(gui_dist), html=True), name="gui")
     else:

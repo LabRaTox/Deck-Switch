@@ -1,0 +1,140 @@
+# Maintainer: LabRaTox <278214024+LabRaTox@users.noreply.github.com>
+
+pkgname=deckswitch
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Independent Elgato Stream Deck control software with its own plugin system"
+arch=('x86_64')
+url="https://github.com/LabRaTox/Deck-Switch"
+license=('MIT')
+
+# Laufzeit. Die Aufteilung folgt dem, was der Code wirklich aufruft:
+# Python-Abhängigkeiten aus pyproject.toml, dazu die Systembibliotheken für
+# USB-Zugriff, Rendering und das Overlay.
+depends=(
+  'python'
+  'python-pillow'
+  'python-cairosvg'
+  'python-fastapi'
+  'python-multipart'
+  'python-pydantic'
+  'python-dbus-next'
+  'python-evdev'
+  'python-xkbcommon'
+  'python-elgato-streamdeck'
+  'uvicorn'
+  'python-websockets'
+  'python-watchfiles'
+  'python-httptools'
+  'python-uvloop'
+  'hidapi'
+  'libusb'
+  'cairo'
+  # Das Overlay des virtuellen Decks ist ein eigenes QML-Programm auf der
+  # Layer-Shell-Ebene.
+  'qt6-declarative'
+  'layer-shell-qt'
+  # Die Oberfläche läuft als Tauri-Fenster.
+  'webkit2gtk-4.1'
+  # Lautstärke, Geräte und Soundboard.
+  'pipewire'
+  'wireplumber'
+  'libpulse'
+)
+
+makedepends=(
+  'python-build'
+  'python-installer'
+  'python-setuptools'
+  'python-wheel'
+  'rust'
+  'cargo'
+  'nodejs'
+  'npm'
+)
+
+# Alles, ohne das die App startet und das meiste kann — nur einzelne
+# Aktionen bleiben dann ohne Wirkung und melden das auch so.
+optdepends=(
+  'python-simpleobsws: OBS-Studio-Aktionen (nicht paketiert, siehe README)'
+  'ddcutil: Monitorhelligkeit über DDC/CI'
+  'spectacle: Bildschirmfotos'
+  'kscreen-doctor: Bildschirme an- und ausschalten'
+  'noto-fonts: Schriften für Tastenbeschriftungen'
+)
+
+install="$pkgname.install"
+
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+_srcdir="Deck-Switch-$pkgver"
+
+prepare() {
+  cd "$_srcdir/gui"
+  # Getrennt von build(), damit der Netzzugriff auf npm an einer Stelle
+  # steht und ein erneuter Bau ohne Netz auskommt.
+  npm ci
+}
+
+build() {
+  cd "$_srcdir/backend"
+  python -m build --wheel --no-isolation
+
+  cd "../gui"
+  npm run build
+  # --no-bundle: Wir brauchen nur die Binärdatei, kein AppImage und kein
+  # .deb — die Paketverwaltung macht hier das Bündeln.
+  npx tauri build --no-bundle
+}
+
+package() {
+  cd "$_srcdir"
+
+  # -- Backend als gewöhnliches Python-Paket ------------------------------
+  python -m installer --destdir="$pkgdir" backend/dist/*.whl
+
+  # -- Mitgeliefertes ------------------------------------------------------
+  # `deckswitch.paths` sucht genau hier, sobald kein Checkout vorliegt.
+  install -d "$pkgdir/usr/share/$pkgname"
+  cp -r backend/plugins "$pkgdir/usr/share/$pkgname/plugins"
+  cp -r gui/dist "$pkgdir/usr/share/$pkgname/gui"
+  install -Dm644 packaging/overlay/deck-overlay.qml \
+    "$pkgdir/usr/share/$pkgname/overlay/deck-overlay.qml"
+
+  # -- Programme -----------------------------------------------------------
+  # `deckswitch` selbst legt bereits das Wheel an (project.scripts).
+  install -Dm755 "gui/src-tauri/target/release/deckswitch" \
+    "$pkgdir/usr/bin/deckswitch-gui"
+  install -Dm755 packaging/streamdeck-url-handler.py \
+    "$pkgdir/usr/bin/deckswitch-url-handler"
+
+  # -- Systemanbindung -----------------------------------------------------
+  # Die udev-Regel ist der Grund, warum es dieses Paket gibt: Ohne sie
+  # gehört das Deck root, und keine Anwendung im Benutzerkontext kommt
+  # daran. Von Hand wäre das der Schritt, den alle vergessen.
+  install -Dm644 packaging/70-streamdeck.rules \
+    "$pkgdir/usr/lib/udev/rules.d/70-streamdeck.rules"
+  install -Dm644 packaging/deckswitch-system.service \
+    "$pkgdir/usr/lib/systemd/user/deckswitch.service"
+
+  # -- Desktop-Anbindung ---------------------------------------------------
+  install -Dm644 packaging/deckswitch.desktop \
+    "$pkgdir/usr/share/applications/$pkgname.desktop"
+  sed 's|__HANDLER__|/usr/bin/deckswitch-url-handler|' \
+    packaging/streamdeck-url-handler.desktop \
+    > "$srcdir/url-handler.desktop"
+  install -Dm644 "$srcdir/url-handler.desktop" \
+    "$pkgdir/usr/share/applications/$pkgname-url-handler.desktop"
+
+  for groesse in 32 128; do
+    install -Dm644 "gui/src-tauri/icons/${groesse}x${groesse}.png" \
+      "$pkgdir/usr/share/icons/hicolor/${groesse}x${groesse}/apps/$pkgname.png"
+  done
+
+  # -- Papierkram ----------------------------------------------------------
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 README.de.md "$pkgdir/usr/share/doc/$pkgname/README.de.md"
+  cp -r docs "$pkgdir/usr/share/doc/$pkgname/docs"
+}

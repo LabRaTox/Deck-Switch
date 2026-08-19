@@ -33,10 +33,14 @@ from dbus_next import BusType, Message, MessageType
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, method
 
+from .. import paths
+
 log = logging.getLogger(__name__)
 
-#: Die QML-Datei des Overlays — im Repo neben der udev-Regel.
-OVERLAY_QML = Path(__file__).resolve().parents[3] / "packaging" / "overlay" / "deck-overlay.qml"
+#: Die QML-Datei des Overlays — im Repo neben der udev-Regel, als Paket
+#: unter ``/usr/share/deckswitch/``. Welche der beiden, entscheidet
+#: :mod:`deckswitch.paths`.
+OVERLAY_QML = paths.OVERLAY_QML
 
 #: Unter diesem Namen meldet sich das Backend am Bus, damit ein KWin-Skript
 #: uns die Zeigerposition zurückgeben kann.

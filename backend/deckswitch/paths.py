@@ -2,6 +2,15 @@
 
 Alles Nutzerbezogene liegt unter ``~/.config/deckswitch/`` (laut Spec),
 alles Mitgelieferte relativ zum Repo bzw. zum installierten Paket.
+
+**Zwei Betriebsarten.** Aus einem Checkout heraus liegen Plugins, Overlay
+und gebaute Oberfläche dort, wo sie im Repo entstehen — in drei
+verschiedenen Ordnern. Als Paket installiert liegen sie gemeinsam unter
+``/usr/share/deckswitch/``. Welche der beiden gilt, entscheidet sich hier
+an genau einer Stelle; der übrige Code fragt nur noch nach dem fertigen
+Pfad. Vorher stand die Rechnerei an vier Stellen verstreut, jede mit einem
+eigenen ``parents[…]`` — und jede davon zeigte nach einer Installation
+irgendwohin.
 """
 
 from __future__ import annotations
@@ -38,8 +47,52 @@ IMAGE_DIRS: tuple[Path, ...] = (UPLOADS_DIR, WALLPAPERS_DIR)
 #: Nachinstallierte Plugins (Action- wie Iconset-Plugins).
 USER_PLUGINS_DIR: Path = DATA_DIR / "plugins"
 
+# -- Mitgeliefertes: Repo oder Installation ---------------------------------
+
+
+def _repo_root() -> Path | None:
+    """Die Repo-Wurzel, wenn die App aus einem Checkout läuft.
+
+    Erkannt am Ordner ``packaging/``: Den gibt es nur im Repo, während
+    ``backend/`` unter einem anderen Namen als Paket auch installiert
+    existieren könnte.
+    """
+    kandidat = Path(__file__).resolve().parents[2]
+    return kandidat if (kandidat / "packaging").is_dir() else None
+
+
+#: Wo ein installiertes Paket sein Mitgeliefertes ablegt. Über die
+#: Umgebungsvariable umstellbar — nur so lässt sich der Installationsfall
+#: prüfen, ohne vorher wirklich zu installieren.
+SHARE_DIR: Path = Path(
+    os.environ.get("DECKSWITCH_SHARE_DIR") or "/usr/share/deckswitch"
+)
+
+#: ``None``, sobald die App installiert ist oder die Variable gesetzt wurde.
+REPO_ROOT: Path | None = None if os.environ.get("DECKSWITCH_SHARE_DIR") else _repo_root()
+
+
+def _bundled(im_repo: str, installiert: str) -> Path:
+    """Ein mitgeliefertes Verzeichnis — je nach Betriebsart."""
+    if REPO_ROOT is not None:
+        return REPO_ROOT / im_repo
+    return SHARE_DIR / installiert
+
+
 #: Mitgelieferte Plugins — technisch gleichwertig, nur anderer Suchpfad.
-BUILTIN_PLUGINS_DIR: Path = Path(__file__).resolve().parent.parent / "plugins"
+BUILTIN_PLUGINS_DIR: Path = _bundled("backend/plugins", "plugins")
+
+#: Das QML-Programm des Overlays.
+OVERLAY_QML: Path = _bundled(
+    "packaging/overlay/deck-overlay.qml", "overlay/deck-overlay.qml"
+)
+
+#: Die gebaute Oberfläche, die der Server ausliefert.
+GUI_DIST: Path = _bundled("gui/dist", "gui")
+
+#: Die vom Paket mitgelieferte systemd-Unit. Gibt es sie, gehört sie der
+#: Paketverwaltung und wird nicht überschrieben.
+PACKAGED_UNIT: Path = Path("/usr/lib/systemd/user/deckswitch.service")
 
 LOG_FILE: Path = DATA_DIR / "deckswitch.log"
 

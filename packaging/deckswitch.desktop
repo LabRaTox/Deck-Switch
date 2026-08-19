@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=DECK//SWITCH
+GenericName=Stream Deck control
+GenericName[de]=Stream-Deck-Steuerung
+Comment=Configure and control your Elgato Stream Deck
+Comment[de]=Das Elgato Stream Deck einrichten und steuern
+Exec=deckswitch-gui
+Icon=deckswitch
+Terminal=false
+Categories=Utility;Settings;
+Keywords=streamdeck;elgato;deck;macro;
+StartupNotify=true
+# Kein StartupWMClass: Womit sich das Fenster beim Fenstermanager meldet,
+# ist ungeprüft, und ein falscher Wert verhindert die Zuordnung von Symbol
+# und Fenster genauso zuverlässig wie ein fehlender. Nachzutragen, sobald
+# es einmal an einem echten Desktop gelaufen ist (`xprop WM_CLASS`).

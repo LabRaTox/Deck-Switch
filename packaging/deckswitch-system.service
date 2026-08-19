@@ -1,0 +1,24 @@
+[Unit]
+Description=DECK//SWITCH Backend
+Documentation=file:/usr/share/doc/deckswitch/README.md
+# Erst starten, wenn die grafische Sitzung steht: die udev-Regel vergibt den
+# Gerätezugriff per uaccess an den eingeloggten User.
+After=graphical-session.target pipewire.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Die Fassung für ein installiertes Paket — kein Repo, kein venv, sondern
+# das Konsolenskript aus dem Paket. Die Schwesterdatei `deckswitch.service`
+# gilt für einen Checkout; `backend/tests/packaging_test.py` hält beide in
+# den Punkten zusammen, die für den Betrieb zählen.
+ExecStart=/usr/bin/deckswitch
+Restart=on-failure
+RestartSec=5
+# Das Deck kann beim Login noch nicht bereit sein — die Runtime wartet selbst
+# darauf, ein Absturz wäre also ein echter Fehler und kein Normalfall.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical-session.target
