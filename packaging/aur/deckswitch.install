@@ -1,0 +1,59 @@
+# Hinweise nach der Installation.
+#
+# Nur das, was die Paketverwaltung nicht selbst erledigen kann: Gruppen
+# ändern sich erst beim nächsten Login, und ein Dienst im Benutzerkontext
+# lässt sich von einem Paket-Skript aus nicht sinnvoll starten — es läuft
+# als root und weiß nicht, wer später angemeldet sein wird.
+
+post_install() {
+    cat <<'HINWEIS'
+
+  DECK//SWITCH ist installiert. Zwei Schritte fehlen noch:
+
+  1) Stecke das Deck einmal neu ein — oder lade die udev-Regeln neu:
+
+       sudo udevadm control --reload && sudo udevadm trigger
+
+  2) Für Tastenkombinationen und "Text tippen" braucht dein Benutzer
+     Zugriff auf /dev/uinput:
+
+       sudo usermod -aG input "$USER"
+
+     Das wirkt erst nach dem nächsten Login.
+
+  Starten:
+
+       systemctl --user enable --now deckswitch.service
+
+  Danach steht die Oberfläche unter http://127.0.0.1:8770 oder als eigenes
+  Fenster über den Eintrag "DECK//SWITCH" im Anwendungsmenü.
+
+  OBS-Aktionen brauchen 'simpleobsws', das es als Arch-Paket nicht gibt:
+
+       pip install --user simpleobsws
+
+HINWEIS
+}
+
+post_upgrade() {
+    cat <<'HINWEIS'
+
+  Der Dienst läuft noch mit dem alten Stand. Neu starten mit:
+
+       systemctl --user restart deckswitch.service
+
+HINWEIS
+}
+
+post_remove() {
+    cat <<'HINWEIS'
+
+  Deine Belegung bleibt erhalten:
+
+       ~/.config/deckswitch/   Konfiguration
+       ~/.local/share/deckswitch/   Uploads, Plugins, Protokoll
+
+  Wer wirklich alles loswerden will, löscht die beiden Ordner von Hand.
+
+HINWEIS
+}

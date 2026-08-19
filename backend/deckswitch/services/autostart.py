@@ -29,6 +29,8 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .. import paths
+
 log = logging.getLogger(__name__)
 
 UNIT_NAME = "deckswitch.service"
@@ -64,9 +66,16 @@ class AutostartStatus:
 # --------------------------------------------------------------------------
 
 
+def _unit_path() -> Path:
+    """Die Unit, um die es hier geht — die des Pakets oder die im Home."""
+    if paths.REPO_ROOT is None and paths.PACKAGED_UNIT.is_file():
+        return paths.PACKAGED_UNIT
+    return UNIT_DIR / UNIT_NAME
+
+
 def status() -> AutostartStatus:
     """Aktueller Zustand — ohne etwas zu verändern."""
-    unit = UNIT_DIR / UNIT_NAME
+    unit = _unit_path()
     reason = _unsupported_reason()
     if reason is not None:
         return AutostartStatus(
@@ -98,7 +107,7 @@ def set_enabled(enabled: bool) -> AutostartStatus:
         _write_unit()
         _systemctl("daemon-reload")
         result = _systemctl("enable", UNIT_NAME)
-    elif (UNIT_DIR / UNIT_NAME).exists():
+    elif _unit_path().exists():
         result = _systemctl("disable", UNIT_NAME)
     else:
         # Ohne Unit gibt es nichts abzuschalten — das Ziel ist schon erreicht.
@@ -141,13 +150,24 @@ def _unsupported_reason() -> str | None:
     return None
 
 
-def _repo_root() -> Path:
-    """…/backend/deckswitch/services/autostart.py → Repo-Wurzel."""
-    return Path(__file__).resolve().parents[3]
-
-
 def _write_unit() -> Path:
-    repo = _repo_root()
+    """Schreibt die Unit ins Home — außer das Paket bringt schon eine mit.
+
+    Als Paket installiert liegt die Unit in ``/usr/lib/systemd/user/`` und
+    gehört der Paketverwaltung. Eine eigene daneben ins Home zu schreiben
+    würde sie verdecken und beim nächsten Update auseinanderlaufen: Der
+    Dienst startete dann weiter mit den Pfaden von vorgestern.
+    """
+    if paths.REPO_ROOT is None:
+        if not paths.PACKAGED_UNIT.is_file():
+            raise AutostartError(
+                f"Weder ein Checkout noch eine mitgelieferte Unit gefunden "
+                f"({paths.PACKAGED_UNIT})"
+            )
+        log.info("Unit des Pakets wird benutzt: %s", paths.PACKAGED_UNIT)
+        return paths.PACKAGED_UNIT
+
+    repo = paths.REPO_ROOT
     template = repo / "packaging" / UNIT_NAME
     try:
         text = template.read_text(encoding="utf-8")
