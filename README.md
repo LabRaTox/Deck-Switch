@@ -89,6 +89,27 @@ The target platform is **CachyOS and Arch Linux**. `setup.sh` therefore
 requires `pacman` and stops on other distributions with a list of the needed
 packages, rather than faking a detection nobody tests.
 
+### From the AUR
+
+The packaged route. It puts the udev rule and the systemd user unit where
+they belong, which is the step most people miss when installing by hand:
+
+```sh
+paru -S deckswitch        # or yay, or makepkg from packaging/aur/
+systemctl --user enable --now deckswitch.service
+```
+
+Afterwards, add yourself to the `input` group once (for the hotkey and type
+text actions) and log in again:
+
+```sh
+sudo usermod -aG input "$USER"
+```
+
+### From the repository
+
+For working on the code, or to run a state newer than the release:
+
 ```sh
 git clone https://github.com/LabRaTox/Deck-Switch.git
 cd Deck-Switch

@@ -1,6 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "DECK//SWITCH",
+  "productName": "DeckSwitch",
+  "mainBinaryName": "deckswitch",
   "identifier": "app.labratox.deckswitch",
   "build": {
     "frontendDist": "../dist",
