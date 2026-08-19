@@ -19,7 +19,8 @@ backend/
     plugins/base.py      plugin API (the only file plugin authors need)
     services/            audio (PipeWire), icons, rendering, backgrounds,
                          autostart, app icon, input (uinput),
-                         media (MPRIS), desktop (KDE), soundboard, overlay
+                         media (MPRIS), desktop (KDE), soundboard, overlay,
+                         global shortcuts (kglobalaccel)
     web/netdeck.html     the page a network guest gets in the browser
   plugins/               bundled plugins — technically ordinary plugins
     audio/ obs/ discord/ system/ streamdeck/ multi/ sound/ iconset-tabler/
@@ -89,11 +90,38 @@ done
 Without `XDG_CONFIG_HOME` set they abort by themselves rather than
 overwriting the real configuration.
 
+`hotkey_test.py` talks to the `kglobalaccel` of the running session —
+anything else would not be a test but a re-enactment. The suite unregisters
+its shortcuts at the end and skips itself when no Plasma is running.
+
 ### GUI
 
 Type checking runs **only** through `npm run build` (`tsc -b`). A `tsc
 --noEmit` passes without doing anything in this project, because
 `tsconfig.json` is nothing but a container of project references.
+
+### Version
+
+The application version lives in **`backend/deckswitch/__init__.py`** and
+nowhere else by hand:
+
+* `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`.
+* The server sends it as `version` in `/api/state`; the interface shows the
+  number at the bottom of the settings. It therefore shows the version of
+  the **backend** — with a network deck the interface may well be running on
+  a different machine.
+* `gui/src-tauri/tauri.conf.json` has **no** `version` field; Tauri then
+  takes the number from `Cargo.toml`.
+* Rust and npm cannot read the Python file. The number is repeated there,
+  and `backend/tests/version_test.py` enforces that it matches.
+
+To raise it: `__init__.py`, `gui/src-tauri/Cargo.toml`, `gui/package.json`,
+then run `version_test.py`.
+
+Separate from all of this are **`CONFIG_VERSION`** in `config.py` (schema
+level of the configuration, bumped only for migrations) and the **plugin
+versions** in their manifests — those belong to the respective plugin, not
+to the application.
 
 ### About the scripts
 
@@ -144,9 +172,16 @@ is the origin of the request, not the content.
   assigning both inevitably moves the trigger to the release.
 * **Type text** only manages characters directly reachable on the active
   layout — anything produced by dead keys is skipped.
-* **No global keyboard shortcut** for summoning the overlay. The clean route
-  would be `org.freedesktop.portal.GlobalShortcuts`; KDE's `kglobalaccel`
-  accepts the registration but never delivers the signal (measured).
+* **Global shortcuts only work under Plasma** (`kglobalaccel`, see
+  `services/shortcuts.py`). The portable route would be
+  `org.freedesktop.portal.GlobalShortcuts`, but that one demands a parent
+  window and a confirmation dialog once per session.
+
+  This used to say that `kglobalaccel` never delivers the signal. That was a
+  measurement error: without a matching `AddMatch` rule the bus sends a
+  client no broadcasts at all. Re-measured with the rule on 2026-08-19 — the
+  signal arrives, all the way from a real key press through the compositor
+  into the service (`tests/hotkey_test.py`).
 * Plugin hot reload reloads manifests and classes, but Python caches modules
   it has already imported — after changing a plugin, restarting the backend
   is the more reliable route.

@@ -1,8 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "DECK//SWITCH",
-  "version": "0.1.0",
-  "identifier": "wtf.stuhrmann.streamdeck",
+  "identifier": "app.labratox.deckswitch",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",

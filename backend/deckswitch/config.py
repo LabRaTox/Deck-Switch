@@ -448,6 +448,12 @@ class DeckBinding(BaseModel):
     #: wiederfinden, egal von welcher Taste aus er es ruft.
     overlay_x: int = -1
     overlay_y: int = -1
+    #: Tastenkombination, die das Overlay holt und wieder wegschickt —
+    #: Schreibweise wie bei der Hotkey-Aktion (``"ctrl+alt+d"``). Leer heißt
+    #: „kein Kurzbefehl". Ein Deck ohne Gehäuse hat sonst keinen Griff:
+    #: Wer nur ein virtuelles Deck hat, käme ohne die Oberfläche gar nicht
+    #: an es heran.
+    overlay_hotkey: str = ""
 
     # -- Nur bei ``network`` -----------------------------------------------
 

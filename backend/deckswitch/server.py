@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
+from . import __version__
 from . import events as ev
 from . import paths
 from .config import Config, DeviceSettings, Page, Slot, TouchWallpaper
@@ -144,6 +145,9 @@ class DeckUpdate(BaseModel):
     tile_size: int | None = None
     overlay_transparent: bool | None = None
     hide_empty: bool | None = None
+    #: Nur bei Overlay-Decks: globaler Kurzbefehl zum Umschalten. Leer
+    #: nimmt ihn wieder weg.
+    overlay_hotkey: str | None = None
     #: Nur bei Netz-Decks: ob sie im Netz angeboten werden.
     network_enabled: bool | None = None
 
@@ -193,7 +197,7 @@ def create_app(
     port: int = 8770,
     dev: bool = False,
 ) -> FastAPI:
-    app = FastAPI(title="DECK//SWITCH", version="0.1.0", docs_url="/api/docs")
+    app = FastAPI(title="DECK//SWITCH", version=__version__, docs_url="/api/docs")
     allowed_origins = _allowed_origins(host, port, dev)
 
     # CORS auf die bekannten Herkünfte einschränken. Damit blockt der Browser
@@ -236,6 +240,10 @@ def create_app(
     async def get_state() -> dict[str, Any]:
         primary = runtime.primary
         return {
+            # Die Oberfläche zeigt die Version des *Backends*, nicht ihre
+            # eigene: Bei einem Netz-Deck oder einer halb aktualisierten
+            # Installation ist das die Zahl, die zählt.
+            "version": __version__,
             # ``device`` bleibt das Hauptdeck — für alles, was nur ein Gerät
             # kennt. Die vollständige Liste steht in ``decks``.
             "device": primary.device.info.as_dict(),
@@ -469,6 +477,11 @@ def create_app(
             setattr(deck.binding, schalter, bool(wert))
             geaendert = True
 
+        if payload.overlay_hotkey is not None:
+            if not deck.binding.is_overlay:
+                raise HTTPException(400, "Ein Kurzbefehl holt nur ein Overlay")
+            deck.binding.overlay_hotkey = payload.overlay_hotkey.strip()
+
         if payload.network_enabled is not None:
             if not deck.binding.is_network:
                 raise HTTPException(400, "Diese Einstellung gilt nur für Netz-Decks")
@@ -482,6 +495,10 @@ def create_app(
             runtime.update_virtual_geometry(deck)
 
         runtime.save_config()
+        # Nach *jeder* Änderung: Der Kurzbefehl hängt nicht nur an der
+        # Kombination, sondern auch am Decknamen — unter dem steht er in den
+        # KDE-Systemeinstellungen. Hat sich nichts geändert, tut das nichts.
+        await runtime.shortcuts.sync()
         eintraege = runtime.decks_payload()
         runtime.bus.publish(ev.EVT_DECKS_CHANGED, decks=eintraege)
         # Dieselbe Form wie in der Liste zurückgeben — sonst fehlten der GUI
@@ -502,6 +519,8 @@ def create_app(
         # das letzte im Netz, hört der Server auf zu lauschen.
         runtime.netz.sitzungen.alle_verwerfen(key)
         await runtime.netz.sync()
+        # Und der Kurzbefehl des Decks wird wieder frei.
+        await runtime.shortcuts.sync()
         return {"forgotten": key}
 
     @app.post("/api/device/brightness")

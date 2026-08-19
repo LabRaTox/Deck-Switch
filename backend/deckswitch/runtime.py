@@ -50,6 +50,7 @@ from .services.input import InputService
 from .services.media import MediaService
 from .services.overlay import OverlayService
 from .services.render import RenderService
+from .services.shortcuts import ShortcutService
 from .services.sound import SoundService
 
 log = logging.getLogger(__name__)
@@ -84,6 +85,8 @@ class Runtime:
         self.sound.on_finished = lambda owner: self.request_redraw()
         #: Zeigt und versteckt die Overlays der virtuellen Decks.
         self.overlay = OverlayService(self)
+        #: Holt dieselben Overlays per globalem Kurzbefehl.
+        self.shortcuts = ShortcutService(self)
         self.netz = NetzService(self)
 
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -130,6 +133,10 @@ class Runtime:
         # Kacheln zu holen.
         await self.netz.sync()
 
+        # Kurzbefehle zuletzt: Erst jetzt kann ein Tastendruck auch etwas
+        # bewirken — vorher gäbe es kein Deck, das sich zeigen ließe.
+        await self.shortcuts.sync()
+
         self._tasks = [
             asyncio.create_task(self._connection_loop(), name="connection"),
         ]
@@ -147,6 +154,11 @@ class Runtime:
 
         with contextlib.suppress(Exception):
             await self.netz.stop()
+
+        # Vor dem Ende abmelden: Ein Kurzbefehl, hinter dem kein Programm
+        # mehr steht, bliebe sonst in den Systemeinstellungen stehen.
+        with contextlib.suppress(Exception):
+            await self.shortcuts.stop()
 
         self.audio.stop_watcher()
         self.sound.close()
@@ -446,6 +458,10 @@ class Runtime:
                 eintrag["overlay_visible"] = self.overlay.is_visible(deck.key)
                 eintrag["overlay_available"] = self.overlay.available()[0]
                 eintrag["overlay_reason"] = self.overlay.available()[1]
+                eintrag["overlay_hotkey"] = deck.binding.overlay_hotkey
+                # Warum der Kurzbefehl *nicht* wirkt, muss man sehen können —
+                # sonst belegt man eine Taste und wundert sich später.
+                eintrag["hotkey_reason"] = self.shortcuts.reason(deck.key)
             if deck.binding.is_network:
                 # Das Passwort selbst verlässt den Rechner nie — die
                 # Oberfläche muss nur wissen, *ob* eines gesetzt ist.

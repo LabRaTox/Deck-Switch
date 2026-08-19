@@ -57,8 +57,9 @@ would afterwards type into the deck instead of the application you came
 from. Measured under KWin — the click arrives, the focus stays with the
 foreground window.
 
-**Summoning it** works two ways:
+**Summoning it** works three ways:
 
+* via a **global shortcut** — see below
 * via *Settings → Decks → Show overlay*
 * via the **Virtual deck** action (plugin *Streamdeck*) on a key of the real
   deck — optionally toggling, and optionally **at the mouse pointer**
@@ -93,6 +94,29 @@ properties. The tile size is continuous; there are two switches next to it:
 * **Hide empty tiles** — unassigned slots stay invisible and take no clicks
   either. Their space is kept, though, so the remaining tiles do not jump
   around whenever something is assigned.
+
+### Shortcut
+
+Below those sits the **shortcut** that brings up this very overlay and sends
+it away again — from anywhere, without opening the interface. If a virtual
+deck is all you have, you need it: a deck without a case has no handle
+otherwise. Press *Record* and type the combination; the field can also be
+filled in by hand (`ctrl+alt+d`), because the browser swallows some
+combinations before the page ever sees them.
+
+The shortcut is registered with Plasma (`kglobalaccel`). That has three
+consequences worth knowing:
+
+* It afterwards also shows up in **KDE System Settings** under *Shortcuts →
+  DECK//SWITCH*, where it can be changed.
+* A combination that is **already taken is refused, not stolen** — the field
+  then says who owns it (for instance “KWin — Show Desktop”). If you want it
+  anyway, take it away there first.
+* Once the backend quits, the shortcut is free again. Nothing is left behind
+  that no program stands behind any more.
+
+`AltGr` does not work — Qt has no modifier level for it that a global
+shortcut could express. An empty field means: no shortcut.
 
 The tiles get **rounded corners with real transparency** — the rounding
 happens during rendering, not in the overlay, because Qt can only clip
