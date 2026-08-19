@@ -385,6 +385,8 @@
     "tileSize": "Tile (px)",
     "overlayShow": "Show overlay",
     "overlayHide": "Hide overlay",
+    "hotkey": "Shortcut",
+    "hotkeyHint": "Brings this overlay up and sends it away again — from anywhere, without opening the interface. The shortcut is registered with Plasma and also shows up in System Settings under “DECK//SWITCH”. Empty field = no shortcut.",
     "addVirtual": "Add virtual deck",
     "newVirtualName": "Virtual deck",
     "virtualHint": "Grid and tile size of this overlay. Changes take effect immediately.",

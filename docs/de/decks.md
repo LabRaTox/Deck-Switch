@@ -58,8 +58,9 @@ Aktion *Text tippen* anschließend ins Deck statt in die Anwendung, aus der
 du kamst. Unter KWin gemessen — der Klick kommt an, der Fokus bleibt beim
 Vordergrundfenster.
 
-**Herbeirufen** geht auf zwei Wegen:
+**Herbeirufen** geht auf drei Wegen:
 
+* über einen **globalen Kurzbefehl** — siehe unten
 * über *Einstellungen → Decks → Overlay zeigen*
 * über die Aktion **Virtuelles Deck** (Plugin *Streamdeck*) auf einer Taste
   des echten Decks — wahlweise umschaltend, und auf Wunsch **am Mauszeiger**
@@ -98,6 +99,29 @@ Schalter:
 * **Leere Kacheln ausblenden** — unbelegte Plätze bleiben unsichtbar und
   nehmen auch keine Klicks an. Ihr Platz bleibt aber frei, damit die
   übrigen Kacheln nicht bei jeder Belegung springen.
+
+### Kurzbefehl
+
+Darunter steht der **Kurzbefehl**, der genau dieses Overlay holt und wieder
+wegschickt — von überall, ohne die Oberfläche zu öffnen. Wer nur ein
+virtuelles Deck hat, braucht ihn: Ein Deck ohne Gehäuse hat sonst keinen
+Griff. *Aufnehmen* drücken und die Kombination tippen; das Feld lässt sich
+auch von Hand beschreiben (`ctrl+alt+d`), weil der Browser manche
+Kombinationen abfängt, bevor die Seite sie sieht.
+
+Angemeldet wird der Kurzbefehl bei Plasma (`kglobalaccel`). Das hat drei
+Folgen, die man kennen sollte:
+
+* Er steht danach auch in den **KDE-Systemeinstellungen** unter *Kurzbefehle
+  → DECK//SWITCH* und lässt sich dort ändern.
+* Eine **schon vergebene Kombination wird abgelehnt**, nicht weggenommen —
+  unter dem Feld steht dann, wem sie gehört (etwa „KWin — Blick auf die
+  Arbeitsfläche"). Wer sie trotzdem will, nimmt sie erst dort weg.
+* Beendet sich das Backend, ist der Kurzbefehl wieder frei. Es bleibt nichts
+  stehen, hinter dem kein Programm mehr steckt.
+
+`AltGr` geht nicht — das ist bei Qt keine Modifier-Stufe, die ein globaler
+Kurzbefehl abbilden kann. Ein leeres Feld heißt: kein Kurzbefehl.
 
 Die Kacheln bekommen **runde Ecken mit echter Transparenz** — gerundet wird
 beim Rendern und nicht im Overlay, weil Qt nur rechteckig zuschneiden kann

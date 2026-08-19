@@ -385,6 +385,8 @@
     "tileSize": "Kachel (px)",
     "overlayShow": "Overlay zeigen",
     "overlayHide": "Overlay verstecken",
+    "hotkey": "Kurzbefehl",
+    "hotkeyHint": "Holt dieses Overlay und schickt es wieder weg — von überall, ohne die Oberfläche zu öffnen. Der Kurzbefehl wird bei Plasma angemeldet und steht danach auch in den Systemeinstellungen unter „DECK//SWITCH“. Leeres Feld = kein Kurzbefehl.",
     "addVirtual": "Virtuelles Deck anlegen",
     "newVirtualName": "Virtuelles Deck",
     "virtualHint": "Raster und Kachelgröße dieses Overlays. Änderungen sind sofort zu sehen.",

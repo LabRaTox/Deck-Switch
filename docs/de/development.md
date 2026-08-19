@@ -18,7 +18,8 @@ backend/
     plugins/base.py      Plugin-API (die einzige Datei, die Plugin-Autoren brauchen)
     services/            Audio (PipeWire), Icons, Rendering, Hintergründe,
                          Autostart, App-Symbol, Eingabe (uinput),
-                         Medien (MPRIS), Desktop (KDE), Soundboard, Overlay
+                         Medien (MPRIS), Desktop (KDE), Soundboard, Overlay,
+                         globale Kurzbefehle (kglobalaccel)
     web/netdeck.html     die Seite, die ein Netz-Gast im Browser bekommt
   plugins/               Mitgelieferte Plugins — technisch normale Plugins
     audio/ obs/ discord/ system/ streamdeck/ multi/ sound/ iconset-tabler/
@@ -89,6 +90,11 @@ done
 Ohne gesetztes `XDG_CONFIG_HOME` brechen sie von selbst ab, statt die echte
 Konfiguration zu überschreiben.
 
+`hotkey_test.py` redet mit dem `kglobalaccel` der laufenden Sitzung — anders
+wäre nichts davon geprüft, sondern nur nachgespielt. Die Suite meldet ihre
+Kurzbefehle am Ende wieder ab und überspringt sich selbst, wenn kein Plasma
+läuft.
+
 ### GUI
 
 Die Typprüfung läuft **nur** über `npm run build` (`tsc -b`). Ein `tsc
@@ -145,9 +151,16 @@ Herkunft der Anfrage, nicht der Inhalt.
   auf das Loslassen.
 * **Text tippen** schafft nur Zeichen, die auf der aktiven Belegung direkt
   erreichbar sind — was dort über Tottasten entsteht, wird übersprungen.
-* **Kein globales Tastenkürzel** zum Herbeirufen des Overlays. Der saubere
-  Weg wäre `org.freedesktop.portal.GlobalShortcuts`; KDEs `kglobalaccel`
-  nimmt die Anmeldung an, liefert das Signal aber nicht aus (gemessen).
+* **Globale Kurzbefehle gehen nur unter Plasma** (`kglobalaccel`, siehe
+  `services/shortcuts.py`). Der portable Weg wäre
+  `org.freedesktop.portal.GlobalShortcuts` — der verlangt aber ein
+  Elternfenster und einen Bestätigungsdialog je Sitzung.
+
+  Hier stand früher, `kglobalaccel` liefere das Signal nicht aus. Das war
+  ein Messfehler: Ohne passende `AddMatch`-Regel schickt der Bus einem
+  Client keine Broadcasts. Am 2026-08-19 mit Regel nachgemessen — das Signal
+  kommt an, vom echten Tastendruck über den Compositor bis in den Dienst
+  (`tests/hotkey_test.py`).
 * Plugin-Hot-Reload lädt Manifeste und Klassen neu, aber Python cached
   bereits importierte Module — nach Änderungen an einem Plugin ist ein
   Neustart des Backends der verlässlichere Weg.

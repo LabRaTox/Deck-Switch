@@ -76,6 +76,8 @@ interface StoreState {
       tile_size?: number;
       overlay_transparent?: boolean;
       hide_empty?: boolean;
+      /** Globaler Kurzbefehl fürs Overlay. Leerer Text nimmt ihn weg. */
+      overlay_hotkey?: string;
       /** Nur bei Netz-Decks: ob sie im Netz angeboten werden. */
       network_enabled?: boolean;
     },

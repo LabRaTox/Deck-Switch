@@ -354,6 +354,14 @@ input[type="checkbox"] {
   margin: 4px 0 0;
 }
 
+/* Warnungen stehen im Formular als `help error-text` — kleine Schrift wie
+   ein Hinweis, aber in Warnfarbe. Ohne diese Regel gewänne `.help`: Es hat
+   dieselbe Spezifität und steht weiter unten in der Datei, und der Hinweis
+   auf ein Problem sähe aus wie jeder andere Hinweis. */
+.help.error-text {
+  color: #fca5a5;
+}
+
 /* --------------------------------------------------------------- Bibliothek */
 
 .library,

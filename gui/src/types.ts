@@ -192,6 +192,10 @@ export interface DeckInfo extends DeviceInfo {
   network_running?: boolean;
   overlay_available?: boolean;
   overlay_reason?: string;
+  /** Globaler Kurzbefehl, der das Overlay holt. Leer = keiner. */
+  overlay_hotkey?: string;
+  /** Warum der Kurzbefehl gerade *nicht* wirkt. Leer = er wirkt. */
+  hotkey_reason?: string;
 }
 
 export interface AppSettings {

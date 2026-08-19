@@ -47,7 +47,8 @@ Helligkeit und eigenen Zeiten. Zugeordnet über die Seriennummer.
 **Virtuelles Deck**
 Ein Deck als Overlay auf dem Bildschirm, mit frei wählbarem Raster — ohne
 Fensterrahmen, ohne Eintrag in Alt-Tab und ohne den Tastaturfokus zu
-stehlen. Frei platzierbar, die Stelle wird gemerkt.
+stehlen. Frei platzierbar, die Stelle wird gemerkt. Per **globalem
+Kurzbefehl** von überall herbeizurufen.
 
 **Netz-Deck**
 Ein Deck, das jemand anderes im selben Netz im Browser bedient — etwa der
