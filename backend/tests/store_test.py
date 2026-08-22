@@ -193,6 +193,15 @@ def main() -> None:
             check("dieselbe Fassung nicht zweimal",
                   _wirft(lambda: store.hochladen(archiv), store.StoreError))
 
+            meine = store.meine_plugins()
+            eigenes = next((p for p in meine["plugins"] if p["slug"] == slug), None)
+            check("es steht in den eigenen Einreichungen", eigenes is not None)
+            check("mit seinem Stand",
+                  eigenes and eigenes["versions"][0]["status"] == "pending",
+                  json.dumps(eigenes["versions"][0] if eigenes else None))
+            check("und noch nicht im Katalog",
+                  eigenes and eigenes["visibility"] == "draft")
+
             print("\nWer prüfen darf, erfährt davon")
             mod = f"{PRAEFIX}-mod"
             mod_token = node("test-account.mjs", mod, "moderator", umgebung=umgebung)

@@ -517,6 +517,31 @@ export interface StoreAccount {
   store_url: string;
 }
 
+/** Eine Fassung in der Übersicht der eigenen Einreichungen. */
+export interface StoreMineVersion {
+  version: string;
+  /** pending | approved | rejected | withdrawn | blocked */
+  status: string;
+  /** Warum zurückgezogen oder gesperrt. */
+  stateNote: string | null;
+  /** Was die Moderation dazugeschrieben hat — auch bei einer Ablehnung. */
+  reviewNote: string | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+  downloadCount: number;
+}
+
+/** Ein eigenes Plugin im Store, mit allen Fassungen. */
+export interface StoreMinePlugin {
+  id: number;
+  slug: string;
+  name: string;
+  kind: string;
+  visibility: string;
+  removedAt: string | null;
+  versions: StoreMineVersion[];
+}
+
 /** Schritt 1 der Anmeldung: der Code, den der Benutzer eintippt. */
 export interface StoreLoginStart {
   device_code: string;

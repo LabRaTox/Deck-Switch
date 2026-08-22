@@ -2817,3 +2817,83 @@ input[type="checkbox"] {
   color: var(--danger, #ef4444);
   font-size: 13px;
 }
+
+/* Einreichen und die eigenen Einreichungen. */
+.store-einreichen,
+.store-meine {
+  list-style: none;
+  margin: 8px 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.store-einreichen li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.store-meine li {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.store-meine-kopf {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.store-fassungen {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.store-fassungen td {
+  padding: 3px 8px 3px 0;
+  vertical-align: top;
+}
+
+/* Der Stand einer Fassung. Farbe statt Symbol: Was abgelehnt wurde, soll
+   man sehen, ohne es zu lesen — und was wartet, soll nicht wie ein Fehler
+   aussehen. */
+.zustand {
+  padding: 1px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.zustand.approved { border-color: var(--ok, #22c55e); color: var(--ok, #22c55e); }
+.zustand.pending { border-color: var(--accent); color: var(--accent); }
+.zustand.rejected,
+.zustand.blocked { border-color: var(--danger, #ef4444); color: var(--danger, #ef4444); }
+.zustand.withdrawn { color: var(--text-dim); }
+
+/* Die Quittung nach dem Einreichen. */
+.store-quittung {
+  border-left: 3px solid var(--accent);
+  background: var(--bg-sunken);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.store-quittung.gut {
+  border-left-color: var(--ok, #22c55e);
+}
+
+.store-quittung p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}

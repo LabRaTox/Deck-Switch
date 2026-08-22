@@ -24,7 +24,7 @@ import type {
   Selection,
   Slot,
   TouchWallpaper,
-  StorePending,
+  StoreAccount,
 } from "./types";
 
 interface StoreState {
@@ -47,12 +47,14 @@ interface StoreState {
   previewVersion: number;
   view: "editor" | "plugins" | "settings";
   /**
-   * Was im Store auf Prüfung wartet — nur gefüllt, wenn der Angemeldete
-   * prüfen darf. Steht hier und nicht in der Store-Ansicht, weil die
-   * Kopfzeile es anzeigt: Wer erst hineinklicken muss, um zu erfahren, dass
-   * etwas liegt, erfährt es zu spät.
+   * Wer im Store angemeldet ist und was dort auf Prüfung wartet.
+   *
+   * Steht hier und nicht in der Store-Ansicht, weil mehrere Stellen es
+   * brauchen: die Kopfzeile für die Zahl, das Einreichen für die Frage, ob
+   * überhaupt jemand angemeldet ist. Wer erst hineinklicken muss, um zu
+   * erfahren, dass etwas liegt, erfährt es zu spät.
    */
-  storePending: StorePending | null;
+  storeKonto: StoreAccount | null;
 
   load: () => Promise<void>;
   setOnline: (online: boolean) => void;
@@ -128,7 +130,7 @@ interface StoreState {
   setPluginConfig: (pluginId: string, config: Record<string, unknown>) => Promise<void>;
   setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<void>;
   reloadPlugins: () => Promise<void>;
-  refreshStorePending: () => Promise<void>;
+  refreshStoreKonto: () => Promise<void>;
   setPluginOrder: (order: string[]) => Promise<void>;
   uninstallPlugin: (pluginId: string) => Promise<void>;
   installRequests: InstallRequest[];
@@ -579,16 +581,16 @@ export const useStore = create<StoreState>((set, get) => ({
     await get().load();
   },
 
-  storePending: null,
+  storeKonto: null,
 
-  refreshStorePending: async () => {
+  refreshStoreKonto: async () => {
     try {
-      const konto = await api.storeAccount();
-      set({ storePending: konto.pending });
+      set({ storeKonto: await api.storeAccount() });
     } catch {
-      // Der Store kann aus sein oder niemand angemeldet — beides ist kein
-      // Grund, in der Oberfläche einen Fehler zu zeigen.
-      set({ storePending: null });
+      // Der Store kann aus sein oder nicht erreichbar — beides ist kein
+      // Grund, in der Oberfläche einen Fehler zu zeigen. Die eigenen
+      // Plugins stehen auch ohne ihn.
+      set({ storeKonto: null });
     }
   },
 

@@ -525,6 +525,28 @@
     "tag": "Store",
     "source": "Source",
     "update": "To {{version}}",
-    "newVersion": "Version {{version}} is in the store"
+    "newVersion": "Version {{version}} is in the store",
+    "submitTitle": "Submit a plugin",
+    "submitNeedsLogin": "You need to be signed in to the store to submit.",
+    "submitPick": "Which plugin?",
+    "submitNothing": "Nothing to submit — bundled plugins are already part of the app.",
+    "submit": "Submit",
+    "submitting": "Packing …",
+    "submitFindings_one": "The scan found 1 finding. It will be shown with your version.",
+    "submitFindings_other": "The scan found {{count}} findings. They will be shown with your version.",
+    "mineTitle": "My submissions",
+    "mineEmpty": "Nothing submitted yet.",
+    "status": {
+      "pending": "awaiting review",
+      "approved": "approved",
+      "rejected": "rejected",
+      "withdrawn": "withdrawn",
+      "blocked": "blocked"
+    },
+    "visibility": {
+      "draft": "not in the catalogue yet",
+      "hidden": "hidden",
+      "listed": "in the catalogue"
+    }
   }
 }

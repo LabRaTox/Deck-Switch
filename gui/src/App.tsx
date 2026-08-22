@@ -28,9 +28,9 @@ export default function App() {
     // Einmal beim Start und dann alle fünf Minuten: Eine wartende Einreichung
     // ist nichts, was auf die Sekunde ankommt — aber sie soll auffallen, ohne
     // dass jemand die App neu startet.
-    void useStore.getState().refreshStorePending();
+    void useStore.getState().refreshStoreKonto();
     const pruefungen = window.setInterval(
-      () => void useStore.getState().refreshStorePending(),
+      () => void useStore.getState().refreshStoreKonto(),
       5 * 60 * 1000,
     );
 

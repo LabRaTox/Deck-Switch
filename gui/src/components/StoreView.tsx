@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { useStore } from "../store";
-import type { StoreAccount, StoreLoginStart, StorePlugin, StoreWarnung } from "../types";
+import type { StoreLoginStart, StorePlugin, StoreWarnung } from "../types";
 
 /**
  * Die Teile, die der Store zur Plugin-Ansicht beisteuert.
@@ -100,7 +100,7 @@ export function Warnungen({ warnungen }: { warnungen: StoreWarnung[] }) {
  */
 export function StoreHinweis() {
   const { t } = useTranslation();
-  const pending = useStore((s) => s.storePending);
+  const pending = useStore((s) => s.storeKonto?.pending ?? null);
   if (!pending || pending.submissions + pending.reports === 0) return null;
 
   return (
@@ -127,26 +127,12 @@ export function StoreHinweis() {
  */
 export function StoreAnmeldung() {
   const { t } = useTranslation();
-  const refreshStorePending = useStore((s) => s.refreshStorePending);
+  const konto = useStore((s) => s.storeKonto);
+  const ladeKonto = useStore((s) => s.refreshStoreKonto);
 
-  const [konto, setKonto] = useState<StoreAccount | null>(null);
   const [start, setStart] = useState<StoreLoginStart | null>(null);
   const [fehler, setFehler] = useState("");
   const abfrage = useRef<number | null>(null);
-
-  const ladeKonto = useCallback(async () => {
-    try {
-      setKonto(await api.storeAccount());
-    } catch {
-      // Kein Konto zu haben ist kein Fehler — der Katalog steht auch ohne.
-      setKonto(null);
-    }
-    await refreshStorePending();
-  }, [refreshStorePending]);
-
-  useEffect(() => {
-    void ladeKonto();
-  }, [ladeKonto]);
 
   // Ohne dieses Aufräumen liefe die Nachfrage weiter, wenn die Ansicht
   // gewechselt wird — und schriebe irgendwann in eine Komponente, die es

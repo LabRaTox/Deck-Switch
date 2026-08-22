@@ -525,6 +525,28 @@
     "tag": "Store",
     "source": "Quelltext",
     "update": "Auf {{version}}",
-    "newVersion": "Im Store steht Fassung {{version}}"
+    "newVersion": "Im Store steht Fassung {{version}}",
+    "submitTitle": "Plugin einreichen",
+    "submitNeedsLogin": "Zum Einreichen musst du im Store angemeldet sein.",
+    "submitPick": "Welches Plugin?",
+    "submitNothing": "Nichts einzureichen — mitgelieferte Plugins gehören schon zur App.",
+    "submit": "Einreichen",
+    "submitting": "Wird gepackt …",
+    "submitFindings_one": "Die Durchsicht hat 1 Hinweis gefunden. Er steht später an deiner Fassung.",
+    "submitFindings_other": "Die Durchsicht hat {{count}} Hinweise gefunden. Sie stehen später an deiner Fassung.",
+    "mineTitle": "Meine Einreichungen",
+    "mineEmpty": "Noch nichts eingereicht.",
+    "status": {
+      "pending": "wartet auf Prüfung",
+      "approved": "freigegeben",
+      "rejected": "abgelehnt",
+      "withdrawn": "zurückgezogen",
+      "blocked": "gesperrt"
+    },
+    "visibility": {
+      "draft": "noch nicht im Katalog",
+      "hidden": "ausgeblendet",
+      "listed": "im Katalog"
+    }
   }
 }

@@ -11,6 +11,7 @@ import { PfadText } from "./PfadText";
 import { PluginDetail } from "./PluginDetail";
 import { PluginInstaller } from "./PluginInstaller";
 import { SettingsForm } from "./SettingsForm";
+import { StoreEinreichen } from "./StoreEinreichen";
 import { StoreAnmeldung, StoreKarte, StoreHinweis } from "./StoreView";
 
 /**
@@ -32,6 +33,7 @@ export function PluginsView() {
   const plugins = useStore((s) => s.plugins);
   const reloadPlugins = useStore((s) => s.reloadPlugins);
   const [installOpen, setInstallOpen] = useState(false);
+  const [einreichenOpen, setEinreichenOpen] = useState(false);
   const [typ, setTyp] = useState<PluginTyp>("action");
   /**
    * Der Katalog des Stores. `null`, solange er nicht da ist — der Store kann
@@ -127,6 +129,9 @@ export function PluginsView() {
         <h2>{t("plugins.title")}</h2>
         <div className="row">
           <StoreAnmeldung />
+          <button type="button" className="btn" onClick={() => setEinreichenOpen(true)}>
+            {t("store.submitTitle")}
+          </button>
           <button type="button" className="btn" onClick={() => void reloadPlugins()}>
             {t("plugins.reload")}
           </button>
@@ -250,6 +255,8 @@ export function PluginsView() {
           )}
         </div>
       </div>
+
+      {einreichenOpen && <StoreEinreichen onClose={() => setEinreichenOpen(false)} />}
 
       {installOpen && (
         <Modal
