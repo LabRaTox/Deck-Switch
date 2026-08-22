@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { localized } from "../i18n";
 import { useStore } from "../store";
-import type { StoreMinePlugin, StoreUploadResult } from "../types";
+import type { StoreMinePlugin, StorePlugin, StoreUploadResult } from "../types";
 import { Modal } from "./Modal";
 
 /**
@@ -18,7 +18,14 @@ import { Modal } from "./Modal";
  * weiß man, was hineingehört — und ein Archiv, das die Oberfläche baut,
  * müsste erst durch den Browser wandern, um denselben Weg zurückzunehmen.
  */
-export function StoreEinreichen({ onClose }: { onClose: () => void }) {
+export function StoreEinreichen({
+  katalog,
+  onClose,
+}: {
+  /** Der Katalog des Stores, wie ihn die Plugin-Ansicht schon geladen hat. */
+  katalog: StorePlugin[] | null;
+  onClose: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const installiert = useStore((s) => s.plugins);
   const konto = useStore((s) => s.storeKonto);
@@ -41,13 +48,28 @@ export function StoreEinreichen({ onClose }: { onClose: () => void }) {
     if (konto?.user) void lade();
   }, [konto?.user, lade]);
 
+  /** Die Kennungen, die im Store *mir* gehören. */
+  const meineKennungen = new Set((meine ?? []).map((p) => p.slug));
+
   /**
-   * Einreichen kann nur, was selbst installiert und nicht mitgeliefert ist.
+   * Was eingereicht werden kann.
    *
-   * Ein eingebautes Plugin gehört schon zur App — es im Store einzureichen
-   * ginge schief, denn seine Kennung ist dort für die App reserviert.
+   * Drei Bedingungen, und jede hat ihren Grund:
+   *
+   * - **Nicht mitgeliefert.** Ein eingebautes Plugin gehört schon zur App,
+   *   und seine Kennung ist im Store für sie reserviert.
+   * - **Nicht fremd.** Aus dem Store installierte Plugins liegen im selben
+   *   Verzeichnis wie die eigenen — der Lader unterscheidet sie nicht. Wer
+   *   sie hier angeboten bekäme, würde fremde Arbeit einreichen und vom
+   *   Store abgewiesen. Also gar nicht erst anbieten.
+   * - **Eigene bleiben drin**, auch wenn sie schon im Katalog stehen: Genau
+   *   so reicht man eine neue Fassung ein.
    */
-  const einreichbar = installiert.filter((p) => !p.builtin);
+  const fremd = new Set(
+    (katalog ?? []).map((p) => p.slug).filter((slug) => !meineKennungen.has(slug)),
+  );
+  const einreichbar = installiert.filter((p) => !p.builtin && !fremd.has(p.id));
+  const ausgeblendet = installiert.filter((p) => !p.builtin && fremd.has(p.id)).length;
 
   async function reicheEin(pluginId: string) {
     setLaeuft(pluginId);
@@ -91,6 +113,12 @@ export function StoreEinreichen({ onClose }: { onClose: () => void }) {
       )}
 
       <h4>{t("store.submitPick")}</h4>
+      {/* Wer ein Plugin vermisst, soll erfahren, warum es fehlt — statt zu
+          suchen, wo nichts ist. */}
+      {ausgeblendet > 0 && (
+        <p className="hint">{t("store.submitHiddenForeign", { count: ausgeblendet })}</p>
+      )}
+
       {einreichbar.length === 0 ? (
         <p className="hint">{t("store.submitNothing")}</p>
       ) : (
@@ -103,6 +131,9 @@ export function StoreEinreichen({ onClose }: { onClose: () => void }) {
                   {" "}
                   {plugin.id} · {plugin.manifest.version}
                 </span>
+                {meineKennungen.has(plugin.id) && (
+                  <div className="hint">{t("store.submitNewVersion")}</div>
+                )}
               </div>
               <button
                 type="button"

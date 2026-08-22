@@ -547,6 +547,9 @@
       "draft": "noch nicht im Katalog",
       "hidden": "ausgeblendet",
       "listed": "im Katalog"
-    }
+    },
+    "submitHiddenForeign_one": "Ein installiertes Plugin stammt aus dem Store und gehört jemand anderem — es steht deshalb nicht zur Auswahl.",
+    "submitHiddenForeign_other": "{{count}} installierte Plugins stammen aus dem Store und gehören jemand anderem — sie stehen deshalb nicht zur Auswahl.",
+    "submitNewVersion": "Steht schon im Store — das wird eine neue Fassung."
   }
 }
