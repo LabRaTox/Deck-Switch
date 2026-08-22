@@ -43,13 +43,22 @@ UNTERORDNER = "screenshots"
 #: Ein Deck ist dunkel und die Tasten sind quadratisch — das Bild soll
 #: aussehen wie das Gerät und nicht wie eine Webseite.
 HINTERGRUND = (16, 16, 20)
-TASTE = 132
+TASTE = 150
 LUECKE = 14
 RAND = 28
 RADIUS = 16
 
-#: Der Touchstrip des Stream Deck+ ist 800×100 — hier im selben Verhältnis.
-STRIP_HOEHE = 96
+#: Das Stream Deck+ hat vier Spalten. Ein Blatt mit drei Tasten nebeneinander
+#: sähe nach einem Gerät aus, das es nicht gibt — und der Streifen darunter
+#: hätte die falsche Breite.
+SPALTEN = 4
+
+#: Der Touchstrip ist ein einziger Bildschirm von 800×100, den die App in
+#: vier Segmente teilt — eines je Dial. Ein Plugin auf einem Dial zeichnet
+#: also in 200×100 und nicht über die ganze Breite. Beides steht in
+#: ``device.py`` (``touchscreen_size``, ``segment_size``).
+STRIP_PIXEL = (800, 100)
+SEGMENTE = 4
 
 
 def _parse(colour: str, vorgabe=(75, 85, 99)):
@@ -99,40 +108,49 @@ def _glyph(name: str, groesse: int, farbe="#ffffff"):
     return Image.open(io.BytesIO(png)).convert("RGBA")
 
 
-def _taste(symbol: str | None, text: str, akzent, gross: str = "") -> Image.Image:
+def _taste(
+    symbol: str | None,
+    text: str,
+    akzent,
+    gross: str = "",
+    oben: str = "",
+    mittel: str = "",
+    balken: float | None = None,
+    rahmen: bool = False,
+    farbe=None,
+    grund=None,
+) -> Image.Image:
     """Eine einzelne Taste, wie das Deck sie zeigt.
 
-    ``gross`` ersetzt das Symbol durch eine große Zahl — so sieht eine Taste
-    aus, die einen Wert anzeigt statt eines Zustands.
+    Die Teile sind dieselben, aus denen die Plugins ihre Tasten bauen: eine
+    kleine Kopfzeile (``oben``), ein Symbol, eine große Zahl (``gross``), eine
+    kräftige Zeile darüber (``mittel``), eine Beschriftung am unteren Rand, ein Pegelbalken und ein Rahmen für einen
+    aktiven Zustand. Welche davon vorkommen, entscheidet das Beispiel — je
+    nachdem, was das Plugin an dieser Stelle wirklich zeichnet.
     """
     bild = Image.new("RGBA", (TASTE, TASTE), (0, 0, 0, 0))
     stift = ImageDraw.Draw(bild)
+    farbe = farbe or akzent
 
-    # Die Tastenfläche: fast schwarz, ein Hauch der Akzentfarbe darin.
-    flaeche = _mix((24, 24, 28), akzent, 0.10)
+    # Die Tastenfläche: fast schwarz, ein Hauch der Akzentfarbe darin. Ein
+    # Bildschirmschoner bekommt das Deck als ein Bild und schwärzt es — der
+    # gibt seinen eigenen Grund vor.
+    flaeche = grund if grund else _mix((24, 24, 28), farbe, 0.10)
     stift.rounded_rectangle((0, 0, TASTE - 1, TASTE - 1), radius=RADIUS, fill=(*flaeche, 255))
 
-    hat_text = bool(text)
-    if gross:
-        schrift = _schrift(46, fett=True)
-        breite = stift.textlength(gross, font=schrift)
-        stift.text(
-            ((TASTE - breite) / 2, TASTE / 2 - 34), gross, font=schrift, fill=(*akzent, 255)
-        )
-    else:
-        glyph = _glyph(symbol, round(TASTE * (0.42 if hat_text else 0.52)))
-        if glyph is not None:
-            oben = round(TASTE * (0.16 if hat_text else 0.24))
-            bild.alpha_composite(glyph, ((TASTE - glyph.width) // 2, oben))
+    # Von unten nach oben: Beschriftung sitzt am Rand, alles andere füllt den
+    # Platz darüber. So bleiben Tasten mit und ohne Zahl auf einer Höhe.
+    unterkante = TASTE - 12 - (10 if balken is not None else 0)
 
-    if hat_text:
-        schrift = _schrift(15)
-        # Lange Namen umbrechen statt abschneiden: Auf einer Taste steht
-        # sonst „Zufallswiederg…“, und das hilft niemandem.
-        worte, zeilen, zeile = text.split(), [], ""
-        for wort in worte:
+    zeilen: list[str] = []
+    if text:
+        schrift_text = _schrift(15)
+        zeile = ""
+        for wort in text.split():
             versuch = f"{zeile} {wort}".strip()
-            if stift.textlength(versuch, font=schrift) <= TASTE - 12:
+            # Lange Namen umbrechen statt abschneiden: Auf einer Taste steht
+            # sonst „Zufallswiederg…“, und das hilft niemandem.
+            if stift.textlength(versuch, font=schrift_text) <= TASTE - 12:
                 zeile = versuch
             else:
                 if zeile:
@@ -142,20 +160,85 @@ def _taste(symbol: str | None, text: str, akzent, gross: str = "") -> Image.Imag
             zeilen.append(zeile)
         zeilen = zeilen[:2]
 
-        y = TASTE - 12 - len(zeilen) * 17
-        for eintrag in zeilen:
-            breite = stift.textlength(eintrag, font=schrift)
-            stift.text(((TASTE - breite) / 2, y), eintrag, font=schrift, fill=(226, 232, 240, 255))
-            y += 17
+    raum_unten = unterkante - len(zeilen) * 17 - (24 if mittel else 0)
+    raum_oben = 8
+    if oben:
+        stift.text(
+            ((TASTE - stift.textlength(oben, font=_schrift(13))) / 2, raum_oben),
+            oben,
+            font=_schrift(13),
+            fill=(199, 199, 209, 255),
+        )
+        raum_oben += 20
+
+    glyph = None
+    if symbol and not (gross and not oben and not zeilen):
+        kleiner = bool(gross or oben or zeilen)
+        glyph = _glyph(symbol, round(TASTE * (0.36 if gross else 0.42 if kleiner else 0.52)))
+
+    schrift_gross = _schrift(38 if glyph is not None else 46, fett=True)
+    hoehe_gross = 42 if gross else 0
+    hoehe_glyph = glyph.height + (6 if gross else 0) if glyph is not None else 0
+
+    y = raum_oben + max(0, (raum_unten - raum_oben - hoehe_glyph - hoehe_gross)) // 2
+    if glyph is not None:
+        bild.alpha_composite(glyph, ((TASTE - glyph.width) // 2, round(y)))
+        y += hoehe_glyph
+    if gross:
+        stift.text(
+            ((TASTE - stift.textlength(gross, font=schrift_gross)) / 2, y),
+            gross,
+            font=schrift_gross,
+            fill=(*farbe, 255),
+        )
+
+    y = unterkante - len(zeilen) * 17 - (24 if mittel else 0)
+    if mittel:
+        breite = stift.textlength(mittel, font=_schrift(19, fett=True))
+        stift.text(
+            ((TASTE - breite) / 2, y), mittel, font=_schrift(19, fett=True), fill=(240, 244, 248, 255)
+        )
+        y += 24
+    for eintrag in zeilen:
+        breite = stift.textlength(eintrag, font=_schrift(15))
+        stift.text(((TASTE - breite) / 2, y), eintrag, font=_schrift(15), fill=(226, 232, 240, 255))
+        y += 17
+
+    if balken is not None:
+        # Dieselbe Geometrie wie ``render.draw_bar``: zehn Pixel Abstand zu
+        # den Seiten, sechs Pixel hoch, direkt über der unteren Kante.
+        links, rechts = 10, TASTE - 10
+        kopf, fuss = TASTE - 16, TASTE - 10
+        stift.rounded_rectangle((links, kopf, rechts, fuss), radius=3, fill=(255, 255, 255, 38))
+        breite = round((rechts - links) * max(0.0, min(1.0, balken)))
+        if breite > 3:
+            stift.rounded_rectangle(
+                (links, kopf, links + breite, fuss), radius=3, fill=(*farbe, 255)
+            )
+
+    if rahmen:
+        stift.rounded_rectangle(
+            (1, 1, TASTE - 2, TASTE - 2), radius=RADIUS - 1, outline=(*farbe, 255), width=3
+        )
 
     return bild
 
 
-def _blatt(spalten: int, zeilen: int, strip: bool = False) -> Image.Image:
-    breite = RAND * 2 + spalten * TASTE + (spalten - 1) * LUECKE
+def _breite() -> int:
+    """Die Innenbreite eines Blattes — vier Tasten und die Lücken dazwischen."""
+    return SPALTEN * TASTE + (SPALTEN - 1) * LUECKE
+
+
+def _strip_hoehe() -> int:
+    """Der Streifen im Verhältnis des echten: 800 breit, 100 hoch."""
+    return round(_breite() * STRIP_PIXEL[1] / STRIP_PIXEL[0])
+
+
+def _blatt(zeilen: int, strip: bool = False) -> Image.Image:
+    breite = RAND * 2 + _breite()
     hoehe = RAND * 2 + zeilen * TASTE + (zeilen - 1) * LUECKE
     if strip:
-        hoehe += STRIP_HOEHE + LUECKE
+        hoehe += _strip_hoehe() + LUECKE
     return Image.new("RGB", (breite, hoehe), HINTERGRUND)
 
 
@@ -167,17 +250,121 @@ def _setze(blatt: Image.Image, taste: Image.Image, spalte: int, zeile: int) -> N
     )
 
 
-def _touchstrip(blatt: Image.Image, akzent, text: str, wert: str) -> None:
-    """Der Streifen unter den Tasten — beim Stream Deck+ die zweite Ebene."""
-    stift = ImageDraw.Draw(blatt)
-    oben = blatt.height - RAND - STRIP_HOEHE
-    stift.rounded_rectangle(
-        (RAND, oben, blatt.width - RAND - 1, oben + STRIP_HOEHE - 1),
-        radius=12,
-        fill=(*_mix((20, 20, 24), akzent, 0.08), 255),
+def _leere_taste(akzent, grund=None) -> Image.Image:
+    """Eine Taste, auf der nichts liegt. Gehört dazu: Ein Deck hat acht."""
+    bild = Image.new("RGBA", (TASTE, TASTE), (0, 0, 0, 0))
+    ImageDraw.Draw(bild).rounded_rectangle(
+        (0, 0, TASTE - 1, TASTE - 1),
+        radius=RADIUS,
+        fill=(*(grund if grund else _mix((20, 20, 23), akzent, 0.04)), 255),
     )
-    stift.text((RAND + 20, oben + 22), text, font=_schrift(17), fill=(148, 163, 184, 255))
-    stift.text((RAND + 20, oben + 46), wert, font=_schrift(28, fett=True), fill=(*akzent, 255))
+    return bild
+
+
+def _streifen(
+    blatt: Image.Image, akzent, geteilt: bool = True, grund=None
+) -> tuple[int, int, int, int]:
+    """Zeichnet den Touchstrip und gibt sein Rechteck zurück.
+
+    ``geteilt`` zieht die Trennlinien zwischen den vier Segmenten ein. Ein
+    Bildschirmschoner malt über den ganzen Streifen und braucht sie nicht —
+    ein Plugin auf einem Dial hat nur sein Viertel.
+    """
+    stift = ImageDraw.Draw(blatt)
+    links, breite, hoehe = RAND, _breite(), _strip_hoehe()
+    oben = blatt.height - RAND - hoehe
+    stift.rounded_rectangle(
+        (links, oben, links + breite - 1, oben + hoehe - 1),
+        radius=10,
+        fill=(*(grund if grund else _mix((20, 20, 24), akzent, 0.08)), 255),
+    )
+    if geteilt:
+        for i in range(1, SEGMENTE):
+            x = links + round(breite * i / SEGMENTE)
+            stift.line((x, oben + 6, x, oben + hoehe - 6), fill=(255, 255, 255, 22))
+    return links, oben, breite, hoehe
+
+
+def _segment(blatt: Image.Image, akzent, nummer: int) -> tuple[int, int, int, int, float]:
+    """Das Rechteck eines Segments samt Maßstab zu den echten 200×100."""
+    links, oben, breite, hoehe = _streifen(blatt, akzent)
+    seg = breite / SEGMENTE
+    return (
+        round(links + seg * nummer),
+        oben,
+        round(seg),
+        hoehe,
+        hoehe / STRIP_PIXEL[1],
+    )
+
+
+def _segment_medien(blatt, akzent, symbol: str, titel: str, kuenstler: str) -> None:
+    """Was Spotify auf einem Dial zeigt: Symbol links, Titel, Künstler.
+
+    Im Betrieb liegt dahinter noch das Albumbild, weichgezeichnet. Das hier
+    zeigt den Fall ohne Cover — ein erfundenes Album wäre ein fremdes Bild in
+    unserem Repository.
+    """
+    x, y, breite, hoehe, f = _segment(blatt, akzent, 0)
+    stift = ImageDraw.Draw(blatt)
+
+    glyph = _glyph(symbol, round(55 * f))
+    if glyph is not None:
+        blatt.paste(glyph, (x + round(10 * f), y + (hoehe - glyph.height) // 2), glyph)
+
+    text = x + round(75 * f)
+    platz = breite - round(87 * f)
+    stift.text((text, y + round(14 * f)), _kuerze(stift, titel, _schrift(round(16 * f)), platz),
+               font=_schrift(round(16 * f)), fill=(240, 244, 248, 255))
+    stift.text((text, y + round(36 * f)), _kuerze(stift, kuenstler, _schrift(round(13 * f)), platz),
+               font=_schrift(round(13 * f)), fill=(199, 199, 209, 255))
+
+
+def _segment_wetter(blatt, akzent, symbol: str, kopf: str, gross: str, rechts: str) -> None:
+    """Und was das Wetter auf einem Dial zeigt: die Stundenansicht."""
+    x, y, breite, hoehe, f = _segment(blatt, akzent, 0)
+    stift = ImageDraw.Draw(blatt)
+
+    glyph = _glyph(symbol, round(56 * f))
+    if glyph is not None:
+        blatt.paste(glyph, (x + round(10 * f), y + (hoehe - glyph.height) // 2), glyph)
+
+    links = x + round(76 * f)
+    platz = breite - round(88 * f)
+    stift.text((links, y + round(8 * f)), _kuerze(stift, kopf, _schrift(round(12 * f)), platz),
+               font=_schrift(round(12 * f)), fill=(199, 199, 209, 255))
+    stift.text((links, y + round(30 * f)), gross, font=_schrift(round(24 * f), fett=True),
+               fill=(226, 232, 240, 255))
+
+    schrift = _schrift(round(12 * f))
+    stift.text((x + breite - round(12 * f) - stift.textlength(rechts, font=schrift),
+                y + round(36 * f)), rechts, font=schrift, fill=(147, 197, 253, 255))
+
+
+def _streifen_text(blatt, akzent, text: str, grund=None) -> None:
+    """Ein Wort über den ganzen Streifen — so macht es der Bildschirmschoner.
+
+    Er bekommt das Deck als *ein* Bild und darf überall hinmalen. Das ist der
+    einzige Fall, in dem eine Darstellung über die Segmentgrenzen geht.
+    """
+    _, oben, breite, hoehe = _streifen(blatt, akzent, geteilt=False, grund=grund)
+    stift = ImageDraw.Draw(blatt)
+    schrift = _schrift(round(hoehe * 0.5), fett=True)
+    stift.text(
+        (RAND + (breite - stift.textlength(text, font=schrift)) / 2, oben + hoehe * 0.22),
+        text,
+        font=schrift,
+        fill=(226, 232, 240, 160),
+    )
+
+
+def _kuerze(stift, text: str, schrift, platz: int) -> str:
+    """Kürzt mit Auslassungszeichen, wie es die Anzeige auch tut."""
+    if stift.textlength(text, font=schrift) <= platz:
+        return text
+    while text and stift.textlength(text + "…", font=schrift) > platz:
+        text = text[:-1]
+    return text + "…"
 
 
 # --------------------------------------------------------------------------
@@ -188,62 +375,113 @@ def _touchstrip(blatt: Image.Image, akzent, text: str, wert: str) -> None:
 def _aktionen_blatt(manifest: dict, akzent) -> Image.Image:
     """Alle Aktionen des Plugins als Tastenfeld."""
     aktionen = manifest.get("actions") or []
-    spalten = min(4, max(1, len(aktionen)))
-    zeilen = max(1, -(-len(aktionen) // spalten))
+    zeilen = max(1, -(-len(aktionen) // SPALTEN))
 
-    blatt = _blatt(spalten, zeilen)
-    for i, aktion in enumerate(aktionen):
-        name = aktion.get("name")
+    blatt = _blatt(zeilen)
+    for i in range(zeilen * SPALTEN):
+        spalte, zeile = i % SPALTEN, i // SPALTEN
+        if i >= len(aktionen):
+            _setze(blatt, _leere_taste(akzent), spalte, zeile)
+            continue
+        name = aktionen[i].get("name")
         beschriftung = name.get("de") if isinstance(name, dict) else str(name or "")
-        _setze(
-            blatt,
-            _taste(aktion.get("default_icon"), beschriftung, akzent),
-            i % spalten,
-            i // spalten,
-        )
+        _setze(blatt, _taste(aktionen[i].get("default_icon"), beschriftung, akzent), spalte, zeile)
     return blatt
 
 
-#: Was ein Plugin auf einer Taste zeigt, wenn es läuft. Beispielwerte — sie
-#: stehen hier und nicht im Code der Bilder, damit sichtbar bleibt, dass sie
-#: erfunden sind.
+#: Was ein Plugin auf einem laufenden Deck zeigt.
+#:
+#: Die Werte sind erfunden — es gibt keine 18 Grad und kein laufendes Lied,
+#: während dieses Skript läuft. Der Aufbau ist es nicht: Was hier steht, hält
+#: sich an das, was ``render()`` im jeweiligen Plugin zeichnet. Die
+#: Wiedergabe-Taste zeigt deshalb den Titel und nicht den Künstler (Vorgabe
+#: von ``show_track``), die Lautstärke hat einen Balken statt einer
+#: Prozentzahl, und was auf einem Dial läuft, füllt ein Viertel des Streifens
+#: und nicht den ganzen.
 BEISPIELE = {
-    "weather": [
-        ("18°", "Berlin", "sun"),
-        ("7 %", "Regen morgen", "cloud-rain"),
-        ("42", "Luftqualität", "wind"),
-    ],
-    "spotify": [
-        ("", "Sunrise Avenue", "player-pause"),
-        ("", "Nächster Titel", "player-track-next"),
-        ("65 %", "Lautstärke", "volume"),
-    ],
-    # Je eine Ziffer pro Taste — genau so, wie die Beschreibung es sagt.
-    "clock-saver": [
-        ("1", "", ""),
-        ("4", "", ""),
-        ("3", "", ""),
-        ("5", "", ""),
-    ],
+    "weather": {
+        # _render_current_key, _render_forecast_key, _render_air_key
+        "tasten": [
+            {"symbol": "cloud", "gross": "18°", "text": "bedeckt"},
+            {"oben": "Sa", "symbol": "cloud-rain", "mittel": "21° / 11°", "text": "40 % Regen"},
+            {"oben": "AQI", "gross": "42", "text": "Gut", "farbe": (34, 197, 94)},
+        ],
+        # _render_hourly — die Vorgabe für ein Dial-Segment
+        "segment": ("wetter", "cloud", "Berlin · 14:00", "18°", "40 % Regen"),
+    },
+    "spotify": {
+        # Die Wiedergabe läuft: Titel als Beschriftung, Akzentrahmen darum.
+        # „Nächster Titel“ und „Lautstärke“ tragen den Namen, den man der
+        # Taste selbst gibt — das Plugin liefert dort keine Beschriftung.
+        "tasten": [
+            {"symbol": "player-pause", "text": "Fairytale Gone Bad", "rahmen": True},
+            {"symbol": "player-track-prev", "text": "Vorheriger Titel"},
+            {"symbol": "player-track-next", "text": "Nächster Titel"},
+            {"symbol": "volume", "text": "Lautstärke", "balken": 0.65},
+        ],
+        # _render_multimedia
+        "segment": ("medien", "player-pause", "Fairytale Gone Bad", "Sunrise Avenue"),
+    },
+    # Der Bildschirmschoner malt über das ganze Deck: obere Reihe Uhrzeit,
+    # untere das Datum, je eine Ziffer pro Taste, und der Wochentag über den
+    # Streifen.
+    "clock-saver": {
+        # Schwarz und ein helles Grau — die Vorgaben des Schoners, nicht die
+        # Akzentfarbe des Plugins.
+        "grund": (0, 0, 0),
+        "farbe": (226, 232, 240),
+        "tasten": [
+            {"gross": "1"}, {"gross": "4"}, {"gross": "3"}, {"gross": "5"},
+            {"gross": "2"}, {"gross": "2"}, {"gross": "0"}, {"gross": "8"},
+        ],
+        "segment": ("ganz", "Freitag"),
+    },
 }
 
 
 def _beispiel_blatt(kennung: str, akzent) -> Image.Image | None:
-    """Ein Blatt mit Beispielwerten — was im Betrieb auf den Tasten steht."""
-    eintraege = BEISPIELE.get(kennung)
-    if not eintraege:
+    """Ein Blatt mit Beispielwerten — was im Betrieb auf dem Deck steht."""
+    beispiel = BEISPIELE.get(kennung)
+    if not beispiel:
         return None
 
-    blatt = _blatt(len(eintraege), 1, strip=True)
-    for i, (wert, beschriftung, symbol) in enumerate(eintraege):
-        _setze(blatt, _taste(symbol, beschriftung, akzent, gross=wert), i, 0)
+    grund = beispiel.get("grund")
+    vorgabe = beispiel.get("farbe")
+    tasten = beispiel["tasten"]
+    zeilen = max(1, -(-len(tasten) // SPALTEN))
+    blatt = _blatt(zeilen, strip=True)
 
-    strip = {
-        "weather": ("Berlin · bedeckt", "18°   max 21°   min 11°"),
-        "spotify": ("Sunrise Avenue — Fairytale Gone Bad", "2:31 / 3:14"),
-        "clock-saver": ("Freitag, 22. August", "14:35"),
-    }[kennung]
-    _touchstrip(blatt, akzent, *strip)
+    for i in range(zeilen * SPALTEN):
+        spalte, zeile = i % SPALTEN, i // SPALTEN
+        if i >= len(tasten):
+            _setze(blatt, _leere_taste(akzent, grund), spalte, zeile)
+            continue
+        taste = tasten[i]
+        _setze(
+            blatt,
+            _taste(
+                taste.get("symbol"),
+                taste.get("text", ""),
+                akzent,
+                gross=taste.get("gross", ""),
+                oben=taste.get("oben", ""),
+                mittel=taste.get("mittel", ""),
+                balken=taste.get("balken"),
+                rahmen=taste.get("rahmen", False),
+                farbe=taste.get("farbe", vorgabe),
+                grund=grund,
+            ),
+            spalte,
+            zeile,
+        )
+
+    art, *rest = beispiel["segment"]
+    if art == "medien":
+        _segment_medien(blatt, akzent, *rest)
+    elif art == "wetter":
+        _segment_wetter(blatt, akzent, *rest)
+    else:
+        _streifen_text(blatt, akzent, *rest, grund=grund)
     return blatt
 
 

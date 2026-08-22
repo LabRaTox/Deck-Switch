@@ -535,6 +535,10 @@
     "submitFindings_other": "Die Durchsicht hat {{count}} Hinweise gefunden. Sie stehen später an deiner Fassung.",
     "mineTitle": "Meine Einreichungen",
     "mineEmpty": "Noch nichts eingereicht.",
+    "delete": "Löschen",
+    "withdraw": "Zurückziehen",
+    "deleteConfirm": "„{{name}}“ {{version}} löschen? Die Fassung war nie im Katalog — sie verschwindet samt Archiv, und die Nummer ist wieder frei.",
+    "withdrawConfirm": "„{{name}}“ {{version}} zurückziehen? Die Fassung fällt aus dem Katalog. Wer sie schon installiert hat, kann sie weiter herunterladen.",
     "status": {
       "pending": "wartet auf Prüfung",
       "approved": "freigegeben",

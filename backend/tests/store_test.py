@@ -248,6 +248,31 @@ def main() -> None:
             check("die Installation bricht ab",
                   _wirft(lambda: store.installiere(slug), installer.ChecksumError))
 
+            print("\nEine eigene Einreichung zurücknehmen")
+            store.schreib_token(token)
+            zurueck = store.zuruecknehmen(slug, "1.0.0")
+            check("die freigegebene Fassung wird nur zurückgezogen",
+                  zurueck["aktion"] == "zurueckgezogen", json.dumps(zurueck))
+            store.vergiss()
+            check("und fällt damit aus dem Katalog",
+                  store.katalog(q=slug)["count"] == 0)
+            check("ein zweites Mal geht nicht",
+                  _wirft(lambda: store.zuruecknehmen(slug, "1.0.0"), store.StoreError))
+
+            # Was noch niemand bekommen hat, verschwindet ganz — samt Nummer.
+            # Genau das braucht, wer versehentlich einen halben Stand hochlädt.
+            zweite = store.packe(baue_plugin(Path(tmp) / "zweite", slug, "1.1.0"))
+            store.hochladen(zweite, dateiname=f"{slug}.zip")
+            check("eine wartende Fassung verschwindet ganz",
+                  store.zuruecknehmen(slug, "1.1.0")["aktion"] == "geloescht")
+            check("und ihre Nummer ist wieder zu haben",
+                  store.hochladen(zweite)["version"] == "1.1.0")
+
+            store.schreib_token(mod_token)
+            check("fremde Einreichungen gehen niemanden etwas an",
+                  _wirft(lambda: store.zuruecknehmen(slug, "1.1.0"), store.StoreError))
+            store.schreib_token(token)
+
             print("\nAbmelden")
             store.abmelden()
             check("das Token ist weg", store.lies_token() == "")

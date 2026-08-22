@@ -535,6 +535,10 @@
     "submitFindings_other": "The scan found {{count}} findings. They will be shown with your version.",
     "mineTitle": "My submissions",
     "mineEmpty": "Nothing submitted yet.",
+    "delete": "Delete",
+    "withdraw": "Withdraw",
+    "deleteConfirm": "Delete “{{name}}” {{version}}? That version was never in the catalogue — it goes away together with its archive, and the number is free again.",
+    "withdrawConfirm": "Withdraw “{{name}}” {{version}}? The version leaves the catalogue. Anyone who already installed it can still download it.",
     "status": {
       "pending": "awaiting review",
       "approved": "approved",

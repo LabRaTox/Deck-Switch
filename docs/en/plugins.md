@@ -184,7 +184,16 @@ and tar.gz all work: the store accepts what it can open for review. What
 ships later is always a ZIP, because that is what the installer can unpack.
 
 The same window lists your previous submissions with their state (waiting,
-approved, rejected) and the moderator's note.
+approved, rejected) and the moderator's note. Every row has a button to get
+rid of it again, and what that does depends on the state:
+
+* **Waiting or rejected:** the version is deleted, its archive with it, and
+  the version number is free again. Handy when you uploaded too early.
+* **Approved:** it only leaves the catalogue. Anyone who already installed it
+  can still download it — otherwise a fresh install would suddenly face an
+  address that no longer exists.
+* **Blocked:** stays where it is. A moderator decided that, and no button of
+  yours changes it.
 
 ### streamdeck:// links
 

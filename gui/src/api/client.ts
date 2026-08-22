@@ -459,6 +459,19 @@ export const api = {
   storeMine: () =>
     request<{ count: number; plugins: StoreMinePlugin[] }>("/api/store/mine"),
 
+  /**
+   * Eine eigene Einreichung zurücknehmen.
+   *
+   * Was daraus wird, steht in `aktion`: `geloescht` heißt weg, samt Archiv —
+   * `zurueckgezogen` heißt raus aus dem Katalog, aber weiter herunterladbar
+   * für alle, die die Fassung schon haben.
+   */
+  storeWithdraw: (slug: string, version: string) =>
+    request<{ slug: string; version: string; aktion: string; pluginWeg: boolean }>(
+      `/api/store/mine/${encodeURIComponent(slug)}/${encodeURIComponent(version)}`,
+      { method: "DELETE" },
+    ),
+
   /** Ob eine Kennung im Store noch zu haben ist. */
   storeSlug: (slug: string) =>
     request<{ slug: string; frei: boolean; grund: string; aehnlich: string[] }>(

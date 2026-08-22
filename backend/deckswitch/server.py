@@ -1322,6 +1322,18 @@ def create_app(
         except store.StoreError as exc:
             raise HTTPException(400, str(exc)) from exc
 
+    @app.delete("/api/store/mine/{slug}/{version}")
+    async def store_mine_delete(slug: str, version: str) -> dict[str, Any]:
+        """Nimmt eine eigene Einreichung zurück.
+
+        Ob daraus ein Löschen wird oder nur ein Rückzug aus dem Katalog,
+        entscheidet der Store — hier wird nur weitergereicht, was er sagt.
+        """
+        try:
+            return await _im_hintergrund(lambda: store.zuruecknehmen(slug, version))
+        except store.StoreError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @app.post("/api/store/upload")
     async def store_upload(plugin_id: str = Body(..., embed=True)) -> dict[str, Any]:
         """Reicht ein installiertes Plugin beim Store ein.
