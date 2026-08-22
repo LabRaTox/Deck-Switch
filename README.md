@@ -107,13 +107,17 @@ This is meant for **CachyOS and Arch Linux**, so `setup.sh` needs `pacman`.
 On other distributions it stops and shows you the list of packages to install
 yourself.
 
-### From the AUR
+### Build the package
 
-The convenient way. It puts the udev rule and the systemd unit where they
-belong, which is exactly the step people forget when doing it by hand.
+DECK//SWITCH is not in the AUR yet. The packaging files are in the repository
+though, so you can build it yourself. It is worth doing, because the package
+puts the udev rule and the systemd unit where they belong — exactly the step
+people forget when doing it by hand.
 
 ```sh
-paru -S deckswitch        # or yay, or makepkg from packaging/aur/
+git clone https://github.com/LabRaTox/Deck-Switch.git
+cd Deck-Switch/packaging/aur
+makepkg -si
 systemctl --user enable --now deckswitch.service
 ```
 
@@ -126,7 +130,7 @@ sudo usermod -aG input "$USER"
 
 ### From the repository
 
-For hacking on it, or if you want something newer than the last release:
+For hacking on it, or if you would rather not package anything:
 
 ```sh
 git clone https://github.com/LabRaTox/Deck-Switch.git

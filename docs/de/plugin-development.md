@@ -2,13 +2,14 @@
 
 *[English version](../en/plugin-development.md)* · Zurück zur [Übersicht](../../README.de.md).
 
-Es gibt zwei Sorten: **Action-Plugins** steuern Tasten, Dials und
+Es gibt zwei Sorten. **Action-Plugins** steuern Tasten, Dials und
 Touchstrip-Segmente, **Iconset-Plugins** liefern nur SVGs für den
 Icon-Picker.
 
-Plugins liegen in `~/.local/share/deckswitch/plugins/<plugin-id>/`.
-Die mitgelieferten Plugins unter `backend/plugins/` sind technisch
-identisch aufgebaut und taugen als Vorlage.
+Plugins liegen in `~/.local/share/deckswitch/plugins/`. Jeder Ordner dort
+trägt eine laufende Nummer, welches Plugin darin steckt, steht in seiner
+`manifest.json`. Die mitgelieferten Plugins unter `backend/plugins/` sind
+technisch identisch aufgebaut und taugen gut als Vorlage.
 
 ---
 
@@ -21,13 +22,19 @@ Ein Plugin darf ein Bild mitbringen, das es in der Übersicht vertritt:
 ```
 
 256 × 256 Pixel, PNG (auch JPEG, WebP oder SVG). Die Datei liegt im
-Plugin-Ordner; Pfade nach außen weist das Backend ab. Das Symbol erscheint
-ausschließlich in der Plugin-Liste, nicht bei den Aktionen.
+Plugin-Ordner, und Pfade nach außen weist das Backend ab. Das Symbol
+erscheint nur in der Plugin-Liste und nicht bei den Aktionen.
+
+Dazu kannst du bis zu drei Bilder für die Detailansicht angeben:
+
+```json
+{ "screenshots": ["screenshots/deck.png", "screenshots/aktionen.png"] }
+```
 
 ## Action-Plugin
 
-Minimales Beispiel — ein Plugin mit einer Aktion, die einen Zähler
-hochzählt:
+Ein minimales Beispiel: ein Plugin mit einer Aktion, die einen Zähler
+hochzählt.
 
 ```
 counter/
@@ -71,7 +78,7 @@ counter/
 }
 ```
 
-Das `settings_schema` ist wichtig: **die GUI baut ihr Formular allein
+Das `settings_schema` ist wichtig, denn **die GUI baut ihr Formular allein
 daraus**. Ein Plugin muss dafür nichts in der Oberfläche ergänzen.
 
 Feldtypen: `text`, `number`, `bool`, `select`, `color`, `path`, `file`,
@@ -104,15 +111,14 @@ class CounterPlugin(ActionPlugin):
 ```
 
 Das war alles. Gezeichnet wird über das gemeinsame Layout: Hintergrund,
-Icon (passend zum State), Label darunter — Icon, Größen, Farben und
-Hintergrund stellt der Nutzer in der GUI ein, ohne dass das Plugin etwas
-dafür tun muss.
+Icon passend zum State, Label darunter. Icon, Größen, Farben und Hintergrund
+stellt der Nutzer in der GUI ein, dafür muss das Plugin nichts tun.
 
 ## Die Hooks
 
-Alle sind optional, alle dürfen `def` **oder** `async def` sein. Synchrone
-Hooks laufen in einem Worker-Thread — ein `subprocess.run` blockiert also
-nie die Anwendung.
+Alle sind optional, und alle dürfen `def` **oder** `async def` sein.
+Synchrone Hooks laufen in einem Worker-Thread. Ein `subprocess.run` blockiert
+also nie die Anwendung.
 
 | Hook | Wann |
 | --- | --- |
@@ -131,9 +137,9 @@ nie die Anwendung.
 | `get_dynamic_options(source, context)` | Auswahllisten zur Laufzeit füllen |
 | `gui_command(command, payload)` | Aktion, die die GUI direkt auslöst |
 
-Eine Falle: Ein **synchroner** Hook läuft im Worker-Thread, dort gibt es
-keinen Event-Loop — `asyncio.create_task` scheitert dann mit „no running
-event loop“. Zwei Auswege:
+Eine Falle: Ein **synchroner** Hook läuft im Worker-Thread, und dort gibt
+es keinen Event-Loop. `asyncio.create_task` scheitert dann mit „no running
+event loop". Zwei Auswege:
 
 * den Hook als `async def` deklarieren (dann läuft er im Loop), oder
 * `self.run_async(coro)` benutzen. Der Helfer funktioniert aus jedem Thread
@@ -142,8 +148,8 @@ event loop“. Zwei Auswege:
 
 ### Verbindungszustand anzeigen
 
-Plugins, die von etwas Externem abhängen, melden ihren Zustand an die GUI —
-dort erscheint er als grüner bzw. grauer Punkt in der Plugin-Liste:
+Plugins, die von etwas Externem abhängen, melden ihren Zustand an die GUI.
+Dort erscheint er als grüner oder grauer Punkt in der Plugin-Liste:
 
 ```python
 def get_status(self):
@@ -155,36 +161,37 @@ def get_status(self):
 self.services.runtime.publish_plugin_status(self.manifest.id)
 ```
 
-Wer keine Verbindung hat, lässt `get_status` weg — dann zeigt die GUI auch
-nichts an, statt eine Bedeutung vorzutäuschen.
+Wer keine Verbindung hat, lässt `get_status` einfach weg. Dann zeigt die
+GUI dort auch nichts an.
 
 ### Der Kontext (`ctx`)
 
-Dieselbe Aktion kann mehrfach belegt sein — etwa eine Taste je
+Dieselbe Aktion kann mehrfach belegt sein, zum Beispiel eine Taste je
 Ausgabegerät. Der `ctx` sagt, welche Belegung gerade dran ist:
 
 * `ctx.index`, `ctx.input_type` (`"key"`/`"dial"`), `ctx.page_id`
-* `ctx.size` — Zeichenfläche: `(120, 120)` für Tasten, `(200, 100)` je Segment
-* `ctx.setting(name, default)` — Einstellung mit Rückfallwert
-* `ctx.scratch` — freier Zwischenspeicher, überlebt zwischen Aufrufen
-* `ctx.request_redraw()` — genau diese Kachel sofort neu zeichnen
-* `ctx.services` — Audio, Icons, Rendering, Runtime und die Systemdienste
-* `ctx.deck_serial` — auf welchem Deck die Belegung liegt
-* `ctx.frame_time` — Laufzeit in Sekunden; animierte Bilder wählen daraus
-  ihr Einzelbild
+* `ctx.size` ist die Zeichenfläche: `(120, 120)` für Tasten, `(200, 100)`
+  je Segment
+* `ctx.setting(name, default)` holt eine Einstellung mit Rückfallwert
+* `ctx.scratch` ist freier Zwischenspeicher und überlebt zwischen Aufrufen
+* `ctx.request_redraw()` zeichnet genau diese Kachel sofort neu
+* `ctx.services` sind Audio, Icons, Rendering, Runtime und die Systemdienste
+* `ctx.deck_serial` sagt, auf welchem Deck die Belegung liegt
+* `ctx.frame_time` ist die Laufzeit in Sekunden, animierte Bilder wählen
+  daraus ihr Einzelbild
 
 **Bei mehreren Decks wichtig:** `ctx.services.runtime` zeigt auf *das Deck,
 auf dem gedrückt wurde*. Wer über `self.services.runtime` navigiert, landet
-dagegen beim Hauptdeck — das ist bei einem einzelnen Gerät dasselbe, bei
-zweien aber falsch. Faustregel: Alles, was mit einer Belegung zu tun hat,
-über `ctx.services.runtime`; alles Übrige (Fehler melden, Config speichern)
+beim Hauptdeck. Bei einem einzelnen Gerät ist das dasselbe, bei zweien ist es
+falsch. Faustregel: Alles, was mit einer Belegung zu tun hat, geht über
+`ctx.services.runtime`. Der Rest, also Fehler melden und Config speichern,
 darf über `self.services.runtime` gehen.
 
 ## Zustände von außen
 
 Ändert sich etwas ohne Zutun des Nutzers, soll die Anzeige nicht bis zum
-nächsten Tick warten. Dafür ist `request_redraw` da — und es ist
-threadsicher, darf also aus einem Watcher-Thread heraus gerufen werden:
+nächsten Tick warten. Dafür ist `request_redraw` da. Es ist threadsicher und
+darf auch aus einem Watcher-Thread gerufen werden:
 
 ```python
 async def setup(self):
@@ -194,13 +201,13 @@ def _on_change(self, event, facility):
     self.services.runtime.request_redraw()   # alles neu zeichnen
 ```
 
-`ctx.request_redraw()` zeichnet nur die eine Kachel neu und ist deshalb
-vorzuziehen, wenn klar ist, welche betroffen ist.
+`ctx.request_redraw()` zeichnet nur die eine Kachel neu. Nimm das, wenn du
+weißt, welche betroffen ist.
 
 ## Auswahllisten zur Laufzeit
 
-Wenn die Optionen erst beim Betrieb feststehen (Audio-Geräte, OBS-Szenen),
-im Manifest `options_source` setzen und im Plugin auflösen:
+Wenn die Optionen erst im Betrieb feststehen, etwa Audio-Geräte oder
+OBS-Szenen, setzt du im Manifest `options_source` und löst es im Plugin auf:
 
 ```json
 { "key": "sink", "type": "select", "options_source": "sinks" }
@@ -214,8 +221,8 @@ def get_dynamic_options(self, source, context=None):
     return []
 ```
 
-Hängt eine Liste von einem anderen Feld ab — die Filter *einer* Quelle, die
-Quellen *einer* Szene —, wird das im Manifest deklariert:
+Hängt eine Liste von einem anderen Feld ab, etwa die Filter *einer* Quelle
+oder die Quellen *einer* Szene, deklarierst du das im Manifest:
 
 ```json
 {
@@ -231,8 +238,8 @@ GUI lädt die Liste neu, sobald sich das übergeordnete Feld ändert.
 
 ## Selbst zeichnen
 
-Nur nötig, wenn das Standard-Layout nicht reicht — etwa für einen
-Pegelbalken:
+Das brauchst du nur, wenn das Standard-Layout nicht reicht, zum Beispiel
+für einen Pegelbalken:
 
 ```python
 def render(self, action_id, settings, ctx):
@@ -247,8 +254,8 @@ Bausteine im Render-Service: `background`, `compose` (Icon + Label wie im
 Standard), `draw_bar`, `draw_text`, `draw_text_at`, `draw_badge`,
 `blank`, `empty_slot`.
 
-Wichtig: **den Hintergrund aus `ctx.appearance` nehmen**, nicht hart
-schwarz füllen — sonst ignoriert das Plugin die Einstellungen des Nutzers.
+Wichtig: **Nimm den Hintergrund aus `ctx.appearance`** und füll nicht hart
+schwarz. Sonst ignoriert das Plugin die Einstellungen des Nutzers.
 
 ## Services
 
@@ -287,26 +294,26 @@ unter *Plugins → \<Plugin\> → Plugin-Einstellungen*, das Plugin liest es
 ## Fehler melden
 
 `self.notify_error("…")` schreibt ins Log **und** in die Fehleranzeige der
-GUI. Wirft ein Hook eine Ausnahme, fängt die Runtime sie ab, zeigt eine
-rote Fehlerkachel auf dem Gerät und listet den Fehler in der Oberfläche —
-ein kaputtes Plugin legt also nie die ganze Anwendung lahm.
+GUI. Wirft ein Hook eine Ausnahme, fängt die Runtime sie ab, zeigt eine rote
+Fehlerkachel auf dem Gerät und listet den Fehler in der Oberfläche. Ein
+kaputtes Plugin legt also nie die ganze Anwendung lahm.
 
 ## Drehrichtungen
 
 Ein Dial kann je Drehrichtung eine eigene Action tragen. Ist eine belegt,
-bekommt sie die Drehung **wie einen kurzen Tastendruck** — also
-`on_key_down` und `on_key_up`, nicht `on_dial_rotate`. Eine Action, die nur
-`on_dial_rotate` beantwortet, taugt damit nicht als Richtungsbelegung; wer
+bekommt sie die Drehung **wie einen kurzen Tastendruck**, also `on_key_down`
+und `on_key_up` und nicht `on_dial_rotate`. Eine Action, die nur
+`on_dial_rotate` beantwortet, taugt damit nicht als Richtungsbelegung. Wer
 beides anbieten will, beantwortet beide Hooks.
 
-Umgekehrt gilt: Solange keine Richtung belegt ist, ändert sich nichts —
-`on_dial_rotate` bekommt weiter jedes Delta.
+Solange keine Richtung belegt ist, ändert sich nichts: `on_dial_rotate`
+bekommt weiter jedes Delta.
 
 ## Was Plugins über Multi-Aktionen wissen müssen
 
-Eine Multi-Aktion ruft ganz normale Actions auf — genau so, wie es ein
-Tastendruck täte: erst `on_key_down`, dann `on_key_up`. Ein Plugin muss
-dafür nichts vorbereiten. Zwei Dinge sind trotzdem gut zu wissen:
+Eine Multi-Aktion ruft ganz normale Actions auf, genau so wie es ein
+Tastendruck täte: erst `on_key_down`, dann `on_key_up`. Ein Plugin muss dafür
+nichts vorbereiten. Zwei Dinge sind trotzdem gut zu wissen:
 
 * Jeder Schritt bekommt einen **eigenen `ctx.scratch`**. Eine Aktion, die
   ihren Zustand dort führt (etwa ein Umschalter), zählt also je Schritt
@@ -317,10 +324,10 @@ dafür nichts vorbereiten. Zwei Dinge sind trotzdem gut zu wissen:
 
 ## Kein Symbol
 
-`IconRef(kind="none")` heißt ausdrücklich „hier soll kein Symbol stehen" —
-auch nicht das `default_icon` aus dem Manifest. Das braucht, wer ein fertig
-gestaltetes Tastenbild als Hintergrund setzt; Symbol und Text stecken dann
-schon darin.
+`IconRef(kind="none")` heißt ausdrücklich „hier soll kein Symbol stehen",
+auch nicht das `default_icon` aus dem Manifest. Das brauchst du, wenn du ein
+fertig gestaltetes Tastenbild als Hintergrund setzt. Symbol und Text stecken
+dann schon darin.
 
 ## Iconset-Plugin
 
@@ -338,8 +345,8 @@ Nur ein Manifest und ein Ordner mit SVGs:
 ```
 
 Der Dateiname ohne Endung ist der Icon-Name. SVGs, die mit
-`stroke="currentColor"` bzw. `fill="currentColor"` arbeiten, lassen sich
-in der GUI einfärben; alle anderen werden über ihre Alpha-Maske getönt.
+`stroke="currentColor"` oder `fill="currentColor"` arbeiten, lassen sich in
+der GUI einfärben. Alle anderen tönt die App über ihre Alpha-Maske.
 
 ## Ausprobieren
 
@@ -347,6 +354,16 @@ in der GUI einfärben; alle anderen werden über ihre Alpha-Maske getönt.
 ./scripts/start-backend.sh --verbose
 ```
 
-In der GUI *Plugins → Plugins neu laden*. Weil Python bereits importierte
-Module zwischenspeichert, ist nach Codeänderungen ein Neustart des
-Backends allerdings der verlässlichere Weg.
+In der GUI dann *Plugins → Plugins neu laden*. Python speichert bereits
+importierte Module zwischen, deshalb ist nach Codeänderungen ein Neustart des
+Backends der verlässlichere Weg.
+
+## Einreichen
+
+Ist das Plugin fertig, kannst du es über *Plugins → Plugin einreichen* in den
+Store geben. Zieh ein Archiv in das Feld, ZIP, TAR und tar.gz gehen alle.
+
+Der Store sieht sich den Python-Quelltext an und notiert, was auffällt:
+Adressen, Netzbibliotheken, Programmaufrufe, zur Laufzeit erzeugter Code.
+Diese Funde bekommt später jeder zu sehen, der dein Plugin installieren will.
+Wenn dein Plugin ins Netz greift, schreib in die Beschreibung wozu.
