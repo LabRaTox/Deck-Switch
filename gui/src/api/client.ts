@@ -440,7 +440,7 @@ export const api = {
   storeLogin: () => request<StoreLoginStart>("/api/store/login", { method: "POST" }),
 
   storeLoginPoll: (deviceCode: string) =>
-    request<{ status: string; user?: StoreUser }>("/api/store/login/poll", {
+    request<{ status: string; user?: StoreUser; backoff?: number }>("/api/store/login/poll", {
       method: "POST",
       body: JSON.stringify({ device_code: deviceCode }),
     }),

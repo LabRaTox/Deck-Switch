@@ -153,37 +153,51 @@ export function StoreAnmeldung() {
   // nicht mehr gibt.
   useEffect(
     () => () => {
-      if (abfrage.current) window.clearInterval(abfrage.current);
+      if (abfrage.current) window.clearTimeout(abfrage.current);
     },
     [],
   );
 
+  function beende() {
+    if (abfrage.current) window.clearTimeout(abfrage.current);
+    abfrage.current = null;
+  }
+
   async function anmelden() {
     setFehler("");
+    beende();
     try {
       const begonnen = await api.storeLogin();
       setStart(begonnen);
 
-      abfrage.current = window.setInterval(
-        async () => {
-          try {
-            const antwort = await api.storeLoginPoll(begonnen.device_code);
-            if (antwort.status === "ok") {
-              if (abfrage.current) window.clearInterval(abfrage.current);
-              abfrage.current = null;
-              setStart(null);
-              await ladeKonto();
-            }
-          } catch (exc) {
-            if (abfrage.current) window.clearInterval(abfrage.current);
-            abfrage.current = null;
+      // Kein festes Intervall, sondern ein Kreislauf, der sich selbst neu
+      // stellt. Der Grund ist `slow_down`: GitHub verlangt dann einen um
+      // fünf Sekunden größeren Abstand und antwortet sonst bis zum Ablauf
+      // des Codes dasselbe — die Anmeldung wäre längst durch, und die App
+      // zeigte weiter den Code.
+      let abstand = Math.max(begonnen.interval, 5) * 1000;
+
+      const nachfragen = async () => {
+        try {
+          const antwort = await api.storeLoginPoll(begonnen.device_code);
+          if (antwort.status === "ok") {
+            beende();
             setStart(null);
-            setFehler(exc instanceof Error ? exc.message : String(exc));
+            await ladeKonto();
+            return;
           }
-        },
-        // GitHub bremst, wer zu oft fragt — das Intervall kommt von dort.
-        Math.max(begonnen.interval, 5) * 1000,
-      );
+          if (antwort.status === "slow_down") {
+            abstand += (antwort.backoff ?? 5) * 1000;
+          }
+          abfrage.current = window.setTimeout(() => void nachfragen(), abstand);
+        } catch (exc) {
+          beende();
+          setStart(null);
+          setFehler(exc instanceof Error ? exc.message : String(exc));
+        }
+      };
+
+      abfrage.current = window.setTimeout(() => void nachfragen(), abstand);
     } catch (exc) {
       setFehler(exc instanceof Error ? exc.message : String(exc));
     }
