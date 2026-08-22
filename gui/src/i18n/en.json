@@ -130,7 +130,8 @@
     "turnEvery": "Trigger every … detents",
     "turnEveryHint": "A brisk turn is easily a dozen detents. 1 triggers on every one.",
     "remove_left": "Remove turn left",
-    "remove_right": "Remove turn right"
+    "remove_right": "Remove turn right",
+    "unavailable": "Has no effect in this session: {{reason}}"
   },
   "icons": {
     "title": "Choose icon",
@@ -263,7 +264,8 @@
     "animationFps": "Frames per second",
     "perDeckHint": "These settings apply to the deck selected above.",
     "version": "Version {{version}}",
-    "versionUnknown": "Version unknown — the backend has not reported in yet."
+    "versionUnknown": "Version unknown — the backend has not reported in yet.",
+    "optionUnavailable": "{{label}} (has no effect in this session)"
   },
   "errors": {
     "title": "Problems",
@@ -420,6 +422,32 @@
     "copy": "Copy",
     "addNetwork": "Network deck",
     "newNetworkName": "Network deck",
-    "addNetworkHint": "A network deck is operated by someone else on the same network in a browser — your mod during a stream, for instance. They only see this one deck and cannot change it. Password and address live in the editor on the right when no key is selected."
+    "addNetworkHint": "A network deck is operated by someone else on the same network in a browser — your mod during a stream, for instance. They only see this one deck and cannot change it. Password and address live in the editor on the right when no key is selected.",
+    "hotkeyEffective": "The desktop assigned {{combo}} for this."
+  },
+  "session": {
+    "title": "What this session supports",
+    "intro": "Detected: {{desktop}} on {{server}}. Actions missing here are not offered in the library at all.",
+    "unknown": "unknown",
+    "missingHint_one": "One capability is missing. After installing what it needs, use “Check again” — otherwise it takes a backend restart.",
+    "missingHint_other": "{{count}} capabilities are missing. After installing what they need, use “Check again” — otherwise it takes a backend restart.",
+    "recheck": "Check again",
+    "checking": "Checking …",
+    "caps": {
+      "keyboard_input": "Send key presses and text",
+      "window_control": "Control windows",
+      "global_shortcuts": "Global shortcuts",
+      "screenshot": "Screenshot",
+      "screen_power": "Turn displays on and off",
+      "session_power": "Log out and shut down",
+      "session_manager": "Log out and confirmation prompts",
+      "overlay": "Virtual deck as an overlay",
+      "ddc": "Display brightness (DDC/CI)",
+      "audio": "Volume and audio devices",
+      "sound_playback": "Play sounds",
+      "tray": "Tray icon",
+      "open_uri": "Open folders, files and links",
+      "process_control": "Find and close programs"
+    }
   }
 }

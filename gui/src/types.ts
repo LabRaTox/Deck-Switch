@@ -196,6 +196,12 @@ export interface DeckInfo extends DeviceInfo {
   overlay_hotkey?: string;
   /** Warum der Kurzbefehl gerade *nicht* wirkt. Leer = er wirkt. */
   hotkey_reason?: string;
+  /**
+   * Womit der Kurzbefehl tatsächlich ausgelöst wird. Nur gesetzt, wenn der
+   * Desktop das selbst entschieden hat (Portal-Weg) und es von der
+   * eingetippten Kombination abweichen kann.
+   */
+  hotkey_effective?: string;
 }
 
 export interface AppSettings {
@@ -234,7 +240,14 @@ export interface SettingsField {
   default?: unknown;
   placeholder?: LocalizedText;
   help?: LocalizedText;
-  options: { value: unknown; label: LocalizedText }[];
+  options: {
+    value: unknown;
+    label: LocalizedText;
+    /** Was die Sitzung können muss, damit dieser Auswahlwert etwas bewirkt. */
+    requires?: string[];
+    /** Gesetzt, wenn diese Sitzung ihn nicht hergibt. */
+    unavailable?: { missing: string[]; reason: string } | null;
+  }[];
   options_source?: string | null;
   options_depend_on?: string[];
   min?: number | null;
@@ -259,6 +272,14 @@ export interface ActionDescriptor {
   states: ActionState[];
   settings_schema: SettingsField[];
   accent?: string | null;
+  /** Was die Sitzung können muss, damit die Aktion etwas bewirkt. */
+  requires?: string[];
+  /**
+   * Gesetzt, wenn diese Sitzung die Aktion nicht hergibt. Die Bibliothek
+   * blendet sie dann aus — auf einer schon belegten Taste bleibt sie
+   * sichtbar und zeigt den Grund an.
+   */
+  unavailable?: { missing: string[]; reason: string } | null;
 }
 
 export interface Manifest {
@@ -274,6 +295,28 @@ export interface Manifest {
   config_schema: SettingsField[];
   actions: ActionDescriptor[];
   license: string;
+}
+
+/** Eine Fähigkeit der laufenden Sitzung. */
+export interface Capability {
+  id: string;
+  available: boolean;
+  /** Womit sie umgesetzt wird — "spectacle", "portal", "kwin". */
+  provider: string;
+  /** Warum nicht, in einem Satz. Leer, wenn verfügbar. */
+  reason: string;
+}
+
+export interface SessionInfo {
+  /** "kde", "gnome", "hyprland", … oder "" wenn unbekannt. */
+  desktop: string;
+  /** "wayland", "x11" oder "". */
+  display_server: string;
+}
+
+export interface SessionCapabilities {
+  session: SessionInfo;
+  capabilities: Capability[];
 }
 
 /** Verbindungszustand — nur bei Plugins, die von etwas Externem abhängen. */

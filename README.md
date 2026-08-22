@@ -8,6 +8,24 @@ official Elgato software required, with its own plugin system.
 Built and tested against a **Stream Deck +** on **CachyOS / Arch Linux**
 with KDE Plasma on Wayland.
 
+It runs on other desktops too. On startup it works out what the running
+session actually supports and only offers actions that will do something —
+rather than offering them and staying silent. What is missing on your
+system, and why, is listed in the settings.
+
+| | Virtual deck | Window control |
+| --- | --- | --- |
+| KDE Plasma (Wayland and X11) | yes | yes |
+| Hyprland, Sway | yes | yes |
+| XFCE, Cinnamon, MATE, i3 … (X11) | yes | no |
+| GNOME | no | no |
+
+The virtual deck uses `zwlr_layer_shell_v1` on Wayland and the classic
+window hints on X11; either way a click never takes the keyboard focus.
+GNOME's compositor does not support the protocol. Window control needs an
+interface offered by the compositor — Plasma, Hyprland and Sway have one,
+GNOME deliberately does not.
+
 > The name is written **DECK//SWITCH**, the slashes in the accent colour.
 > Technically everything is called `deckswitch` — package, service, config
 > directory.
@@ -179,8 +197,8 @@ line:
 | **GUI** | Tauri + Vite/React (system WebView instead of a bundled Chromium) |
 | **Audio** | PipeWire via `wpctl`/`pactl`, soundboard via `pw-play` |
 | **Input** | virtual keyboard via `/dev/uinput`, layout via libxkbcommon |
-| **Desktop** | MPRIS and KDE's global shortcuts over D-Bus |
-| **Overlay** | `zwlr_layer_shell_v1` via layer-shell-qt |
+| **Desktop** | MPRIS over D-Bus; global shortcuts and screenshots via KDE, otherwise via `xdg-desktop-portal` |
+| **Overlay** | `zwlr_layer_shell_v1` via layer-shell-qt, window hints on X11 |
 | **Icons** | [Tabler Icons](https://tabler.io/icons) (MIT), wired in as an ordinary icon set plugin |
 
 Without [`python-elgato-streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck)

@@ -8,6 +8,24 @@ ohne Elgatos offizielle Software, mit eigenem Plugin-System.
 Entwickelt und am Gerät geprüft mit dem **Stream Deck +** auf **CachyOS /
 Arch Linux** mit KDE Plasma unter Wayland.
 
+Auf anderen Desktops läuft die App ebenfalls. Sie stellt beim Start selbst
+fest, was die laufende Sitzung hergibt, und bietet nur die Aktionen an, die
+auch etwas bewirken — statt sie anzubieten und stumm zu bleiben. Was bei
+Ihnen fehlt und warum, steht in den Einstellungen.
+
+| | Virtuelles Deck | Fenster steuern |
+| --- | --- | --- |
+| KDE Plasma (Wayland und X11) | ja | ja |
+| Hyprland, Sway | ja | ja |
+| XFCE, Cinnamon, MATE, i3 … (X11) | ja | nein |
+| GNOME | nein | nein |
+
+Das virtuelle Deck nutzt unter Wayland `zwlr_layer_shell_v1` und unter X11
+die klassischen Fenster-Hinweise; beides sorgt dafür, dass ein Klick den
+Tastaturfokus nicht wegnimmt. GNOMEs Compositor unterstützt das Protokoll
+nicht. Fenster steuern setzt eine Schnittstelle des Compositors voraus —
+Plasma, Hyprland und Sway haben eine, GNOME bietet grundsätzlich keine.
+
 > Der Name wird **DECK//SWITCH** geschrieben, die Schrägstriche in der
 > Akzentfarbe. Technisch heißt alles `deckswitch` — Paket, Dienst,
 > Konfigurationsordner.
@@ -181,8 +199,8 @@ Dasselbe von der Kommandozeile:
 | **GUI** | Tauri + Vite/React (System-WebView statt gebündeltem Chromium) |
 | **Audio** | PipeWire über `wpctl`/`pactl`, Soundboard über `pw-play` |
 | **Eingaben** | virtuelle Tastatur über `/dev/uinput`, Belegung über libxkbcommon |
-| **Desktop** | MPRIS und KDEs globale Kurzbefehle über D-Bus |
-| **Overlay** | `zwlr_layer_shell_v1` über layer-shell-qt |
+| **Desktop** | MPRIS über D-Bus; globale Kurzbefehle und Bildschirmfotos über KDE, sonst über `xdg-desktop-portal` |
+| **Overlay** | `zwlr_layer_shell_v1` über layer-shell-qt, unter X11 über Fenster-Hinweise |
 | **Icons** | [Tabler Icons](https://tabler.io/icons) (MIT), eingebunden als ganz normales Iconset-Plugin |
 
 Ohne [`python-elgato-streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck)

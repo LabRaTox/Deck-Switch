@@ -32,10 +32,31 @@ export default function App() {
       (event) => {
         const store = useStore.getState();
         switch (event.type) {
-          case "device_state":
+          case "device_state": {
             store.setOnline(true);
-            useStore.setState({ device: event.data as unknown as DeviceInfo });
+            // Nur das Deck übernehmen, das der Editor gerade zeigt — genau
+            // wie bei `page_changed` darunter. Ohne diese Prüfung überschrieb
+            // jede Meldung eines *anderen* Decks die Ansicht: Man bearbeitete
+            // ein 3×2-Overlay, das Stream Deck+ meldete nebenbei seinen
+            // Zustand (Verbindung, Helligkeit, Leerlauf-Dimmen), und das
+            // Raster sprang auf dessen 4×2 um, während die Eigenschaften
+            // rechts beim bearbeiteten Deck blieben. Am 2026-08-22 mit drei
+            // Decks gleichzeitig aufgefallen.
+            const info = event.data as unknown as DeviceInfo;
+            const gemeint = String((info as { id?: string }).id ?? "");
+            if (gemeint && gemeint !== store.activeDeck) {
+              // Fremdes Deck: Der Zustand gehört trotzdem in die Deckliste,
+              // damit Verbindungspunkte und Namen stimmen.
+              useStore.setState({
+                decks: store.decks.map((deck) =>
+                  deck.id === gemeint ? { ...deck, ...info } : deck,
+                ),
+              });
+              break;
+            }
+            useStore.setState({ device: info });
             break;
+          }
           case "page_changed": {
             // Nur das Deck, das der Editor gerade zeigt. Blättert ein
             // anderes weiter — jemand drückt einen Ordner am Gerät, oder

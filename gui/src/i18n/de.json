@@ -130,7 +130,8 @@
     "turnEvery": "Auslösen alle … Rasten",
     "turnEveryHint": "Ein zügiger Dreh sind schnell ein Dutzend Rasten. 1 löst bei jeder aus.",
     "remove_left": "Linksdrehung entfernen",
-    "remove_right": "Rechtsdrehung entfernen"
+    "remove_right": "Rechtsdrehung entfernen",
+    "unavailable": "Wirkungslos in dieser Sitzung: {{reason}}"
   },
   "icons": {
     "title": "Icon auswählen",
@@ -263,7 +264,8 @@
     "animationFps": "Bilder je Sekunde",
     "perDeckHint": "Diese Einstellungen gelten für das oben gewählte Deck.",
     "version": "Version {{version}}",
-    "versionUnknown": "Version unbekannt — das Backend hat sich noch nicht gemeldet."
+    "versionUnknown": "Version unbekannt — das Backend hat sich noch nicht gemeldet.",
+    "optionUnavailable": "{{label}} (in dieser Sitzung wirkungslos)"
   },
   "errors": {
     "title": "Probleme",
@@ -420,6 +422,32 @@
     "copy": "Kopieren",
     "addNetwork": "Netz-Deck",
     "newNetworkName": "Netz-Deck",
-    "addNetworkHint": "Ein Netz-Deck bedient jemand anderes im selben Netz im Browser — etwa der Mod während des Streams. Er sieht nur dieses eine Deck und kann nichts daran ändern. Passwort und Adresse stehen im Editor rechts, wenn keine Taste ausgewählt ist."
+    "addNetworkHint": "Ein Netz-Deck bedient jemand anderes im selben Netz im Browser — etwa der Mod während des Streams. Er sieht nur dieses eine Deck und kann nichts daran ändern. Passwort und Adresse stehen im Editor rechts, wenn keine Taste ausgewählt ist.",
+    "hotkeyEffective": "Der Desktop hat dafür {{combo}} vergeben."
+  },
+  "session": {
+    "title": "Was diese Sitzung kann",
+    "intro": "Erkannt: {{desktop}} unter {{server}}. Aktionen, die hier fehlen, bietet die Bibliothek gar nicht erst an.",
+    "unknown": "unbekannt",
+    "missingHint_one": "Eine Fähigkeit fehlt. Wird das Nötige nachinstalliert, hilft „Erneut prüfen“ — sonst erst nach einem Neustart des Backends.",
+    "missingHint_other": "{{count}} Fähigkeiten fehlen. Wird das Nötige nachinstalliert, hilft „Erneut prüfen“ — sonst erst nach einem Neustart des Backends.",
+    "recheck": "Erneut prüfen",
+    "checking": "Prüfe …",
+    "caps": {
+      "keyboard_input": "Tastendrücke und Text schicken",
+      "window_control": "Fenster steuern",
+      "global_shortcuts": "Globale Kurzbefehle",
+      "screenshot": "Bildschirmfoto",
+      "screen_power": "Bildschirme an und aus",
+      "session_power": "Abmelden und Herunterfahren",
+      "session_manager": "Abmelden und Rückfragen",
+      "overlay": "Virtuelles Deck als Overlay",
+      "ddc": "Monitorhelligkeit (DDC/CI)",
+      "audio": "Lautstärke und Audiogeräte",
+      "sound_playback": "Klänge abspielen",
+      "tray": "Symbol in der Kontrollleiste",
+      "open_uri": "Ordner, Dateien und Links öffnen",
+      "process_control": "Programme finden und beenden"
+    }
   }
 }

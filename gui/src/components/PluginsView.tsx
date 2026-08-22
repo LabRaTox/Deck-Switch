@@ -6,6 +6,7 @@ import { localized } from "../i18n";
 import { useStore } from "../store";
 import type { PluginInfo } from "../types";
 import { Modal } from "./Modal";
+import { PfadText } from "./PfadText";
 import { PluginInstaller } from "./PluginInstaller";
 import { SettingsForm } from "./SettingsForm";
 
@@ -161,7 +162,9 @@ function PluginSection({
   return (
     <>
       <h3 className="section-title">{title}</h3>
-      <p className="hint">{hint}</p>
+      <p className="hint">
+        <PfadText text={hint} />
+      </p>
       {plugins.length === 0 ? (
         <p className="empty-note">{t("plugins.noneInstalled")}</p>
       ) : (

@@ -102,6 +102,9 @@
           },
           "default": "#3b82f6"
         }
+      ],
+      "requires": [
+        "audio"
       ]
     },
     {
@@ -170,6 +173,9 @@
           },
           "default": "#ef4444"
         }
+      ],
+      "requires": [
+        "audio"
       ]
     },
     {
@@ -239,6 +245,9 @@
           },
           "default": "#22c55e"
         }
+      ],
+      "requires": [
+        "audio"
       ]
     },
     {
@@ -289,6 +298,9 @@
           },
           "default": "#a855f7"
         }
+      ],
+      "requires": [
+        "audio"
       ]
     }
   ],

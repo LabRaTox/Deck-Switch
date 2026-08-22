@@ -33,6 +33,8 @@ from dbus_next.aio import MessageBus
 
 from .. import events as ev
 from .input import NAMED_KEYS, parse_combo
+from .portal import GlobalShortcutsPortal
+from .session import GLOBAL_SHORTCUTS
 
 log = logging.getLogger(__name__)
 
@@ -151,6 +153,8 @@ class ShortcutService:
         #: Deck-Schlüssel → warum es *nicht* geklappt hat. Leer = alles gut.
         self._gruende: dict[str, str] = {}
         self._lock = asyncio.Lock()
+        #: Nur auf Desktops ohne kglobalaccel — siehe :meth:`_ueber_portal`.
+        self._portal: GlobalShortcutsPortal | None = None
 
     # -- Zustand -----------------------------------------------------------
 
@@ -176,6 +180,10 @@ class ShortcutService:
                 if deck.binding.is_overlay and deck.binding.overlay_hotkey.strip()
             }
 
+            if self._ueber_portal():
+                await self._sync_portal(gewuenscht)
+                return
+
             # Ohne Kurzbefehl und ohne Verbindung gibt es nichts zu tun —
             # dann bauen wir auch keine auf.
             if not gewuenscht and self._bus is None:
@@ -199,9 +207,59 @@ class ShortcutService:
                     continue
                 await self._anmelden(key, combo, name)
 
+    # -- Der Weg über das Portal -------------------------------------------
+
+    def _ueber_portal(self) -> bool:
+        """Gehen die Kurzbefehle über das Portal statt über kglobalaccel?
+
+        Entschieden hat das die Sitzungserkennung; hier wird sie nur
+        gefragt. Auf Plasma bleibt es bei kglobalaccel — nur dort lässt
+        sich die Kombination setzen, die der Benutzer bei uns eingetippt
+        hat, statt eine, die der Desktop für richtig hält.
+        """
+        session = getattr(self.runtime, "session", None)
+        if session is None:
+            return False
+        cap = session.caps.get(GLOBAL_SHORTCUTS)
+        return cap is not None and cap.available and cap.provider == "portal"
+
+    async def _sync_portal(self, gewuenscht: dict[str, tuple[str, str]]) -> None:
+        if self._portal is None:
+            self._portal = GlobalShortcutsPortal(self._portal_ausgeloest)
+
+        self._gruende = await self._portal.sync(gewuenscht)
+        self._angemeldet = {
+            key: wert for key, wert in gewuenscht.items() if key not in self._gruende
+        }
+
+    def _portal_ausgeloest(self, deck_key: str) -> None:
+        # Das Portal meldet aus dem Signal-Handler heraus; von dort darf
+        # nichts awaited werden.
+        asyncio.create_task(self._ausloesen(deck_key))
+
+    def vergebene_kombination(self, deck_key: str) -> str:
+        """Womit der Kurzbefehl wirklich ausgelöst wird. Leer = wie gewünscht.
+
+        Nur beim Portal-Weg gefüllt und nur, wenn der Desktop es mitteilt:
+        Dort entscheidet der Benutzer im Dialog, und das Ergebnis kann von
+        der eingetippten Kombination abweichen. Die Oberfläche zeigt dann
+        besser das, was gilt, als das, was gewünscht war.
+        """
+        if self._portal is None:
+            return ""
+        return self._portal.vergeben.get(deck_key, "")
+
     async def stop(self) -> None:
         """Alles abmelden — sonst blieben tote Einträge in Plasma stehen."""
         async with self._lock:
+            # Beim Portal hängen die Kurzbefehle an der Sitzung: Die zu
+            # schließen nimmt sie alle auf einmal zurück.
+            if self._portal is not None:
+                await self._portal.stop()
+                self._portal = None
+                self._angemeldet.clear()
+                return
+
             for key in list(self._angemeldet):
                 await self._abmelden(key)
             if self._bus is not None:

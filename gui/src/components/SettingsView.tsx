@@ -6,7 +6,7 @@ import { SUPPORTED_LANGUAGES } from "../i18n";
 import { useStore } from "../store";
 import { ScreensaverCard } from "./ScreensaverCard";
 import { Wordmark } from "./Wordmark";
-import type { AutostartStatus } from "../types";
+import type { AutostartStatus, SessionCapabilities } from "../types";
 
 /** App- und Geräteeinstellungen sowie Export/Import der Belegung. */
 export function SettingsView() {
@@ -291,8 +291,86 @@ export function SettingsView() {
         )}
       </section>
 
+      <SessionCard />
+
       <AboutCard />
     </div>
+  );
+}
+
+/**
+ * Was diese Sitzung hergibt — und was nicht.
+ *
+ * Ohne diese Karte wäre die Aktionsbibliothek ein Rätsel: Aktionen, die es
+ * auf einem anderen Rechner gibt, fehlen hier einfach. Hier steht, woran
+ * das liegt, und zwar mit dem Grund, den das Backend beim Abtasten
+ * festgestellt hat — nicht mit einer Vermutung.
+ */
+function SessionCard() {
+  const { t, i18n } = useTranslation();
+  const [daten, setDaten] = useState<SessionCapabilities | null>(null);
+  const [laeuft, setLaeuft] = useState(false);
+
+  useEffect(() => {
+    api.session().then(setDaten).catch(() => undefined);
+  }, []);
+
+  // Nach einer Nachinstallation noch einmal nachsehen: Ohne das bliebe die
+  // Aktion bis zum nächsten Backend-Start verschwunden, obwohl sie längst
+  // funktionieren würde.
+  const erneutPruefen = async () => {
+    setLaeuft(true);
+    try {
+      setDaten(await api.refreshSession());
+      // Die Aktionsbibliothek hängt an denselben Angaben.
+      await useStore.getState().load();
+    } catch {
+      /* Beim nächsten Versuch wieder */
+    } finally {
+      setLaeuft(false);
+    }
+  };
+
+  if (!daten) return null;
+
+  const fehlend = daten.capabilities.filter((c) => !c.available);
+
+  return (
+    <section className="settings-card">
+      <h3>{t("session.title")}</h3>
+      <p className="help">
+        {t("session.intro", {
+          desktop: daten.session.desktop || t("session.unknown"),
+          server: daten.session.display_server || t("session.unknown"),
+        })}
+      </p>
+
+      <ul className="session-list">
+        {daten.capabilities.map((cap) => (
+          <li key={cap.id} className={cap.available ? "is-available" : "is-missing"}>
+            <span className="session-name">
+              {i18n.exists(`session.caps.${cap.id}`) ? t(`session.caps.${cap.id}`) : cap.id}
+            </span>
+            <span className="session-detail">
+              {cap.available ? cap.provider : cap.reason}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {fehlend.length > 0 && (
+        <p className="help">{t("session.missingHint", { count: fehlend.length })}</p>
+      )}
+
+      <button
+        type="button"
+        className="btn small session-recheck"
+        onClick={() => void erneutPruefen()}
+        disabled={laeuft}
+      >
+        {laeuft ? t("session.checking") : t("session.recheck")}
+      </button>
+    </section>
   );
 }
 

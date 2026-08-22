@@ -115,6 +115,9 @@
           },
           "default": false
         }
+      ],
+      "requires": [
+        "sound_playback"
       ]
     },
     {
@@ -129,7 +132,10 @@
       },
       "inputs": ["key", "dial"],
       "default_icon": "player-stop",
-      "settings_schema": []
+      "settings_schema": [],
+      "requires": [
+        "sound_playback"
+      ]
     }
   ]
 }

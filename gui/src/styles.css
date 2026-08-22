@@ -1526,6 +1526,77 @@ input[type="checkbox"] {
   max-width: 620px;
 }
 
+/* Pfeil in Pfadangaben („Einstellungen › Decks"). Als Icon statt als
+   Schriftzeichen: Der Textpfeil sitzt je nach Schnitt zu hoch und wirkt
+   dünner als alles daneben. */
+.pfad-pfeil {
+  vertical-align: -2px;
+  margin: 0 1px;
+  opacity: 0.7;
+}
+
+/* ------------------------------------------------- Fähigkeiten der Sitzung */
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.session-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+/* Der Punkt vorn trägt die Aussage — Farbe allein reicht nicht, wenn
+   jemand sie nicht unterscheiden kann. Deshalb steht rechts ohnehin
+   entweder der Weg oder der Grund als Text. */
+.session-name::before {
+  content: "●";
+  margin-right: 8px;
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+.session-list .is-available .session-name::before {
+  color: var(--ok);
+}
+
+.session-list .is-missing .session-name::before {
+  color: var(--text-dim);
+}
+
+.session-list .is-missing .session-name {
+  color: var(--text-dim);
+}
+
+/* Die Karte ist eine Flex-Spalte — ohne das zöge sich der Knopf über die
+   ganze Breite und sähe aus wie ein Hauptbefehl. */
+.session-recheck {
+  align-self: flex-start;
+}
+
+.session-detail {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: right;
+  /* Begründungen sind ganze Sätze — sie dürfen umbrechen, statt die
+     Karte in die Breite zu ziehen. */
+  flex: 1 1 55%;
+}
+
 /* --------------------------------------------------------------- Scrollbars */
 
 ::-webkit-scrollbar {
