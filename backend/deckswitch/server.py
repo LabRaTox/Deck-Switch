@@ -1323,40 +1323,45 @@ def create_app(
             raise HTTPException(400, str(exc)) from exc
 
     @app.post("/api/store/upload")
-    async def store_upload(
-        plugin_id: str = Body("", embed=True),
-        file: UploadFile | None = File(None),
-    ) -> dict[str, Any]:
-        """Reicht ein Plugin beim Store ein.
+    async def store_upload(plugin_id: str = Body(..., embed=True)) -> dict[str, Any]:
+        """Reicht ein installiertes Plugin beim Store ein.
 
-        Zwei Wege: ein fertiges Archiv, oder die Kennung eines installierten
-        Plugins — dann wird sein Ordner hier gepackt. Der zweite ist der
-        gewöhnliche; wer entwickelt, hat das Plugin ohnehin installiert.
+        Gepackt wird hier und nicht in der Oberfläche: Der Plugin-Ordner liegt
+        auf diesem Rechner, und ein Archiv, das die GUI baut, müsste erst durch
+        den Browser wandern, um denselben Weg zurückzunehmen.
+
+        **Getrennt vom Weg über eine Datei** und nicht beides in einem
+        Endpunkt: Sobald ein ``File``-Feld in der Signatur steht, erwartet
+        FastAPI die ganze Anfrage als Formular — ein JSON-Rumpf käme nie an,
+        und ``plugin_id`` bliebe leer. Genau daran ist das Einreichen beim
+        ersten Versuch gescheitert.
         """
-        if file is not None:
-            daten = await file.read(installer.MAX_ARCHIVE_BYTES + 1)
-            name = file.filename or "plugin.zip"
-        elif plugin_id:
-            geladen = runtime.registry.get(plugin_id)
-            if geladen is None:
-                raise HTTPException(404, f"'{plugin_id}' ist nicht installiert")
-            if geladen.builtin:
-                raise HTTPException(
-                    400,
-                    "Mitgelieferte Plugins gehören schon zur App — "
-                    "sie im Store einzureichen ginge schief.",
-                )
-            try:
-                daten = await _im_hintergrund(lambda: store.packe(geladen.directory))
-            except store.StoreError as exc:
-                raise HTTPException(400, str(exc)) from exc
-            name = f"{plugin_id}.zip"
-        else:
-            raise HTTPException(400, "Es fehlt, was hochgeladen werden soll")
+        geladen = runtime.registry.get(plugin_id)
+        if geladen is None:
+            raise HTTPException(404, f"'{plugin_id}' ist nicht installiert")
+        if geladen.builtin:
+            raise HTTPException(
+                400,
+                "Mitgelieferte Plugins gehören schon zur App — "
+                "sie im Store einzureichen ginge schief.",
+            )
 
+        try:
+            daten = await _im_hintergrund(lambda: store.packe(geladen.directory))
+        except store.StoreError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+        return await _reiche_ein(daten, f"{plugin_id}.zip")
+
+    @app.post("/api/store/upload-archive")
+    async def store_upload_archive(file: UploadFile = File(...)) -> dict[str, Any]:
+        """Reicht ein fertiges Archiv ein — für alles, was nicht installiert ist."""
+        daten = await file.read(installer.MAX_ARCHIVE_BYTES + 1)
+        return await _reiche_ein(daten, file.filename or "plugin.zip")
+
+    async def _reiche_ein(daten: bytes, name: str) -> dict[str, Any]:
         if len(daten) > installer.MAX_ARCHIVE_BYTES:
             raise HTTPException(413, "Archiv zu groß (max. 64 MB)")
-
         try:
             return await _im_hintergrund(lambda: store.hochladen(daten, dateiname=name))
         except store.StoreError as exc:

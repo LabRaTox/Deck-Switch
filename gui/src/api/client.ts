@@ -23,6 +23,7 @@ import type {
   Slot,
   StoreAccount,
   StoreLoginStart,
+  StoreMinePlugin,
   StorePlugin,
   StoreUser,
   StoreUploadResult,
@@ -448,7 +449,13 @@ export const api = {
   storeLogout: () => request<{ status: string }>("/api/store/logout", { method: "POST" }),
 
   storeMine: () =>
-    request<{ count: number; plugins: unknown[] }>("/api/store/mine"),
+    request<{ count: number; plugins: StoreMinePlugin[] }>("/api/store/mine"),
+
+  /** Ob eine Kennung im Store noch zu haben ist. */
+  storeSlug: (slug: string) =>
+    request<{ slug: string; frei: boolean; grund: string; aehnlich: string[] }>(
+      `/api/store/slugs/${encodeURIComponent(slug)}`,
+    ),
 
   /** Ein installiertes Plugin beim Store einreichen. */
   storeUpload: (pluginId: string) =>

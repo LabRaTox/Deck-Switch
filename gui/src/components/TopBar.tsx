@@ -9,7 +9,7 @@ export function TopBar() {
   const { t } = useTranslation();
   const view = useStore((s) => s.view);
   const setView = useStore((s) => s.setView);
-  const storePending = useStore((s) => s.storePending);
+  const storeKonto = useStore((s) => s.storeKonto);
   const device = useStore((s) => s.device);
   const decks = useStore((s) => s.decks);
   const activeDeck = useStore((s) => s.activeDeck);
@@ -40,8 +40,8 @@ export function TopBar() {
           // im Store. Sie steht nur, wenn der Angemeldete prüfen darf — für
           // alle anderen ist das nichts, was sie angeht.
           const offen =
-            entry === "plugins" && storePending
-              ? storePending.submissions + storePending.reports
+            entry === "plugins" && storeKonto?.pending
+              ? storeKonto.pending.submissions + storeKonto.pending.reports
               : 0;
           return (
             <button
