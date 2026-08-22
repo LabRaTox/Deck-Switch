@@ -2897,3 +2897,24 @@ input[type="checkbox"] {
   margin: 4px 0 0;
   font-size: 13px;
 }
+
+/* Das Feld zum Einreichen. Ziehen oder klicken — beides führt zum selben. */
+.ablegefeld {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 28px 16px;
+  margin: 8px 0;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  cursor: pointer;
+  text-align: center;
+}
+
+.ablegefeld:hover,
+.ablegefeld.ueber {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}

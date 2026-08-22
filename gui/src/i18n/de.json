@@ -528,8 +528,7 @@
     "newVersion": "Im Store steht Fassung {{version}}",
     "submitTitle": "Plugin einreichen",
     "submitNeedsLogin": "Zum Einreichen musst du im Store angemeldet sein.",
-    "submitPick": "Welches Plugin?",
-    "submitNothing": "Nichts einzureichen — mitgelieferte Plugins gehören schon zur App.",
+    "submitPick": "Was soll in den Store?",
     "submit": "Einreichen",
     "submitting": "Wird gepackt …",
     "submitFindings_one": "Die Durchsicht hat 1 Hinweis gefunden. Er steht später an deiner Fassung.",
@@ -548,8 +547,8 @@
       "hidden": "ausgeblendet",
       "listed": "im Katalog"
     },
-    "submitHiddenForeign_one": "Ein installiertes Plugin stammt aus dem Store und gehört jemand anderem — es steht deshalb nicht zur Auswahl.",
-    "submitHiddenForeign_other": "{{count}} installierte Plugins stammen aus dem Store und gehören jemand anderem — sie stehen deshalb nicht zur Auswahl.",
-    "submitNewVersion": "Steht schon im Store — das wird eine neue Fassung."
+    "dropHere": "Archiv hierher ziehen",
+    "dropOrClick": "oder klicken, um eine Datei zu wählen",
+    "submitFormats": "ZIP, TAR oder tar.gz — angenommen wird, was sich zum Prüfen öffnen lässt. Ausgeliefert wird immer ein ZIP, denn nur das kann die App auspacken."
   }
 }
