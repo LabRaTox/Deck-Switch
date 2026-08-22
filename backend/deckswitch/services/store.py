@@ -270,17 +270,27 @@ def anmeldung_starten() -> dict[str, Any]:
 
 
 def anmeldung_nachfragen(device_code: str) -> dict[str, Any]:
-    """Fragt einmal nach. Bei Erfolg wird das Token abgelegt."""
+    """Fragt einmal nach. Bei Erfolg wird das Token abgelegt.
+
+    Drei mögliche Stände: ``ok``, ``pending`` und ``slow_down``. Der letzte
+    heißt *nicht* „noch nicht bestätigt", sondern „du fragst zu oft" — und
+    wer daraufhin im gleichen Takt weiterfragt, bekommt bis zum Ablauf des
+    Codes dieselbe Antwort. Die Oberfläche muss ihren Abstand vergrößern,
+    deshalb kommt ``backoff`` mit zurück.
+    """
     antwort = _anfrage(
         "/api/auth/device/poll",
         methode="POST",
         rumpf=json.dumps({"device_code": device_code}).encode(),
         typ="application/json",
     )
-    if antwort.get("status") == "ok":
+    stand = antwort.get("status", "pending")
+    if stand == "ok":
         schreib_token(antwort["token"])
         return {"status": "ok", "user": antwort.get("user")}
-    return {"status": antwort.get("status", "pending")}
+    if stand == "slow_down":
+        return {"status": "slow_down", "backoff": int(antwort.get("backoff", 5))}
+    return {"status": stand}
 
 
 def wer_bin_ich() -> dict[str, Any] | None:
