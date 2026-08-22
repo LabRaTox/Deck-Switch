@@ -6,6 +6,7 @@
   "entry": "plugin.py",
   "class": "ClockScreensaver",
   "accent": "#38bdf8",
+  "category": "screensaver",
   "description": {
     "de": "Uhrzeit und Datum als je eine Ziffer pro Taste.",
     "en": "Time and date as one digit per key."

@@ -140,6 +140,17 @@ export function InstallRequestBanner() {
         <strong>{t("plugins.requestTitle")}</strong>
         <span className="install-origin">{host}</span>
         <code>{request.url}</code>
+        {/* Ob überhaupt jemand gesagt hat, was ankommen soll. Ohne
+            Prüfsumme installiert die App, was auch immer unter der
+            Adresse liegt — das gehört vor die Bestätigung, nicht
+            dahinter. */}
+        {request.sha256 ? (
+          <small className="pruefsumme">
+            {t("plugins.checksumAnnounced", { hash: request.sha256.slice(0, 12) })}
+          </small>
+        ) : (
+          <small className="error-text">{t("plugins.checksumMissing")}</small>
+        )}
         <small>{t("plugins.trustWarning")}</small>
       </div>
 

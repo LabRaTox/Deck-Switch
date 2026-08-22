@@ -6,6 +6,7 @@
   "entry": "plugin.py",
   "class": "ObsPlugin",
   "accent": "#ef4444",
+  "category": "streaming",
   "description": {
     "de": "Steuert OBS Studio über obs-websocket: Szenen, Stream, Aufnahme, Quellen, Filter und mehr.",
     "en": "Controls OBS Studio via obs-websocket: scenes, stream, recording, sources, filters and more."

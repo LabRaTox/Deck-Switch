@@ -717,7 +717,9 @@ class Runtime:
     # Installationsanfragen über streamdeck://
     # ======================================================================
 
-    def add_install_request(self, url: str, origin: str = "") -> "InstallRequest":
+    def add_install_request(
+        self, url: str, origin: str = "", sha256: str = ""
+    ) -> "InstallRequest":
         """Merkt eine angeforderte Installation vor — ohne sie auszuführen.
 
         Ein Klick auf einen Link im Browser darf niemals ungefragt Code
@@ -730,7 +732,11 @@ class Runtime:
         self._expire_install_requests(now)
 
         request = InstallRequest(
-            id=uuid.uuid4().hex[:12], url=url, origin=origin, created_at=now
+            id=uuid.uuid4().hex[:12],
+            url=url,
+            origin=origin,
+            created_at=now,
+            sha256=sha256.strip().lower(),
         )
         self.install_requests.append(request)
         del self.install_requests[:-10]

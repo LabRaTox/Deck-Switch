@@ -6,6 +6,7 @@
   "entry": "plugin.py",
   "class": "AudioPlugin",
   "accent": "#3b82f6",
+  "category": "audio",
   "description": {
     "de": "Lautstärke, Mikrofon und Ausgabegeräte über PipeWire.",
     "en": "Volume, microphone and output devices via PipeWire."

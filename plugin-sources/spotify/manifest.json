@@ -6,6 +6,7 @@
   "entry": "plugin.py",
   "class": "SpotifyPlugin",
   "accent": "#1db954",
+  "category": "music",
   "description": {
     "de": "Musiksteuerung ohne Fensterwechsel: abspielen, pausieren, Titel überspringen, Shuffle, Wiederholung und Lautstärke — direkt vom Deck.",
     "en": "Music control without switching windows: play, pause, skip tracks, shuffle, repeat and volume — straight from the deck."

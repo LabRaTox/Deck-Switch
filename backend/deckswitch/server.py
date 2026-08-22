@@ -42,13 +42,18 @@ from .config import Config, DeviceSettings, Page, Slot, TouchWallpaper
 from .plugins import installer
 from .runtime import Runtime
 from .virtualdeck import VirtualDevice
-from .services import autostart, backgrounds, screensaver
+from .services import autostart, backgrounds, screensaver, store
 from .services import render as render_service
 
 log = logging.getLogger(__name__)
 
 #: Bildformate, die ein Plugin als Symbol mitbringen darf.
 PLUGIN_ICON_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+
+#: Für Bilder in der Detailansicht ohne SVG: Ein Bildschirmfoto ist eine
+#: Rastergrafik, und SVG bringt eine ganze Skriptsprache mit, die hier
+#: nichts zu suchen hat.
+PLUGIN_SCREENSHOT_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
 #: Dateiendungen, die als Bildschirmschoner infrage kommen.
 SCREENSAVER_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
@@ -1039,6 +1044,36 @@ def create_app(
             headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
         return FileResponse(candidate, media_type=media, headers=headers)
 
+    @app.get("/api/plugins/{plugin_id}/screenshot/{index}")
+    async def plugin_screenshot(plugin_id: str, index: int) -> Response:
+        """Eines der Bilder aus der Detailansicht.
+
+        Angesprochen über die Position, nicht über den Dateinamen: Der
+        stünde sonst in jeder Bild-Adresse und käme aus fremder Hand.
+        """
+        loaded = runtime.registry.get(plugin_id)
+        if loaded is None:
+            raise HTTPException(404, "Plugin nicht gefunden")
+
+        bilder = loaded.manifest.screenshots
+        if not 0 <= index < len(bilder):
+            raise HTTPException(404, "Kein Bild an dieser Stelle")
+
+        # Dieselbe Sorgfalt wie beim Symbol: Der Dateiname stammt aus einem
+        # fremden Manifest und darf auf nichts außerhalb des Plugin-Ordners
+        # zeigen.
+        directory = loaded.directory.resolve()
+        candidate = (directory / bilder[index]).resolve()
+        if directory not in candidate.parents or not candidate.is_file():
+            raise HTTPException(404, "Bilddatei nicht gefunden")
+        if candidate.suffix.lower() not in PLUGIN_SCREENSHOT_SUFFIXES:
+            raise HTTPException(415, f"Nicht unterstützt: {candidate.suffix}")
+
+        media = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+        return FileResponse(
+            candidate, media_type=media, headers={"X-Content-Type-Options": "nosniff"}
+        )
+
     @app.put("/api/plugins/{plugin_id}/config")
     async def put_plugin_config(plugin_id: str, payload: dict = Body(...)) -> dict[str, Any]:
         if runtime.registry.get(plugin_id) is None:
@@ -1092,11 +1127,18 @@ def create_app(
     # -- Installieren und Entfernen ----------------------------------------
 
     @app.post("/api/plugins/install-url")
-    async def install_from_url(url: str = Body(..., embed=True)) -> dict[str, Any]:
-        """Lädt ein Plugin-Archiv von einer Adresse und installiert es."""
+    async def install_from_url(
+        url: str = Body(..., embed=True),
+        sha256: str = Body("", embed=True),
+    ) -> dict[str, Any]:
+        """Lädt ein Plugin-Archiv von einer Adresse und installiert es.
+
+        Ist eine Prüfsumme dabei, muss sie stimmen — sonst wird das Archiv
+        nicht einmal geöffnet.
+        """
         try:
             manifest = await asyncio.get_running_loop().run_in_executor(
-                None, installer.install_url, url
+                None, lambda: installer.install_url(url, sha256=sha256)
             )
         except installer.InstallError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -1107,7 +1149,9 @@ def create_app(
 
     @app.post("/api/plugins/install-request")
     async def request_install(
-        url: str = Body(..., embed=True), origin: str = Body("", embed=True)
+        url: str = Body(..., embed=True),
+        origin: str = Body("", embed=True),
+        sha256: str = Body("", embed=True),
     ) -> dict[str, Any]:
         """Nimmt eine ``streamdeck://``-Anfrage entgegen — ohne zu installieren.
 
@@ -1116,7 +1160,7 @@ def create_app(
         """
         if not url.lower().startswith(("http://", "https://")):
             raise HTTPException(400, "Nur http(s)-Adressen werden angenommen")
-        request = runtime.add_install_request(url, origin)
+        request = runtime.add_install_request(url, origin, sha256)
         return request.as_dict()
 
     @app.get("/api/plugins/install-requests")
@@ -1129,8 +1173,11 @@ def create_app(
         if request is None:
             raise HTTPException(404, "Anfrage nicht gefunden oder abgelaufen")
         try:
+            # Die Prüfsumme stammt aus derselben Anfrage wie die Adresse —
+            # sie schützt also nicht vor einem bösartigen Link, sondern
+            # davor, dass unterwegs etwas anderes ankommt als angekündigt.
             manifest = await asyncio.get_running_loop().run_in_executor(
-                None, installer.install_url, request.url
+                None, lambda: installer.install_url(request.url, sha256=request.sha256)
             )
         except installer.InstallError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -1186,6 +1233,141 @@ def create_app(
         runtime.save_config()
         runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="plugin_order")
         return {"order": runtime.config.app.plugin_order}
+
+    # ======================================================================
+    # Der Plugin-Store
+    # ======================================================================
+
+    def _im_hintergrund(arbeit):
+        """Blockierendes im Executor — der Store hängt am Netz."""
+        return asyncio.get_running_loop().run_in_executor(None, arbeit)
+
+    @app.get("/api/store/catalog")
+    async def store_catalog(kind: str = "", q: str = "") -> dict[str, Any]:
+        try:
+            return await _im_hintergrund(lambda: store.katalog(kind=kind, q=q))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.get("/api/store/popular")
+    async def store_popular(kind: str = "") -> dict[str, Any]:
+        try:
+            return await _im_hintergrund(lambda: store.beliebt(kind=kind))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.get("/api/store/plugins/{slug}")
+    async def store_plugin(slug: str) -> dict[str, Any]:
+        try:
+            return await _im_hintergrund(lambda: store.plugin(slug))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.post("/api/store/install")
+    async def store_install(
+        slug: str = Body(..., embed=True),
+        version: str = Body("", embed=True),
+    ) -> dict[str, Any]:
+        """Installiert aus dem Store — nur bei stimmender Prüfsumme."""
+        try:
+            ergebnis = await _im_hintergrund(lambda: store.installiere(slug, version))
+        except installer.ChecksumError as exc:
+            # Eigener Status: Das ist kein gewöhnlicher Fehlschlag, sondern
+            # der Hinweis, dass unterwegs etwas ausgetauscht wurde.
+            raise HTTPException(409, str(exc)) from exc
+        except (store.StoreError, installer.InstallError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        await runtime.reload_plugins()
+        return ergebnis
+
+    @app.get("/api/store/account")
+    async def store_account() -> dict[str, Any]:
+        """Wer angemeldet ist — und was auf ihn wartet.
+
+        Beides in einer Antwort: Die Oberfläche fragt ohnehin bei jedem Blick
+        in den Store, und zwei Runden übers Netz für zwei Zahlen wären eine
+        Runde zu viel.
+        """
+        try:
+            konto = await _im_hintergrund(store.wer_bin_ich)
+            offen = await _im_hintergrund(store.offene_pruefungen) if konto else None
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {"user": konto, "pending": offen, "store_url": store.STORE_URL}
+
+    @app.post("/api/store/login")
+    async def store_login() -> dict[str, Any]:
+        """Beginnt die Anmeldung; die GUI zeigt den Code an."""
+        try:
+            return await _im_hintergrund(store.anmeldung_starten)
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.post("/api/store/login/poll")
+    async def store_login_poll(device_code: str = Body(..., embed=True)) -> dict[str, Any]:
+        try:
+            return await _im_hintergrund(lambda: store.anmeldung_nachfragen(device_code))
+        except store.StoreError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/store/logout")
+    async def store_logout() -> dict[str, Any]:
+        await _im_hintergrund(store.abmelden)
+        return {"status": "ok"}
+
+    @app.get("/api/store/mine")
+    async def store_mine() -> dict[str, Any]:
+        try:
+            return await _im_hintergrund(store.meine_plugins)
+        except store.StoreError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/store/upload")
+    async def store_upload(
+        plugin_id: str = Body("", embed=True),
+        file: UploadFile | None = File(None),
+    ) -> dict[str, Any]:
+        """Reicht ein Plugin beim Store ein.
+
+        Zwei Wege: ein fertiges Archiv, oder die Kennung eines installierten
+        Plugins — dann wird sein Ordner hier gepackt. Der zweite ist der
+        gewöhnliche; wer entwickelt, hat das Plugin ohnehin installiert.
+        """
+        if file is not None:
+            daten = await file.read(installer.MAX_ARCHIVE_BYTES + 1)
+            name = file.filename or "plugin.zip"
+        elif plugin_id:
+            geladen = runtime.registry.get(plugin_id)
+            if geladen is None:
+                raise HTTPException(404, f"'{plugin_id}' ist nicht installiert")
+            if geladen.builtin:
+                raise HTTPException(
+                    400,
+                    "Mitgelieferte Plugins gehören schon zur App — "
+                    "sie im Store einzureichen ginge schief.",
+                )
+            try:
+                daten = await _im_hintergrund(lambda: store.packe(geladen.directory))
+            except store.StoreError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            name = f"{plugin_id}.zip"
+        else:
+            raise HTTPException(400, "Es fehlt, was hochgeladen werden soll")
+
+        if len(daten) > installer.MAX_ARCHIVE_BYTES:
+            raise HTTPException(413, "Archiv zu groß (max. 64 MB)")
+
+        try:
+            return await _im_hintergrund(lambda: store.hochladen(daten, dateiname=name))
+        except store.StoreError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/store/slugs/{slug}")
+    async def store_slug(slug: str) -> dict[str, Any]:
+        try:
+            return await _im_hintergrund(lambda: store.name_pruefen(slug))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
 
     # ======================================================================
     # Icons und Uploads

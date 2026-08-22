@@ -9,6 +9,7 @@ export function TopBar() {
   const { t } = useTranslation();
   const view = useStore((s) => s.view);
   const setView = useStore((s) => s.setView);
+  const storePending = useStore((s) => s.storePending);
   const device = useStore((s) => s.device);
   const decks = useStore((s) => s.decks);
   const activeDeck = useStore((s) => s.activeDeck);
@@ -34,16 +35,30 @@ export function TopBar() {
       </div>
 
       <nav className="topbar-nav">
-        {(["editor", "plugins", "settings"] as const).map((entry) => (
-          <button
-            key={entry}
-            type="button"
-            className={view === entry ? "nav-tab active" : "nav-tab"}
-            onClick={() => setView(entry)}
-          >
-            {t(`app.${entry}`)}
-          </button>
-        ))}
+        {(["editor", "plugins", "settings"] as const).map((entry) => {
+          // Die Zahl am Reiter „Plugins": offene Einreichungen und Meldungen
+          // im Store. Sie steht nur, wenn der Angemeldete prüfen darf — für
+          // alle anderen ist das nichts, was sie angeht.
+          const offen =
+            entry === "plugins" && storePending
+              ? storePending.submissions + storePending.reports
+              : 0;
+          return (
+            <button
+              key={entry}
+              type="button"
+              className={view === entry ? "nav-tab active" : "nav-tab"}
+              onClick={() => setView(entry)}
+            >
+              {t(`app.${entry}`)}
+              {offen > 0 && (
+                <span className="nav-tab-zahl" title={t("store.pendingBadge")}>
+                  {offen}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="topbar-right">
