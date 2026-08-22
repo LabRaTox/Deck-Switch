@@ -528,8 +528,7 @@
     "newVersion": "Version {{version}} is in the store",
     "submitTitle": "Submit a plugin",
     "submitNeedsLogin": "You need to be signed in to the store to submit.",
-    "submitPick": "Which plugin?",
-    "submitNothing": "Nothing to submit — bundled plugins are already part of the app.",
+    "submitPick": "What goes into the store?",
     "submit": "Submit",
     "submitting": "Packing …",
     "submitFindings_one": "The scan found 1 finding. It will be shown with your version.",
@@ -548,8 +547,8 @@
       "hidden": "hidden",
       "listed": "in the catalogue"
     },
-    "submitHiddenForeign_one": "One installed plugin came from the store and belongs to someone else — it is not offered here.",
-    "submitHiddenForeign_other": "{{count}} installed plugins came from the store and belong to someone else — they are not offered here.",
-    "submitNewVersion": "Already in the store — this will be a new version."
+    "dropHere": "Drop an archive here",
+    "dropOrClick": "or click to choose a file",
+    "submitFormats": "ZIP, TAR or tar.gz — anything that can be opened for review is accepted. What ships is always a ZIP, because that is what the app can unpack."
   }
 }

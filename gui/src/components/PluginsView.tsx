@@ -256,9 +256,7 @@ export function PluginsView() {
         </div>
       </div>
 
-      {einreichenOpen && (
-        <StoreEinreichen katalog={katalog} onClose={() => setEinreichenOpen(false)} />
-      )}
+      {einreichenOpen && <StoreEinreichen onClose={() => setEinreichenOpen(false)} />}
 
       {installOpen && (
         <Modal

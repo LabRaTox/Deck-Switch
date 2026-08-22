@@ -88,10 +88,18 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Bei einem Formular *keinen* Content-Type setzen: Den bestimmt der Browser
+  // selbst und hängt die Grenze der Mehrteil-Nachricht an. Wer ihn von Hand
+  // auf application/json setzt, schickt eine Nachricht, die auf der anderen
+  // Seite niemand zerlegen kann — und der Server sieht ein leeres Formular.
+  const istFormular = init?.body instanceof FormData;
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: istFormular
+        ? { ...(init?.headers ?? {}) }
+        : { "Content-Type": "application/json", ...(init?.headers ?? {}) },
       ...init,
     });
   } catch {
@@ -457,12 +465,28 @@ export const api = {
       `/api/store/slugs/${encodeURIComponent(slug)}`,
     ),
 
-  /** Ein installiertes Plugin beim Store einreichen. */
+  /** Ein installiertes Plugin beim Store einreichen — gepackt wird im Backend. */
   storeUpload: (pluginId: string) =>
     request<StoreUploadResult>("/api/store/upload", {
       method: "POST",
       body: JSON.stringify({ plugin_id: pluginId }),
     }),
+
+  /**
+   * Ein fertiges Archiv einreichen.
+   *
+   * Ohne `Content-Type`: Den setzt der Browser selbst und hängt die Grenze
+   * der Mehrteil-Nachricht an. Wer ihn von Hand setzt, schickt eine Nachricht,
+   * die niemand zerlegen kann.
+   */
+  storeUploadArchive: (datei: File) => {
+    const formular = new FormData();
+    formular.append("file", datei);
+    return request<StoreUploadResult>("/api/store/upload-archive", {
+      method: "POST",
+      body: formular,
+    });
+  },
 
   // -- Sitzung --------------------------------------------------------------
 

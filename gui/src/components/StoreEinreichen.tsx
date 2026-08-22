@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
-import { localized } from "../i18n";
 import { useStore } from "../store";
-import type { StoreMinePlugin, StorePlugin, StoreUploadResult } from "../types";
+import type { StoreMinePlugin, StoreUploadResult } from "../types";
 import { Modal } from "./Modal";
 
 /**
@@ -18,16 +17,8 @@ import { Modal } from "./Modal";
  * weiß man, was hineingehört — und ein Archiv, das die Oberfläche baut,
  * müsste erst durch den Browser wandern, um denselben Weg zurückzunehmen.
  */
-export function StoreEinreichen({
-  katalog,
-  onClose,
-}: {
-  /** Der Katalog des Stores, wie ihn die Plugin-Ansicht schon geladen hat. */
-  katalog: StorePlugin[] | null;
-  onClose: () => void;
-}) {
-  const { t, i18n } = useTranslation();
-  const installiert = useStore((s) => s.plugins);
+export function StoreEinreichen({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   const konto = useStore((s) => s.storeKonto);
 
   const [meine, setMeine] = useState<StoreMinePlugin[] | null>(null);
@@ -48,35 +39,12 @@ export function StoreEinreichen({
     if (konto?.user) void lade();
   }, [konto?.user, lade]);
 
-  /** Die Kennungen, die im Store *mir* gehören. */
-  const meineKennungen = new Set((meine ?? []).map((p) => p.slug));
-
-  /**
-   * Was eingereicht werden kann.
-   *
-   * Drei Bedingungen, und jede hat ihren Grund:
-   *
-   * - **Nicht mitgeliefert.** Ein eingebautes Plugin gehört schon zur App,
-   *   und seine Kennung ist im Store für sie reserviert.
-   * - **Nicht fremd.** Aus dem Store installierte Plugins liegen im selben
-   *   Verzeichnis wie die eigenen — der Lader unterscheidet sie nicht. Wer
-   *   sie hier angeboten bekäme, würde fremde Arbeit einreichen und vom
-   *   Store abgewiesen. Also gar nicht erst anbieten.
-   * - **Eigene bleiben drin**, auch wenn sie schon im Katalog stehen: Genau
-   *   so reicht man eine neue Fassung ein.
-   */
-  const fremd = new Set(
-    (katalog ?? []).map((p) => p.slug).filter((slug) => !meineKennungen.has(slug)),
-  );
-  const einreichbar = installiert.filter((p) => !p.builtin && !fremd.has(p.id));
-  const ausgeblendet = installiert.filter((p) => !p.builtin && fremd.has(p.id)).length;
-
-  async function reicheEin(pluginId: string) {
-    setLaeuft(pluginId);
+  async function reicheEin(datei: File) {
+    setLaeuft(datei.name);
     setFehler("");
     setErgebnis(null);
     try {
-      setErgebnis(await api.storeUpload(pluginId));
+      setErgebnis(await api.storeUploadArchive(datei));
       await lade();
     } catch (exc) {
       setFehler(exc instanceof Error ? exc.message : String(exc));
@@ -113,40 +81,8 @@ export function StoreEinreichen({
       )}
 
       <h4>{t("store.submitPick")}</h4>
-      {/* Wer ein Plugin vermisst, soll erfahren, warum es fehlt — statt zu
-          suchen, wo nichts ist. */}
-      {ausgeblendet > 0 && (
-        <p className="hint">{t("store.submitHiddenForeign", { count: ausgeblendet })}</p>
-      )}
-
-      {einreichbar.length === 0 ? (
-        <p className="hint">{t("store.submitNothing")}</p>
-      ) : (
-        <ul className="store-einreichen">
-          {einreichbar.map((plugin) => (
-            <li key={plugin.id}>
-              <div>
-                <strong>{localized(plugin.manifest.name, i18n.language)}</strong>
-                <span className="hint">
-                  {" "}
-                  {plugin.id} · {plugin.manifest.version}
-                </span>
-                {meineKennungen.has(plugin.id) && (
-                  <div className="hint">{t("store.submitNewVersion")}</div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="btn"
-                disabled={laeuft === plugin.id}
-                onClick={() => void reicheEin(plugin.id)}
-              >
-                {laeuft === plugin.id ? t("store.submitting") : t("store.submit")}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <Ablegefeld laeuft={!!laeuft} onDatei={(datei) => void reicheEin(datei)} />
+      <p className="hint">{t("store.submitFormats")}</p>
 
       <h4>{t("store.mineTitle")}</h4>
       {meine === null ? (
@@ -193,5 +129,61 @@ export function StoreEinreichen({
         </ul>
       )}
     </Modal>
+  );
+}
+
+/**
+ * Das Feld, in das das Archiv wandert.
+ *
+ * Ziehen oder klicken — beides führt zum selben. Ein Fenster mit nur einem
+ * Auswahlknopf sähe aus, als ginge Ziehen nicht, und genau das versucht jeder
+ * zuerst.
+ */
+function Ablegefeld({
+  laeuft,
+  onDatei,
+}: {
+  laeuft: boolean;
+  onDatei: (datei: File) => void;
+}) {
+  const { t } = useTranslation();
+  const feld = useRef<HTMLInputElement>(null);
+  const [ueber, setUeber] = useState(false);
+
+  function nimm(dateien: FileList | null) {
+    const datei = dateien?.[0];
+    if (datei) onDatei(datei);
+  }
+
+  return (
+    <div
+      className={ueber ? "ablegefeld ueber" : "ablegefeld"}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setUeber(true);
+      }}
+      onDragLeave={() => setUeber(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setUeber(false);
+        nimm(e.dataTransfer.files);
+      }}
+      onClick={() => feld.current?.click()}
+    >
+      <input
+        ref={feld}
+        type="file"
+        accept=".zip,.tar,.tar.gz,.tgz,application/zip,application/x-tar,application/gzip"
+        hidden
+        onChange={(e) => {
+          nimm(e.target.files);
+          // Zurücksetzen, damit dieselbe Datei ein zweites Mal ausgewählt
+          // werden kann — sonst löst der Browser kein Ereignis aus.
+          e.target.value = "";
+        }}
+      />
+      <strong>{laeuft ? t("store.submitting") : t("store.dropHere")}</strong>
+      <span className="hint">{t("store.dropOrClick")}</span>
+    </div>
   );
 }
