@@ -3,27 +3,136 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { useStore } from "../store";
-import type { StoreAccount, StoreLoginStart, StorePlugin } from "../types";
+import type { StoreAccount, StoreLoginStart, StorePlugin, StoreWarnung } from "../types";
 
 /**
- * Der Plugin-Store in der App.
+ * Die Teile, die der Store zur Plugin-Ansicht beisteuert.
  *
- * Stöbern, installieren, anmelden, einreichen. Alles Netz-Bezogene läuft über
- * das lokale Backend und nicht von hier aus direkt zum Store: Dort liegt das
- * Anmeldetoken, dort wird die Prüfsumme geprüft, und dort gehört beides auch
- * hin — die Oberfläche soll nichts hüten müssen.
+ * Keine eigene Seite: Installiert und Store stehen in *einer* Liste — wer
+ * ein Plugin sucht, sucht ein Plugin, und ob es schon auf dem Rechner liegt,
+ * ist eine Eigenschaft und kein eigener Ort.
+ *
+ * Alles Netz-Bezogene läuft über das lokale Backend und nicht von hier aus
+ * direkt zum Store: Dort liegt das Anmeldetoken, dort wird die Prüfsumme
+ * geprüft, und dort gehört beides auch hin.
  */
-export function StoreView() {
+
+/** Eine Kachel für etwas, das es nur im Store gibt. */
+export function StoreKarte({
+  plugin,
+  laeuft,
+  onInstallieren,
+}: {
+  plugin: StorePlugin;
+  laeuft: boolean;
+  onInstallieren: () => void;
+}) {
   const { t } = useTranslation();
-  const reloadPlugins = useStore((s) => s.reloadPlugins);
-  const installiert = useStore((s) => s.plugins);
+
+  return (
+    <div className="plugin-card store">
+      <div className="plugin-head">
+        <div className="plugin-title">
+          <span className="plugin-name">{plugin.name}</span>
+          <span className="plugin-meta">
+            {plugin.latest.version} · {t("store.byAuthor", { author: plugin.author })}
+          </span>
+        </div>
+        <span className="tag-store">{t("store.tag")}</span>
+      </div>
+
+      <p className="plugin-card-summary">{plugin.summary}</p>
+      <p className="hint">
+        {plugin.latest.downloads} ×{plugin.rating.up > 0 && ` · ♥ ${plugin.rating.up}`}
+        {plugin.license && ` · ${plugin.license}`}
+      </p>
+
+      {/* Vor der Installation, nicht danach: Was ein Plugin tut, soll man
+          wissen, bevor es auf dem Rechner liegt. */}
+      {plugin.latest.warnings.length > 0 && <Warnungen warnungen={plugin.latest.warnings} />}
+
+      <div className="row">
+        <button
+          type="button"
+          className="btn primary"
+          disabled={laeuft}
+          onClick={onInstallieren}
+        >
+          {laeuft ? t("store.installing") : t("store.install")}
+        </button>
+        {plugin.source_url && (
+          <a className="btn" href={plugin.source_url} target="_blank" rel="noreferrer noopener">
+            {t("store.source")}
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Was die Durchsicht gefunden hat — zugeklappt, aber da. */
+export function Warnungen({ warnungen }: { warnungen: StoreWarnung[] }) {
+  const { t } = useTranslation();
+  return (
+    <details className="store-warnungen">
+      <summary>{t("store.warnings", { count: warnungen.length })}</summary>
+      <ul>
+        {warnungen.map((w, i) => (
+          <li key={i}>
+            <code>{w.kind}</code> {w.value}
+            <span className="hint">
+              {" "}
+              ({w.file}
+              {w.line ? `:${w.line}` : ""})
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/**
+ * Der Hinweis für die, die prüfen dürfen.
+ *
+ * Ganz oben und nicht in einer Ecke: Wer ihn übersieht, erfährt von einer
+ * wartenden Einreichung erst, wenn er von sich aus nachsieht.
+ */
+export function StoreHinweis() {
+  const { t } = useTranslation();
+  const pending = useStore((s) => s.storePending);
+  if (!pending || pending.submissions + pending.reports === 0) return null;
+
+  return (
+    <div className="store-hinweis">
+      <span>
+        {pending.submissions > 0 &&
+          t("store.pendingSubmissions", { count: pending.submissions })}
+        {pending.submissions > 0 && pending.reports > 0 && " · "}
+        {pending.reports > 0 && t("store.pendingReports", { count: pending.reports })}
+      </span>
+      <a className="btn" href={pending.url} target="_blank" rel="noreferrer noopener">
+        {t("store.openReview")}
+      </a>
+    </div>
+  );
+}
+
+/**
+ * Die Anmeldung — Device Flow.
+ *
+ * Die App hat keine Rückruf-Adresse: Sie läuft auf `127.0.0.1`, und ein
+ * eigener kleiner Server dafür wäre eine offene Tür im Netz. Also zeigt sie
+ * einen Code, und der Benutzer tippt ihn bei GitHub ein.
+ */
+export function StoreAnmeldung() {
+  const { t } = useTranslation();
+  const refreshStorePending = useStore((s) => s.refreshStorePending);
 
   const [konto, setKonto] = useState<StoreAccount | null>(null);
-  const [plugins, setPlugins] = useState<StorePlugin[] | null>(null);
-  const [suche, setSuche] = useState("");
+  const [start, setStart] = useState<StoreLoginStart | null>(null);
   const [fehler, setFehler] = useState("");
-  const [laeuft, setLaeuft] = useState("");
-  const [meldung, setMeldung] = useState("");
+  const abfrage = useRef<number | null>(null);
 
   const ladeKonto = useCallback(async () => {
     try {
@@ -32,204 +141,22 @@ export function StoreView() {
       // Kein Konto zu haben ist kein Fehler — der Katalog steht auch ohne.
       setKonto(null);
     }
-  }, []);
-
-  const ladeKatalog = useCallback(async (q: string) => {
-    setFehler("");
-    try {
-      const antwort = await api.storeCatalog("", q);
-      setPlugins(antwort.plugins);
-    } catch (exc) {
-      setPlugins([]);
-      setFehler(exc instanceof Error ? exc.message : String(exc));
-    }
-  }, []);
+    await refreshStorePending();
+  }, [refreshStorePending]);
 
   useEffect(() => {
     void ladeKonto();
-    void ladeKatalog("");
-  }, [ladeKonto, ladeKatalog]);
-
-  async function installiere(plugin: StorePlugin) {
-    setLaeuft(plugin.slug);
-    setFehler("");
-    setMeldung("");
-    try {
-      const ergebnis = await api.storeInstall(plugin.slug);
-      await reloadPlugins();
-      setMeldung(t("store.installed", { name: plugin.name, version: ergebnis.version }));
-    } catch (exc) {
-      setFehler(exc instanceof Error ? exc.message : String(exc));
-    } finally {
-      setLaeuft("");
-    }
-  }
-
-  const istInstalliert = (slug: string) => installiert.some((p) => p.id === slug);
-
-  return (
-    <div className="page-view">
-      <div className="page-head">
-        <h2>{t("store.title")}</h2>
-        <Anmeldung konto={konto} onAendern={ladeKonto} />
-      </div>
-
-      {/* Der Hinweis für die, die prüfen. Er steht ganz oben und nicht in
-          einer Ecke: Wer ihn übersieht, erfährt von einer wartenden
-          Einreichung erst, wenn er von sich aus nachsieht. */}
-      {konto?.pending && konto.pending.submissions + konto.pending.reports > 0 && (
-        <div className="store-hinweis">
-          <span>
-            {konto.pending.submissions > 0 &&
-              t("store.pendingSubmissions", { count: konto.pending.submissions })}
-            {konto.pending.submissions > 0 && konto.pending.reports > 0 && " · "}
-            {konto.pending.reports > 0 &&
-              t("store.pendingReports", { count: konto.pending.reports })}
-          </span>
-          <a
-            className="btn"
-            href={konto.pending.url}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {t("store.openReview")}
-          </a>
-        </div>
-      )}
-
-      <form
-        className="row"
-        style={{ margin: "0 0 16px" }}
-        onSubmit={(ereignis) => {
-          ereignis.preventDefault();
-          void ladeKatalog(suche);
-        }}
-      >
-        <input
-          type="search"
-          value={suche}
-          placeholder={t("store.search")}
-          onChange={(ereignis) => setSuche(ereignis.target.value)}
-        />
-        <button type="submit" className="btn">
-          {t("store.searchButton")}
-        </button>
-      </form>
-
-      {fehler && <p className="error-note">{fehler}</p>}
-      {meldung && <p className="hint">{meldung}</p>}
-
-      {plugins === null ? (
-        <p className="hint">{t("store.loading")}</p>
-      ) : plugins.length === 0 ? (
-        <p className="empty-note">{t("store.empty")}</p>
-      ) : (
-        <div className="plugin-list">
-          {plugins.map((plugin) => (
-            <StoreKarte
-              key={plugin.slug}
-              plugin={plugin}
-              schonDa={istInstalliert(plugin.slug)}
-              laeuft={laeuft === plugin.slug}
-              onInstallieren={() => void installiere(plugin)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Eine Kachel im Katalog — mit dem, was die Durchsicht gefunden hat. */
-function StoreKarte({
-  plugin,
-  schonDa,
-  laeuft,
-  onInstallieren,
-}: {
-  plugin: StorePlugin;
-  schonDa: boolean;
-  laeuft: boolean;
-  onInstallieren: () => void;
-}) {
-  const { t } = useTranslation();
-  const warnungen = plugin.latest.warnings;
-
-  return (
-    <article className="plugin-card">
-      <div className="plugin-card-head">
-        <h3>{plugin.name}</h3>
-        <span className="plugin-card-version">{plugin.latest.version}</span>
-      </div>
-      <p className="plugin-card-summary">{plugin.summary}</p>
-      <p className="hint">
-        {t("store.byAuthor", { author: plugin.author })} · {plugin.latest.downloads} ×
-        {plugin.rating.up > 0 && ` · ♥ ${plugin.rating.up}`}
-      </p>
-
-      {/* Vor der Installation, nicht danach: Was das Plugin tut, soll man
-          wissen, bevor es auf dem Rechner liegt. */}
-      {warnungen.length > 0 && (
-        <details className="store-warnungen">
-          <summary>{t("store.warnings", { count: warnungen.length })}</summary>
-          <ul>
-            {warnungen.map((w, i) => (
-              <li key={i}>
-                <code>{w.kind}</code> {w.value}
-                <span className="hint">
-                  {" "}
-                  ({w.file}
-                  {w.line ? `:${w.line}` : ""})
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-
-      <div className="row">
-        <button
-          type="button"
-          className="btn primary"
-          disabled={laeuft || schonDa}
-          onClick={onInstallieren}
-        >
-          {schonDa
-            ? t("store.alreadyInstalled")
-            : laeuft
-              ? t("store.installing")
-              : t("store.install")}
-        </button>
-      </div>
-    </article>
-  );
-}
-
-/**
- * Die Anmeldung — Device Flow.
- *
- * Die App hat keine Rückruf-Adresse: Sie läuft auf ``127.0.0.1``, und ein
- * eigener kleiner Server dafür wäre eine offene Tür im Netz. Also zeigt sie
- * einen Code, und der Benutzer tippt ihn bei GitHub ein.
- */
-function Anmeldung({
-  konto,
-  onAendern,
-}: {
-  konto: StoreAccount | null;
-  onAendern: () => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const [start, setStart] = useState<StoreLoginStart | null>(null);
-  const [fehler, setFehler] = useState("");
-  const abfrage = useRef<number | null>(null);
+  }, [ladeKonto]);
 
   // Ohne dieses Aufräumen liefe die Nachfrage weiter, wenn die Ansicht
   // gewechselt wird — und schriebe irgendwann in eine Komponente, die es
   // nicht mehr gibt.
-  useEffect(() => () => {
-    if (abfrage.current) window.clearInterval(abfrage.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (abfrage.current) window.clearInterval(abfrage.current);
+    },
+    [],
+  );
 
   async function anmelden() {
     setFehler("");
@@ -237,23 +164,26 @@ function Anmeldung({
       const begonnen = await api.storeLogin();
       setStart(begonnen);
 
-      abfrage.current = window.setInterval(async () => {
-        try {
-          const antwort = await api.storeLoginPoll(begonnen.device_code);
-          if (antwort.status === "ok") {
+      abfrage.current = window.setInterval(
+        async () => {
+          try {
+            const antwort = await api.storeLoginPoll(begonnen.device_code);
+            if (antwort.status === "ok") {
+              if (abfrage.current) window.clearInterval(abfrage.current);
+              abfrage.current = null;
+              setStart(null);
+              await ladeKonto();
+            }
+          } catch (exc) {
             if (abfrage.current) window.clearInterval(abfrage.current);
             abfrage.current = null;
             setStart(null);
-            await onAendern();
+            setFehler(exc instanceof Error ? exc.message : String(exc));
           }
-        } catch (exc) {
-          if (abfrage.current) window.clearInterval(abfrage.current);
-          abfrage.current = null;
-          setStart(null);
-          setFehler(exc instanceof Error ? exc.message : String(exc));
-        }
+        },
         // GitHub bremst, wer zu oft fragt — das Intervall kommt von dort.
-      }, Math.max(begonnen.interval, 5) * 1000);
+        Math.max(begonnen.interval, 5) * 1000,
+      );
     } catch (exc) {
       setFehler(exc instanceof Error ? exc.message : String(exc));
     }
@@ -261,7 +191,7 @@ function Anmeldung({
 
   async function abmelden() {
     await api.storeLogout();
-    await onAendern();
+    await ladeKonto();
   }
 
   if (start) {

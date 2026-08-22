@@ -268,11 +268,7 @@
       "openSupport": "Seite öffnen"
     },
     "checksumAnnounced": "Angekündigte Prüfsumme: {{hash}}… — sie wird vor dem Auspacken geprüft.",
-    "checksumMissing": "Ohne Prüfsumme: Es wird installiert, was gerade unter der Adresse liegt.",
-    "source": {
-      "installiert": "Installiert",
-      "store": "Store"
-    }
+    "checksumMissing": "Ohne Prüfsumme: Es wird installiert, was gerade unter der Adresse liegt."
   },
   "settings": {
     "title": "Einstellungen",
@@ -525,6 +521,10 @@
     "pendingReports_one": "1 offene Meldung",
     "pendingReports_other": "{{count}} offene Meldungen",
     "openReview": "Zur Prüfung",
-    "pendingBadge": "Im Store wartet etwas auf Prüfung"
+    "pendingBadge": "Im Store wartet etwas auf Prüfung",
+    "tag": "Store",
+    "source": "Quelltext",
+    "update": "Auf {{version}}",
+    "newVersion": "Im Store steht Fassung {{version}}"
   }
 }

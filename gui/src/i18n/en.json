@@ -268,11 +268,7 @@
       "openSupport": "Open page"
     },
     "checksumAnnounced": "Announced checksum: {{hash}}… — verified before unpacking.",
-    "checksumMissing": "No checksum: whatever is at that address will be installed.",
-    "source": {
-      "installiert": "Installed",
-      "store": "Store"
-    }
+    "checksumMissing": "No checksum: whatever is at that address will be installed."
   },
   "settings": {
     "title": "Settings",
@@ -525,6 +521,10 @@
     "pendingReports_one": "1 open report",
     "pendingReports_other": "{{count}} open reports",
     "openReview": "Go to review",
-    "pendingBadge": "Something in the store is awaiting review"
+    "pendingBadge": "Something in the store is awaiting review",
+    "tag": "Store",
+    "source": "Source",
+    "update": "To {{version}}",
+    "newVersion": "Version {{version}} is in the store"
   }
 }

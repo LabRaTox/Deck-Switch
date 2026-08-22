@@ -2707,13 +2707,20 @@ input[type="checkbox"] {
 
 /* ── Der Plugin-Store ───────────────────────────────────────────────── */
 
-/* Der Umschalter zwischen „Installiert" und „Store". Sitzt über der
-   Kopfzeile und nicht neben den Typen-Reitern: Das ist die größere Frage —
-   erst woher, dann was für ein Plugin. */
-.plugin-quelle {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
+/* Eine Kachel aus dem Store steht neben den installierten — gestrichelt,
+   damit auf einen Blick klar ist, was noch nicht auf dem Rechner liegt. */
+.plugin-card.store {
+  border-style: dashed;
+  border-left-color: var(--accent);
+}
+
+.tag-store {
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  color: var(--accent);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* Die Zahl am Reiter „Plugins" in der Kopfleiste: offene Prüfungen. */
