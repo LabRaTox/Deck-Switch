@@ -3,12 +3,13 @@
 *[Deutsche Fassung](../de/plugin-development.md)* · Back to the
 [overview](../../README.md).
 
-There are two kinds: **action plugins** drive keys, dials and touch strip
+There are two kinds. **Action plugins** drive keys, dials and touch strip
 segments, **icon set plugins** merely supply SVGs for the icon picker.
 
-Plugins live in `~/.local/share/deckswitch/plugins/<plugin-id>/`. The
-bundled plugins under `backend/plugins/` are built identically and serve
-well as templates.
+Plugins live in `~/.local/share/deckswitch/plugins/`. Every folder there
+carries a running number, and which plugin is inside is in its
+`manifest.json`. The bundled plugins under `backend/plugins/` are built
+identically and serve well as templates.
 
 ---
 
@@ -21,12 +22,18 @@ A plugin may bring an image representing it in the overview:
 ```
 
 256 × 256 pixels, PNG (JPEG, WebP or SVG work too). The file lives in the
-plugin directory; paths pointing outside are rejected by the backend. The
-icon appears only in the plugin list, not next to the actions.
+plugin directory, and paths pointing outside are rejected by the backend. The
+icon appears only in the plugin list and not next to the actions.
+
+On top of that you can give up to three images for the detail view:
+
+```json
+{ "screenshots": ["screenshots/deck.png", "screenshots/actions.png"] }
+```
 
 ## Action plugin
 
-Minimal example — a plugin with one action that counts up:
+A minimal example: a plugin with one action that counts up.
 
 ```
 counter/
@@ -103,14 +110,14 @@ class CounterPlugin(ActionPlugin):
 ```
 
 That is all. Drawing goes through the shared layout: background, icon
-(matching the state), label underneath — icon, sizes, colours and background
+(matching the state), label underneath. Icon, sizes, colours and background
 are set by the user in the interface, without the plugin doing anything for
 it.
 
 ## The hooks
 
 All of them are optional, all may be `def` **or** `async def`. Synchronous
-hooks run in a worker thread — a `subprocess.run` therefore never blocks the
+hooks run in a worker thread, so a `subprocess.run` never blocks the
 application.
 
 | Hook | When |
@@ -131,7 +138,7 @@ application.
 | `gui_command(command, payload)` | an action the interface triggers directly |
 
 One trap: a **synchronous** hook runs in a worker thread, and there is no
-event loop there — `asyncio.create_task` then fails with "no running event
+event loop there, so `asyncio.create_task` fails with "no running event
 loop". Two ways out:
 
 * declare the hook as `async def` (then it runs in the loop), or
@@ -153,27 +160,28 @@ def get_status(self):
 self.services.runtime.publish_plugin_status(self.manifest.id)
 ```
 
-If there is no connection to speak of, leave `get_status` out — then the
-interface shows nothing rather than pretending a meaning.
+If there is no connection to speak of, just leave `get_status` out. The
+interface then shows nothing there.
 
 ### The context (`ctx`)
 
-The same action can be assigned several times — one key per output device,
+The same action can be assigned several times, one key per output device
 say. The `ctx` tells you which assignment is up:
 
 * `ctx.index`, `ctx.input_type` (`"key"`/`"dial"`), `ctx.page_id`
-* `ctx.size` — drawing area: `(120, 120)` for keys, `(200, 100)` per segment
-* `ctx.setting(name, default)` — a setting with a fallback
-* `ctx.scratch` — free scratch space, survives between calls
-* `ctx.request_redraw()` — redraw exactly this tile immediately
-* `ctx.services` — audio, icons, rendering, runtime and the system services
-* `ctx.deck_serial` — which deck the assignment sits on
+* `ctx.size` is the drawing area: `(120, 120)` for keys, `(200, 100)` per
+  segment
+* `ctx.setting(name, default)` gets a setting with a fallback
+* `ctx.scratch` is free scratch space and survives between calls
+* `ctx.request_redraw()` redraws exactly this tile immediately
+* `ctx.services` are audio, icons, rendering, runtime and the system services
+* `ctx.deck_serial` says which deck the assignment sits on
 * `ctx.frame_time` — runtime in seconds; animated images pick their frame
   from it
 
 **Important with several decks:** `ctx.services.runtime` points at *the deck
 the press happened on*. Navigating through `self.services.runtime` lands on
-the primary deck instead — with a single device that is the same thing, with
+the primary deck instead. With a single device that is the same thing, with
 two it is wrong. Rule of thumb: anything to do with an assignment goes
 through `ctx.services.runtime`; everything else (reporting errors, saving
 the config) may go through `self.services.runtime`.
@@ -181,7 +189,7 @@ the config) may go through `self.services.runtime`.
 ## State from outside
 
 If something changes without the user doing anything, the display should not
-wait for the next tick. That is what `request_redraw` is for — and it is
+wait for the next tick. That is what `request_redraw` is for, and it is
 thread-safe, so it may be called from a watcher thread:
 
 ```python
@@ -212,8 +220,8 @@ def get_dynamic_options(self, source, context=None):
     return []
 ```
 
-If a list depends on another field — the filters of *one* source, the
-sources of *one* scene — that is declared in the manifest:
+If a list depends on another field, say the filters of *one* source or the
+sources of *one* scene, you declare that in the manifest:
 
 ```json
 {
@@ -229,7 +237,8 @@ reloads the list as soon as the field above changes.
 
 ## Drawing yourself
 
-Only needed when the standard layout does not suffice — for a level bar, for
+You only need this when the standard layout does not suffice, for a level bar
+for
 instance:
 
 ```python
@@ -297,12 +306,12 @@ assigned, it receives the turn **like a short key press** — that is
 only `on_dial_rotate` is therefore unsuitable as a direction assignment;
 anyone wanting to offer both answers both hooks.
 
-Conversely: as long as no direction is assigned, nothing changes —
-`on_dial_rotate` keeps receiving every delta.
+As long as no direction is assigned, nothing changes: `on_dial_rotate` keeps
+receiving every delta.
 
 ## What plugins need to know about multi actions
 
-A multi action calls perfectly ordinary actions — exactly as a key press
+A multi action calls perfectly ordinary actions, exactly as a key press
 would: first `on_key_down`, then `on_key_up`. A plugin needs to prepare
 nothing for that. Two things are worth knowing all the same:
 
@@ -314,9 +323,9 @@ nothing for that. Two things are worth knowing all the same:
 
 ## No icon
 
-`IconRef(kind="none")` explicitly means "no icon here" — not even the
-`default_icon` from the manifest. That is what you need when setting a
-finished key image as the background; icon and text are already part of it.
+`IconRef(kind="none")` explicitly means "no icon here", not even the
+`default_icon` from the manifest. That is what you need when you set a
+finished key image as the background. Icon and text are already part of it.
 
 ## Icon set plugin
 
@@ -335,7 +344,7 @@ Nothing but a manifest and a directory of SVGs:
 
 The file name without its extension is the icon name. SVGs working with
 `stroke="currentColor"` or `fill="currentColor"` can be recoloured in the
-interface; all others are tinted through their alpha mask.
+interface. All others are tinted through their alpha mask.
 
 ## Trying it out
 
@@ -343,6 +352,16 @@ interface; all others are tinted through their alpha mask.
 ./scripts/start-backend.sh --verbose
 ```
 
-In the interface, *Plugins → Reload plugins*. Because Python caches modules
-it has already imported, restarting the backend is the more reliable route
+In the interface then *Plugins → Reload plugins*. Python caches modules it
+has already imported, so restarting the backend is the more reliable route
 after code changes.
+
+## Submitting
+
+Once the plugin is done you can put it into the store through *Plugins →
+submit plugin*. Drop an archive into the field; ZIP, TAR and tar.gz all work.
+
+The store looks at the Python source and notes what stands out: addresses,
+network libraries, program calls, code generated at runtime. Everyone who
+wants to install your plugin gets to see those findings. If your plugin
+reaches out to the network, say what for in the description.
