@@ -2863,6 +2863,15 @@ input[type="checkbox"] {
   vertical-align: top;
 }
 
+/* Der Knopf zum Zurücknehmen steht rechts außen und nimmt nur so viel
+   Breite, wie er braucht — die Spalten davor sollen sich nicht danach
+   richten. */
+.store-fassung-knopf {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* Der Stand einer Fassung. Farbe statt Symbol: Was abgelehnt wurde, soll
    man sehen, ohne es zu lesen — und was wartet, soll nicht wie ein Fehler
    aussehen. */

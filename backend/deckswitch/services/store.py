@@ -380,6 +380,21 @@ def meine_plugins() -> dict[str, Any]:
     return _anfrage("/api/me/plugins", mit_token=True)
 
 
+def zuruecknehmen(slug: str, version: str) -> dict[str, Any]:
+    """Nimmt eine eigene Einreichung wieder zurück.
+
+    Was daraus wird, entscheidet der Store und nicht die App: Eine Fassung,
+    die noch niemand bekommen hat, verschwindet; eine ausgelieferte fällt nur
+    aus dem Katalog. Die Antwort sagt in ``aktion``, welcher Fall es war.
+    """
+    return _anfrage(
+        f"/api/me/plugins/{urllib.parse.quote(slug, safe='')}/"
+        f"{urllib.parse.quote(version, safe='')}",
+        methode="DELETE",
+        mit_token=True,
+    )
+
+
 def packe(ordner: Path) -> bytes:
     """Packt einen Plugin-Ordner so, wie der Store ihn erwartet.
 

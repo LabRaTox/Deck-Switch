@@ -195,7 +195,18 @@ kann. Ausgeliefert wird später immer ein ZIP, weil nur das der Installer
 auspacken kann.
 
 Im selben Fenster stehen deine bisherigen Einreichungen mit ihrem Stand
-(wartet, freigegeben, abgelehnt) und dem Text der Moderation.
+(wartet, freigegeben, abgelehnt) und dem Text der Moderation. Jede Zeile hat
+einen Knopf, um sie wieder loszuwerden — was dabei passiert, hängt vom Stand
+ab:
+
+* **Wartet oder abgelehnt:** Die Fassung wird gelöscht, das Archiv mit ihr,
+  und die Versionsnummer ist wieder frei. Praktisch, wenn du zu früh
+  hochgeladen hast.
+* **Freigegeben:** Sie fällt nur aus dem Katalog. Wer sie schon installiert
+  hat, kann sie weiter herunterladen — sonst stünde eine Neuinstallation
+  plötzlich vor einer Adresse, die es nicht mehr gibt.
+* **Gesperrt:** bleibt liegen. Das hat ein Moderator entschieden, und daran
+  ändert kein Knopf etwas.
 
 ### streamdeck://-Links
 

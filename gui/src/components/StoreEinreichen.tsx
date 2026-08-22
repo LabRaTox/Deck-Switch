@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { useStore } from "../store";
-import type { StoreMinePlugin, StoreUploadResult } from "../types";
+import type { StoreMinePlugin, StoreMineVersion, StoreUploadResult } from "../types";
 import { Modal } from "./Modal";
 
 /**
@@ -50,6 +50,24 @@ export function StoreEinreichen({ onClose }: { onClose: () => void }) {
       setFehler(exc instanceof Error ? exc.message : String(exc));
     } finally {
       setLaeuft("");
+    }
+  }
+
+  async function nimmZurueck(plugin: StoreMinePlugin, version: StoreMineVersion) {
+    // Zwei verschiedene Fragen, denn es sind zwei verschiedene Vorgänge: Was
+    // freigegeben ist, hat womöglich schon jemand installiert.
+    const frage =
+      version.status === "approved"
+        ? t("store.withdrawConfirm", { name: plugin.name, version: version.version })
+        : t("store.deleteConfirm", { name: plugin.name, version: version.version });
+    if (!window.confirm(frage)) return;
+
+    setFehler("");
+    try {
+      await api.storeWithdraw(plugin.slug, version.version);
+      await lade();
+    } catch (exc) {
+      setFehler(exc instanceof Error ? exc.message : String(exc));
     }
   }
 
@@ -120,6 +138,22 @@ export function StoreEinreichen({ onClose }: { onClose: () => void }) {
                         {v.reviewNote || v.stateNote || ""}
                       </td>
                       <td className="hint">{v.downloadCount} ×</td>
+                      <td className="store-fassung-knopf">
+                        {/* Gesperrtes und schon Zurückgezogenes lässt der
+                            Store nicht mehr anfassen — dann steht hier auch
+                            kein Knopf, der nur eine Fehlermeldung brächte. */}
+                        {(v.status === "pending" ||
+                          v.status === "rejected" ||
+                          v.status === "approved") && (
+                          <button
+                            type="button"
+                            className="btn small danger"
+                            onClick={() => void nimmZurueck(plugin, v)}
+                          >
+                            {t(v.status === "approved" ? "store.withdraw" : "store.delete")}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
