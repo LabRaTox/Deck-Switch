@@ -227,8 +227,15 @@ def main() -> None:
             ergebnis = store.installiere(slug)
             check("installiert", ergebnis["plugin_id"] == slug, json.dumps(ergebnis))
             from deckswitch import paths  # noqa: E402
-            check("und liegt im Plugin-Verzeichnis",
-                  (paths.USER_PLUGINS_DIR / slug / "manifest.json").is_file())
+            # Der Ordner heißt nach einer laufenden Nummer, nicht nach der
+            # Kennung — gesucht wird deshalb über die Manifeste.
+            gefunden = [
+                ordner for ordner in paths.USER_PLUGINS_DIR.iterdir()
+                if (ordner / "manifest.json").is_file()
+                and json.loads((ordner / "manifest.json").read_text())["id"] == slug
+            ]
+            check("und liegt im Plugin-Verzeichnis", len(gefunden) == 1,
+                  gefunden[0].name if gefunden else "nicht gefunden")
             check("die Prüfsumme stimmt mit der des Archivs überein",
                   ergebnis["sha256"] == hashlib.sha256(archiv).hexdigest())
 

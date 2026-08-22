@@ -288,12 +288,12 @@ def _install_from_directory(source: Path, plugin_id: str) -> Manifest:
         )
 
     paths.USER_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
-    target = paths.USER_PLUGINS_DIR / manifest.id
+    target = _ordner_fuer(manifest.id)
 
     # Erst neben das Ziel kopieren, dann tauschen — bricht das Kopieren ab,
     # bleibt eine vorhandene Installation unversehrt.
-    staged = paths.USER_PLUGINS_DIR / f".{manifest.id}.new"
-    backup = paths.USER_PLUGINS_DIR / f".{manifest.id}.old"
+    staged = paths.USER_PLUGINS_DIR / f".{target.name}.new"
+    backup = paths.USER_PLUGINS_DIR / f".{target.name}.old"
     shutil.rmtree(staged, ignore_errors=True)
     shutil.rmtree(backup, ignore_errors=True)
 
@@ -330,18 +330,69 @@ def uninstall(plugin_id: str) -> None:
     if (paths.BUILTIN_PLUGINS_DIR / plugin_id).is_dir():
         raise InstallError("Eingebaute Plugins lassen sich nicht entfernen")
 
-    target = (paths.USER_PLUGINS_DIR / plugin_id).resolve()
-    root = paths.USER_PLUGINS_DIR.resolve()
-    if root not in target.parents or not target.is_dir():
+    # Gesucht wird über das Manifest und nicht über den Ordnernamen: Der ist
+    # eine Nummer und sagt nichts darüber, was darin liegt.
+    target = _finde_ordner(plugin_id)
+    if target is None:
         raise InstallError(f"'{plugin_id}' ist nicht installiert")
 
+    root = paths.USER_PLUGINS_DIR.resolve()
+    if root not in target.resolve().parents:
+        raise InstallError(f"'{plugin_id}' liegt nicht im Plugin-Verzeichnis")
+
     shutil.rmtree(target)
-    log.info("Plugin '%s' entfernt", plugin_id)
+    log.info("Plugin '%s' entfernt (%s)", plugin_id, target.name)
 
 
 # --------------------------------------------------------------------------
 # Hilfen
 # --------------------------------------------------------------------------
+
+
+def _finde_ordner(plugin_id: str) -> Path | None:
+    """Der Ordner, in dem dieses Plugin liegt — oder ``None``.
+
+    Über das Manifest und nicht über den Namen: Seit die Ordner Nummern
+    tragen, sagt der Name nichts mehr über den Inhalt. Ordner aus früheren
+    Fassungen heißen noch wie die Kennung; auch die findet diese Suche, denn
+    sie sieht in jedes Manifest.
+    """
+    if not paths.USER_PLUGINS_DIR.is_dir():
+        return None
+    for eintrag in sorted(paths.USER_PLUGINS_DIR.iterdir()):
+        if not eintrag.is_dir() or eintrag.name.startswith((".", "_")):
+            continue
+        manifest = _read_manifest(eintrag)
+        if manifest is not None and manifest.id == plugin_id:
+            return eintrag
+    return None
+
+
+def _ordner_fuer(plugin_id: str) -> Path:
+    """Wohin dieses Plugin installiert wird.
+
+    **Warum eine Nummer und nicht die Kennung.** Zwei Plugins mit derselben
+    Kennung soll es zwar nicht geben — der Store lässt jede nur einmal zu —,
+    aber auf der Platte hätte ein Name aus einem Archiv trotzdem
+    Macht: Wer ein Plugin von Hand installiert, bestimmt damit einen
+    Ordnernamen, und ein Manifest ist nichts als eine Behauptung. Eine
+    laufende Nummer nimmt dem Archiv diese Entscheidung ab.
+
+    Ist das Plugin schon da, bleibt es in seinem Ordner: Eine neue Fassung
+    ersetzt die alte an Ort und Stelle, statt daneben eine zweite anzulegen.
+    """
+    vorhanden = _finde_ordner(plugin_id)
+    if vorhanden is not None:
+        return vorhanden
+
+    hoechste = 0
+    if paths.USER_PLUGINS_DIR.is_dir():
+        for eintrag in paths.USER_PLUGINS_DIR.iterdir():
+            if eintrag.is_dir() and eintrag.name.isdigit():
+                hoechste = max(hoechste, int(eintrag.name))
+    # Vierstellig, damit eine Auflistung in der Reihenfolge der Installation
+    # steht und nicht 10 vor 2 einsortiert.
+    return paths.USER_PLUGINS_DIR / f"{hoechste + 1:04d}"
 
 
 def _read_manifest(directory: Path) -> Manifest | None:
