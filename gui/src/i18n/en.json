@@ -547,6 +547,9 @@
       "draft": "not in the catalogue yet",
       "hidden": "hidden",
       "listed": "in the catalogue"
-    }
+    },
+    "submitHiddenForeign_one": "One installed plugin came from the store and belongs to someone else — it is not offered here.",
+    "submitHiddenForeign_other": "{{count}} installed plugins came from the store and belong to someone else — they are not offered here.",
+    "submitNewVersion": "Already in the store — this will be a new version."
   }
 }
