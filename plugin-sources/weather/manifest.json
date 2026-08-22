@@ -6,14 +6,26 @@
   },
   "version": "1.0.0",
   "type": "action",
-  "entry": "plugin.py",
-  "class": "WeatherPlugin",
-  "accent": "#0ea5e9",
+  "author": "LabRaTox",
   "category": "monitoring",
+  "accent": "#0ea5e9",
   "description": {
     "de": "Aktuelles Wetter, Vorhersage und Luftqualität auf Tasten und Dials — ohne Konto und ohne API-Schlüssel.",
     "en": "Current weather, forecast and air quality on keys and dials — no account, no API key."
   },
+  "changelog": {
+    "de": "Erste Fassung: aktuelles Wetter, Vorhersage und Luftqualität — ohne Konto und ohne API-Schlüssel.",
+    "en": "First release: current weather, forecast and air quality — no account, no API key."
+  },
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/Deck-Switch",
+  "icon": "icon.png",
+  "screenshots": [
+    "screenshots/deck.png",
+    "screenshots/aktionen.png"
+  ],
+  "entry": "plugin.py",
+  "class": "WeatherPlugin",
   "config_schema": [
     {
       "key": "search",
@@ -359,6 +371,5 @@
         }
       ]
     }
-  ],
-  "icon": "icon.png"
+  ]
 }
