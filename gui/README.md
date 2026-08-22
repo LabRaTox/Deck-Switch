@@ -1,32 +1,44 @@
-# React + TypeScript + Vite
+# Die Oberfläche
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React mit TypeScript, gebaut mit Vite. Im Betrieb läuft das Ganze als
+Tauri-Fenster, das den WebView des Systems benutzt.
 
-Currently, two official plugins are available:
+## Entwickeln
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Das Backend muss laufen, sonst zeigt die Oberfläche nur „Backend nicht
+erreichbar":
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+../scripts/start-backend.sh   # in einem zweiten Terminal
+npm install
+npm run dev                   # http://127.0.0.1:5173
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Der Dev-Server auf Port 5173 spricht mit dem Backend auf 8770. Läuft dein
+Backend woanders, sag es über eine `.env.local`:
+
+```
+VITE_BACKEND_URL=http://127.0.0.1:8790
+```
+
+Das Backend lässt nur bekannte Herkünfte an seine API. Die Vite-Ports 5173,
+5174 und 4173 stehen dort nur, wenn du es mit `--dev` startest.
+
+## Bauen
+
+```sh
+npm run build     # nach dist/, von dort liefert das Backend die Oberfläche aus
+```
+
+## Wo was liegt
+
+| | |
+| --- | --- |
+| `src/api/client.ts` | alle Aufrufe ans Backend |
+| `src/store.ts` | der geteilte Zustand (zustand) |
+| `src/components/` | die Ansichten |
+| `src/i18n/` | Deutsch und Englisch |
+| `src/lib/` | Kleinigkeiten, die mehrere Ansichten brauchen |
+
+Gezeichnet wird nichts hier: Tastenbilder kommen fertig aus dem Backend. Die
+Oberfläche zeigt genau das, was auch auf dem Gerät steht.
