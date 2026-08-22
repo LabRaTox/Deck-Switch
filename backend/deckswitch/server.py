@@ -955,6 +955,32 @@ def create_app(
         return {"stack_index": session.stack_index(index)}
 
     # ======================================================================
+    # Sitzung
+    # ======================================================================
+
+    @app.get("/api/session")
+    async def session_capabilities() -> dict[str, Any]:
+        """Was diese Sitzung hergibt.
+
+        Die Oberfläche zeigt das in den Einstellungen an — damit auf die
+        Frage „warum ist die Fensteraktion nicht da?" eine Antwort im
+        Programm steht statt im Fehlerbericht.
+        """
+        return runtime.session.as_dict()
+
+    @app.post("/api/session/refresh")
+    async def refresh_capabilities() -> dict[str, Any]:
+        """Noch einmal nachsehen.
+
+        Nötig nach einer Nachinstallation (``ddcutil`` etwa) und nach dem
+        Beitritt zur Gruppe ``input`` — sonst bliebe die Aktion bis zum
+        nächsten Neustart des Backends verschwunden, obwohl sie längst
+        funktionieren würde.
+        """
+        await runtime.session.detect()
+        return runtime.session.as_dict()
+
+    # ======================================================================
     # Plugins
     # ======================================================================
 
@@ -1391,6 +1417,50 @@ def _has_icon(loaded) -> bool:
     return directory in candidate.parents and candidate.is_file()
 
 
+def _mark_unavailable(manifest: dict[str, Any], runtime: Runtime) -> None:
+    """Trägt bei jeder Aktion ein, ob diese Sitzung sie überhaupt hergibt.
+
+    Bewusst *markieren* statt weglassen: Eine Aktion, die schon auf einer
+    Taste liegt, muss die Oberfläche weiterhin benennen und zeichnen können
+    — sonst stünde dort nach einem Desktop-Wechsel eine namenlose Kachel.
+    Die Aktionsbibliothek blendet aus, was hier markiert ist; die belegte
+    Taste zeigt stattdessen den Grund an.
+    """
+    for action in manifest.get("actions", []):
+        _mark_options(action, runtime)
+
+        fehlend = runtime.session.missing(action.get("requires") or [])
+        if not fehlend:
+            continue
+        action["unavailable"] = {
+            "missing": fehlend,
+            # Der erste fehlende Grund genügt: Fehlen zwei Fähigkeiten,
+            # ist die erste ohnehin schon ein Ausschlussgrund, und zwei
+            # Sätze nebeneinander liest niemand.
+            "reason": runtime.session.reason_for(fehlend[0]),
+        }
+
+
+def _mark_options(action: dict[str, Any], runtime: Runtime) -> None:
+    """Dasselbe eine Ebene tiefer: einzelne Auswahlwerte.
+
+    Manche Aktionen sind nur *teilweise* an eine Fähigkeit gebunden. „Sitzung"
+    etwa kann überall herunterfahren — ``systemctl`` genügt dafür —, aber
+    „Bildschirme ausschalten" braucht ``kscreen-doctor`` und „Abmelden" die
+    Sitzungsverwaltung von Plasma. Die ganze Aktion auszublenden wäre zu
+    grob; sie anzubieten und einzelne Punkte ins Leere laufen zu lassen wäre
+    zu ungenau. Also wird der einzelne Auswahlwert markiert.
+    """
+    for feld in action.get("settings_schema", []):
+        for option in feld.get("options", []):
+            fehlend = runtime.session.missing(option.get("requires") or [])
+            if fehlend:
+                option["unavailable"] = {
+                    "missing": fehlend,
+                    "reason": runtime.session.reason_for(fehlend[0]),
+                }
+
+
 def _plugins_payload(runtime: Runtime) -> list[dict[str, Any]]:
     """Plugins in der vom User festgelegten Reihenfolge.
 
@@ -1406,10 +1476,12 @@ def _plugins_payload(runtime: Runtime) -> list[dict[str, Any]]:
 
     result = []
     for loaded in ordered:
+        manifest = loaded.manifest.model_dump(mode="json", by_alias=True)
+        _mark_unavailable(manifest, runtime)
         result.append(
             {
                 "id": loaded.id,
-                "manifest": loaded.manifest.model_dump(mode="json", by_alias=True),
+                "manifest": manifest,
                 # Ob die Datei wirklich da ist, weiß nur das Backend — die
                 # GUI soll kein Bild anfragen, das es nicht gibt.
                 "has_icon": _has_icon(loaded),

@@ -141,6 +141,20 @@ async def main():
     check("und eigener Bauart", deck.binding.is_network and deck.binding.is_virtual)
     check("ein Netz-Deck ist kein Overlay", not deck.binding.is_overlay)
 
+    # -- Auswahl der Aktion „Virtuelles Deck" ------------------------------
+    # Sie bot lange auch die Netz-Decks an: Der Filter hing an
+    # ``is_virtual``, und das heißt nur „kein Gerät am USB" — Overlay *und*
+    # Netz-Deck. Ein Netz-Deck läuft aber im Browser eines anderen Rechners
+    # und lässt sich hier gar nicht einblenden; die Taste bliebe stumm.
+    overlay_deck = rt.create_virtual_deck("Overlay-Deck", columns=3, rows=2, dials=1)
+    plugin = rt.registry.instance("streamdeck")
+    auswahl = plugin.get_dynamic_options("virtual_decks", {})
+    schluessel = {e["value"] for e in auswahl}
+    check("das Overlay-Deck steht zur Wahl", overlay_deck.key in schluessel,
+          ", ".join(sorted(schluessel)))
+    check("das Netz-Deck NICHT", deck.key not in schluessel)
+    check("das Gerät am USB auch nicht", rt.primary.key not in schluessel)
+
     app = create_net_app(rt, rt.netz.sitzungen)
     port = freier_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,

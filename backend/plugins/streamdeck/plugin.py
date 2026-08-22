@@ -196,10 +196,15 @@ class StreamdeckPlugin(ActionPlugin):
 
     def get_dynamic_options(self, source, context=None):
         if source == "virtual_decks":
+            # ``is_overlay`` und nicht ``is_virtual``: Letzteres heißt nur
+            # „kein Gerät am USB" und umfasst auch die Netz-Decks. Die
+            # laufen aber im Browser eines anderen Rechners — sie auf dem
+            # eigenen Bildschirm einzublenden ergibt keinen Sinn, und die
+            # Taste bliebe wirkungslos.
             return [
                 {"value": deck.key, "label": deck.label}
                 for deck in self.services.runtime.decks_in_order()
-                if deck.binding.is_virtual
+                if deck.binding.is_overlay
             ]
         if source != "pages":
             return []

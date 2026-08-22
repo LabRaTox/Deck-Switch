@@ -5,6 +5,7 @@ import { localized } from "../i18n";
 import { useTranslation } from "react-i18next";
 import type { SettingsField } from "../types";
 import { HotkeyInput } from "./HotkeyInput";
+import { PfadText } from "./PfadText";
 
 interface Props {
   pluginId: string;
@@ -71,6 +72,7 @@ function Field({
   onChange: (value: unknown) => void;
   language: string;
 }) {
+  const { t } = useTranslation();
   const label = localized(field.label, language) || field.key;
   const help = localized(field.help, language);
   const placeholder = localized(field.placeholder, language);
@@ -79,6 +81,7 @@ function Field({
     field.options.map((option) => ({
       value: option.value,
       label: localized(option.label, language),
+      unavailable: option.unavailable ?? null,
     })),
   );
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -97,7 +100,10 @@ function Field({
     api
       .pluginOptions(pluginId, field.options_source, contextRef.current)
       .then((result) => {
-        if (!cancelled) setOptions(result);
+        // Dynamische Listen kommen vom Plugin, nicht aus dem Manifest —
+        // Anforderungen an die Sitzung gibt es dort nicht.
+        if (!cancelled)
+          setOptions(result.map((o) => ({ ...o, unavailable: null })));
       })
       .catch(() => undefined)
       .finally(() => {
@@ -134,11 +140,22 @@ function Field({
           }}
         >
           <option value="">{loadingOptions ? "…" : "—"}</option>
-          {options.map((option) => (
-            <option key={String(option.value)} value={String(option.value)}>
-              {option.label}
-            </option>
-          ))}
+          {options
+            // Was diese Sitzung nicht hergibt, gehört nicht zur Auswahl.
+            // Die *gewählte* bleibt aber stehen, auch wenn sie hier nichts
+            // bewirkt: Sonst stünde in einer bestehenden Belegung plötzlich
+            // „—", und beim nächsten Speichern wäre sie still gelöscht.
+            .filter(
+              (option) =>
+                !option.unavailable || String(option.value) === String(value ?? ""),
+            )
+            .map((option) => (
+              <option key={String(option.value)} value={String(option.value)}>
+                {option.unavailable
+                  ? t("settings.optionUnavailable", { label: option.label })
+                  : option.label}
+              </option>
+            ))}
         </select>
       ) : field.type === "number" ? (
         <input
@@ -194,7 +211,11 @@ function Field({
         />
       )}
 
-      {help && <small className="help">{help}</small>}
+      {help && (
+        <small className="help">
+          <PfadText text={help} />
+        </small>
+      )}
     </div>
   );
 }

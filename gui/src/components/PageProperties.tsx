@@ -292,6 +292,14 @@ function VirtualDeckSection() {
           warning={deck.hotkey_reason || null}
           onChange={(wert) => void setGrid(deck.id, { overlay_hotkey: wert })}
         />
+        {/* Auf Desktops ohne kglobalaccel vergibt das Portal den
+            Kurzbefehl — dann gilt womöglich eine andere Kombination als
+            die eingetippte, und die eingetippte anzuzeigen wäre falsch. */}
+        {deck.hotkey_effective && deck.hotkey_effective !== deck.overlay_hotkey && (
+          <small className="help">
+            {t("decks.hotkeyEffective", { combo: deck.hotkey_effective })}
+          </small>
+        )}
         <small className="help">{t("decks.hotkeyHint")}</small>
       </div>
 

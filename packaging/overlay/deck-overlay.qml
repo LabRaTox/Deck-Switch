@@ -26,11 +26,40 @@ Window {
     color: "transparent"
 
     // -- Einstellungen von der Kommandozeile ------------------------------
-    property string basis: "http://127.0.0.1:8770"
-    property string deck: ""
-    property int spalten: 4
-    property int reihen: 2
-    property int dials: 0
+    //
+    // Gelesen wird hier, in den Vorgabewerten selbst — *nicht* in
+    // ``Component.onCompleted``. Das läuft nämlich erst, wenn die Kacheln
+    // schon erzeugt sind: Sie hatten dann bereits mit dem geratenen Raster
+    // Bilder angefordert, die es bei kleineren Decks gar nicht gibt. Am
+    // 2026-08-21 gemessen — ein 3×2-Deck holte sich zwei 404, weil die
+    // Vorgabe 4×2 lautete, und genau das stand auch im Journal.
+    function argument(name, standard) {
+        var argv = Qt.application.arguments
+        var i = argv.indexOf(name)
+        return (i >= 0 && i + 1 < argv.length) ? argv[i + 1] : standard
+    }
+    function zahl(name, standard) {
+        var wert = parseInt(root.argument(name, ""))
+        return isNaN(wert) ? standard : wert
+    }
+
+    /* Ein geratenes Raster darf keine Bilder anfordern.
+     *
+     * Ein Riegel „Nummer < Spalten × Reihen" wäre wirkungslos: Genau so
+     * viele Kacheln legt der Repeater ja an, die Bedingung ist immer wahr
+     * (am 2026-08-21 gemessen — die 404 blieben). Es zählt allein, ob das
+     * Raster *belegt* ist: entweder weil das Backend es beim Start
+     * mitgegeben hat, oder weil inzwischen echte Daten da sind.
+     */
+    readonly property bool rasterVomStart: root.argument("--columns", "") !== ""
+    property bool datenDa: false
+    readonly property bool rasterGesichert: root.rasterVomStart || root.datenDa
+
+    property string basis: root.argument("--base", "http://127.0.0.1:8770")
+    property string deck: root.argument("--deck", "")
+    property int spalten: root.zahl("--columns", 4)
+    property int reihen: root.zahl("--rows", 2)
+    property int dials: root.zahl("--dials", 0)
     property int kachel: 120
     property int abstand: 8
     property int rand: 12
@@ -46,6 +75,32 @@ Window {
     height: rand * 2 + reihen * kachel + (reihen - 1) * abstand
             + (dials > 0 ? abstand + Math.round(kachel / 2) : 0)
 
+    /* Zwei Wege zum selben Ziel — je nachdem, worauf die Sitzung läuft.
+     *
+     * Unter Wayland trägt ``zwlr_layer_shell_v1`` das Overlay. Unter X11
+     * gibt es das Protokoll nicht, dafür aber die alten Fenster-Hinweise,
+     * und die können hier alles, worauf es ankommt. Am 2026-08-21 unter
+     * XWayland nachgemessen (``xprop``):
+     *
+     *   _NET_WM_STATE   = _NET_WM_STATE_ABOVE, _NET_WM_STATE_STAYS_ON_TOP
+     *   _NET_WM_WINDOW_TYPE = _NET_WM_WINDOW_TYPE_UTILITY
+     *   WM_HINTS: Client accepts input or input focus: False
+     *
+     * Der letzte Punkt ist der entscheidende: Ein Klick auf eine Kachel
+     * lässt den Tastaturfokus stehen, wo er war — geprüft, indem das
+     * aktive Fenster vor und nach einem Klick verglichen wurde. Genau
+     * darauf beruht das ganze Overlay, denn sonst tippte eine
+     * Hotkey-Aktion hier hinein statt in die Anwendung davor.
+     *
+     * Beides steht nebeneinander in derselben Datei: Unter X11 laufen die
+     * LayerShell-Zuweisungen ins Leere, unter Wayland die Flags. Das ist
+     * gemessen und wirft keine Fehler. Der Import von LayerShellQt bleibt
+     * dabei nötig, auch auf einem reinen X11-Desktop — das Paket
+     * ``layer-shell-qt`` ist deshalb weiterhin eine harte Abhängigkeit.
+     */
+    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+           | Qt.WindowDoesNotAcceptFocus
+
     LayerShell.Window.layer: LayerShell.Window.LayerOverlay
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
     LayerShell.Window.anchors: LayerShell.Window.AnchorTop | LayerShell.Window.AnchorLeft
@@ -53,8 +108,37 @@ Window {
     LayerShell.Window.exclusionZone: 0
     LayerShell.Window.scope: "deckswitch-overlay"
 
-    property int zielX: 200
-    property int zielY: 200
+    property int zielX: root.zahl("--x", 200)
+    property int zielY: root.zahl("--y", 200)
+
+    /* Die Stelle — und zwar auf genau einem Weg, nicht auf beiden.
+     *
+     * Unter Wayland positionieren die Ränder der Layer-Surface (oben),
+     * unter X11 die gewöhnliche Fensterposition. Beides gleichzeitig zu
+     * setzen ist *nicht* unschädlich, wie hier zuerst angenommen: Am
+     * 2026-08-22 hat Heiko gemeldet, dass das Overlay danach nur noch auf
+     * dem linken Monitor erschien und den oberen Bildschirmrand nicht mehr
+     * erreichte. Qt ordnet ein Fenster über ``x``/``y`` einem Bildschirm
+     * zu — auf einer Layer-Surface nagelt das die Fläche auf den ersten
+     * Ausgang fest und verschiebt sie gegen ihre Ränder.
+     *
+     * Welcher Weg gilt, sagt das Backend mit ``--x11``: Es hat die
+     * Sitzung ohnehin schon abgetastet und weiß es genauer als wir hier.
+     */
+    readonly property bool aufX11: Qt.application.arguments.indexOf("--x11") >= 0
+
+    Binding {
+        target: root
+        property: "x"
+        value: root.zielX
+        when: root.aufX11
+    }
+    Binding {
+        target: root
+        property: "y"
+        value: root.zielY
+        when: root.aufX11
+    }
 
     /* Verschieben ohne Fensterrahmen.
      *
@@ -143,8 +227,11 @@ Window {
     function aktualisiere() {
         hole("/api/decks/" + deck + "/tiles", function (text) {
             var daten = JSON.parse(text)
-            if (daten.revision === root.fassung)
+            if (daten.revision === root.fassung) {
+                // Nichts Neues — aber das Raster ist damit bestätigt.
+                root.datenDa = true
                 return
+            }
             root.fassung = daten.revision
             root.spalten = daten.columns
             root.reihen = daten.rows
@@ -153,6 +240,12 @@ Window {
             root.deckkraft = Math.max(0.15, daten.brightness / 100)
             root.durchsichtig = !!daten.transparent
             root.leereAusblenden = !!daten.hide_empty
+
+            // Genau hier und keine Zeile früher: Jetzt stimmt das Raster,
+            // und erst jetzt dürfen die Kacheln Bilder anfordern. Stand das
+            // eine Zeile weiter oben, lud der Repeater noch mit dem
+            // geratenen Raster — am 2026-08-21 waren das zwei 404.
+            root.datenDa = true
 
             var belegtNeu = {}
             var liste = daten.filled || []
@@ -298,7 +391,10 @@ Window {
             fillMode: Image.PreserveAspectFit
             cache: false
             asynchronous: true
-            source: root.deck
+            // Auch bei falsch geratenem Raster nie über die vorhandenen
+            // Kacheln hinausfragen — sonst beantwortet das Backend Anfragen
+            // mit 404, und im Journal steht ein Fehler, der keiner ist.
+            source: root.deck && root.rasterGesichert
                 ? root.basis + "/api/decks/" + root.deck + "/tile/" + feld.art
                   + "/" + feld.nummer + ".png?v=" + feld.fassung
                 : ""
@@ -365,14 +461,7 @@ Window {
 
     // -- Start -------------------------------------------------------------
 
-    Component.onCompleted: {
-        var args = Qt.application.arguments
-        for (var i = 0; i < args.length; i++) {
-            if (args[i] === "--deck" && i + 1 < args.length) root.deck = args[i + 1]
-            else if (args[i] === "--base" && i + 1 < args.length) root.basis = args[i + 1]
-            else if (args[i] === "--x" && i + 1 < args.length) root.zielX = parseInt(args[i + 1])
-            else if (args[i] === "--y" && i + 1 < args.length) root.zielY = parseInt(args[i + 1])
-        }
-        aktualisiere()
-    }
+    // Alles von der Kommandozeile steht schon in den Vorgabewerten oben —
+    // hier bleibt nur, die ersten echten Daten zu holen.
+    Component.onCompleted: root.aktualisiere()
 }

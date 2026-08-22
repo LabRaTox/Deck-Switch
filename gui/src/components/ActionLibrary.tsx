@@ -54,6 +54,11 @@ export function ActionLibrary() {
       .map((plugin) => ({
         plugin,
         actions: plugin.manifest.actions.filter((action) => {
+          // Was diese Sitzung nicht hergibt, gehört nicht in die
+          // Bibliothek: Man könnte es ablegen, und die Taste bliebe stumm.
+          // Auf einer bereits belegten Taste bleibt die Aktion sichtbar —
+          // dort steht dann der Grund, siehe Inspector.
+          if (action.unavailable) return false;
           if (!needle) return true;
           const haystack = [
             localized(action.name, i18n.language),

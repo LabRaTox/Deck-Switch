@@ -19,6 +19,7 @@ import type {
   Page,
   PluginInfo,
   ScreensaverEntry,
+  SessionCapabilities,
   Slot,
   TouchWallpaper,
   WallpaperEntry,
@@ -402,6 +403,13 @@ export const api = {
 
   reloadPlugins: () =>
     request<{ plugins: PluginInfo[] }>("/api/plugins/reload", { method: "POST" }),
+
+  // -- Sitzung --------------------------------------------------------------
+
+  session: () => request<SessionCapabilities>("/api/session"),
+
+  refreshSession: () =>
+    request<SessionCapabilities>("/api/session/refresh", { method: "POST" }),
 
   // -- Icons und Uploads --------------------------------------------------
 
