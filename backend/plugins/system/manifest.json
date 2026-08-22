@@ -9,6 +9,7 @@
   "entry": "plugin.py",
   "class": "SystemPlugin",
   "accent": "#0ea5e9",
+  "category": "system",
   "description": {
     "de": "Programme starten, Dateien und Links öffnen, Systemwerte anzeigen, Monitorhelligkeit regeln.",
     "en": "Launch programs, open files and links, show system metrics, control display brightness."

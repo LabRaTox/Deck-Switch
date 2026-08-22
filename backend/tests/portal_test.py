@@ -6,7 +6,7 @@ ohne Desktop prüfen kann: die Umrechnung der Kurzbefehle, der vorhergesagte
 Antwortpfad und vor allem die *Weichen*: wann das Portal genommen wird und
 wann nicht.
 
-Die eigentliche Portal-Antwort ist am 2026-08-21 auf Heikos Plasma zu Fuß
+Die eigentliche Portal-Antwort ist am 2026-08-21 auf einer Plasma-Sitzung
 geprüft worden — ein Bildschirmfoto über das Portal kam als 4178×1800-PNG
 zurück, und ``BindShortcuts`` nahm die Struktur an (der Dialog wartete).
 Was hier steht, hält das Verhalten fest, damit es so bleibt.

@@ -116,7 +116,7 @@ Window {
      * Unter Wayland positionieren die Ränder der Layer-Surface (oben),
      * unter X11 die gewöhnliche Fensterposition. Beides gleichzeitig zu
      * setzen ist *nicht* unschädlich, wie hier zuerst angenommen: Am
-     * 2026-08-22 hat Heiko gemeldet, dass das Overlay danach nur noch auf
+     * 2026-08-22 wurde gemeldet, dass das Overlay danach nur noch auf
      * dem linken Monitor erschien und den oberen Bildschirmrand nicht mehr
      * erreichte. Qt ordnet ein Fenster über ``x``/``y`` einem Bildschirm
      * zu — auf einer Layer-Surface nagelt das die Fläche auf den ersten

@@ -40,10 +40,11 @@
   "library": {
     "title": "Aktionen",
     "search": "Aktion suchen …",
-    "dragHint": "Aktion auf eine Taste oder einen Dial ziehen",
+    "dragHint": "Aktion auf eine Taste oder einen Dial ziehen. Am Griff ⠿ ordnest du die Plugins.",
     "noResults": "Nichts gefunden",
     "keyOnly": "Nur Tasten",
-    "dialOnly": "Nur Dials"
+    "dialOnly": "Nur Dials",
+    "reorder": "Reihenfolge ändern"
   },
   "grid": {
     "keys": "Tasten",
@@ -187,8 +188,6 @@
     "disabled": "Deaktiviert",
     "connected": "Verbunden",
     "disconnected": "Nicht verbunden",
-    "reorder": "Reihenfolge ändern",
-    "reorderHint": "Plugins am Griff ziehen, um die Reihenfolge zu ändern — sie gilt auch für die Aktionsliste im Editor.",
     "reload": "Plugins neu laden",
     "actions_one": "{{count}} Aktion",
     "actions_other": "{{count}} Aktionen",
@@ -206,7 +205,7 @@
     "install": "Plugins installieren",
     "installAction": "Installieren",
     "installing": "Wird installiert …",
-    "installed": "„{{name}}“ installiert",
+    "installed": "Nachinstalliert",
     "dropArchive": "Plugin-Archiv (.zip) hierher ziehen oder klicken",
     "uninstall": "Entfernen",
     "uninstallConfirm": "„{{name}}“ entfernen? Belegungen dieses Plugins werden gelöscht.",
@@ -219,7 +218,61 @@
     "screensaversHint": "Malen den Schoner über das ganze Deck. Ausgewählt wird er unter Einstellungen → Bildschirmschoner.",
     "wallpapers": "Touchstrip-Hintergrund",
     "wallpapersHint": "Malen den Grund hinter den Dial-Segmenten. Ausgewählt wird er unter Einstellungen → Hintergrundbild Touchstrip.",
-    "noneInstalled": "Keins installiert."
+    "noneInstalled": "Keins installiert.",
+    "categories": {
+      "all": "Alle",
+      "system": "System",
+      "audio": "Audio",
+      "business": "Büro",
+      "creative": "Kreativwerkzeuge",
+      "development": "Entwicklung",
+      "engagement": "Community",
+      "finance": "Finanzen",
+      "gaming": "Spiele",
+      "lighting": "Licht",
+      "monitoring": "Überwachung",
+      "music": "Musik",
+      "productivity": "Produktivität",
+      "screensaver": "Bildschirmschoner",
+      "smarthome": "Smart Home",
+      "social": "Soziales",
+      "streaming": "Streaming",
+      "utilities": "Werkzeuge",
+      "video": "Video",
+      "other": "Sonstiges"
+    },
+    "types": {
+      "action": "Plugins",
+      "iconset": "Icons",
+      "screensaver": "Bildschirmschoner",
+      "wallpaper": "Hintergrundbilder"
+    },
+    "emptyCategory": "In dieser Kategorie ist nichts installiert.",
+    "iconsetsHint": "Liefern die Symbole für Tastenbilder. Ausgewählt werden sie beim Bearbeiten einer Taste.",
+    "backToList": "Zurück zur Übersicht",
+    "overview": "Beschreibung",
+    "whatsNew": "Was ist neu",
+    "details": "Angaben",
+    "noDescription": "Keine Beschreibung hinterlegt.",
+    "by": "von {{author}}",
+    "detail": {
+      "type": "Art",
+      "category": "Kategorie",
+      "version": "Version",
+      "author": "Autor",
+      "license": "Lizenz",
+      "actions": "Aktionen",
+      "dials": "Dials",
+      "source": "Herkunft",
+      "support": "Hilfe",
+      "openSupport": "Seite öffnen"
+    },
+    "checksumAnnounced": "Angekündigte Prüfsumme: {{hash}}… — sie wird vor dem Auspacken geprüft.",
+    "checksumMissing": "Ohne Prüfsumme: Es wird installiert, was gerade unter der Adresse liegt.",
+    "source": {
+      "installiert": "Installiert",
+      "store": "Store"
+    }
   },
   "settings": {
     "title": "Einstellungen",
@@ -449,5 +502,29 @@
       "open_uri": "Ordner, Dateien und Links öffnen",
       "process_control": "Programme finden und beenden"
     }
+  },
+  "store": {
+    "title": "Store",
+    "search": "Im Store suchen",
+    "searchButton": "Suchen",
+    "loading": "Wird geladen …",
+    "empty": "Nichts gefunden.",
+    "byAuthor": "von {{author}}",
+    "install": "Installieren",
+    "installing": "Wird installiert …",
+    "alreadyInstalled": "Schon installiert",
+    "installed": "{{name}} {{version}} ist installiert.",
+    "warnings_one": "1 Hinweis der Durchsicht",
+    "warnings_other": "{{count}} Hinweise der Durchsicht",
+    "login": "Im Store anmelden",
+    "logout": "Abmelden",
+    "enterCode": "Diesen Code bei GitHub eintippen:",
+    "openGithub": "GitHub öffnen",
+    "pendingSubmissions_one": "1 Einreichung wartet auf Prüfung",
+    "pendingSubmissions_other": "{{count}} Einreichungen warten auf Prüfung",
+    "pendingReports_one": "1 offene Meldung",
+    "pendingReports_other": "{{count}} offene Meldungen",
+    "openReview": "Zur Prüfung",
+    "pendingBadge": "Im Store wartet etwas auf Prüfung"
   }
 }

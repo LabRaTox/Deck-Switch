@@ -17,6 +17,8 @@ Plugin installiert, vertraut seinem Autor.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import re
@@ -58,6 +60,9 @@ class InstallRequest:
     url: str
     origin: str = ""
     created_at: float = 0.0
+    #: Angekündigte Prüfsumme aus dem Link. Leer heißt: Niemand hat gesagt,
+    #: was ankommen soll — die Oberfläche weist darauf hin.
+    sha256: str = ""
 
     def as_dict(self) -> dict:
         return {
@@ -65,6 +70,7 @@ class InstallRequest:
             "url": self.url,
             "origin": self.origin,
             "created_at": self.created_at,
+            "sha256": self.sha256,
         }
 
 
@@ -120,9 +126,54 @@ def download(url: str) -> bytes:
     return data
 
 
-def install_url(url: str) -> Manifest:
-    """Lädt ein Plugin-Archiv von einer Adresse und installiert es."""
-    return install_archive(download(url), filename=url.rsplit("/", 1)[-1])
+class ChecksumError(InstallError):
+    """Das Heruntergeladene ist nicht das Erwartete."""
+
+
+def pruefe_sha256(data: bytes, erwartet: str) -> str:
+    """Vergleicht die Prüfsumme und liefert die tatsächliche zurück.
+
+    Der Vergleich ist unempfindlich gegen Groß- und Kleinschreibung und
+    gegen umgebende Leerzeichen: Die Summe wird oft von Hand kopiert, und
+    daran soll eine Installation nicht scheitern.
+
+    **Warum das hier steht und nicht erst beim Auspacken.** Ein Archiv aus
+    dem Netz ist fremder Code. Stimmt die Summe nicht, darf niemand mehr
+    hineinsehen — auch nicht, um „nur mal das Manifest zu lesen". Zwischen
+    Herunterladen und Auspacken gibt es genau einen Platz für diese
+    Prüfung, und das ist dieser.
+    """
+    erwartet = erwartet.strip().lower()
+    if not erwartet:
+        raise ChecksumError("Keine Prüfsumme angegeben")
+    if len(erwartet) != 64 or any(z not in "0123456789abcdef" for z in erwartet):
+        raise ChecksumError(
+            "Die Prüfsumme sieht nicht wie ein SHA-256 aus "
+            "(erwartet werden 64 Zeichen aus 0-9 und a-f)"
+        )
+
+    tatsaechlich = hashlib.sha256(data).hexdigest()
+    if not hmac.compare_digest(tatsaechlich, erwartet):
+        raise ChecksumError(
+            "Die Prüfsumme stimmt nicht: erwartet wurde "
+            f"{erwartet[:12]}…, geladen wurde {tatsaechlich[:12]}…. "
+            "Das Archiv ist ein anderes als das angekündigte — es wird "
+            "nicht installiert."
+        )
+    return tatsaechlich
+
+
+def install_url(url: str, *, sha256: str = "") -> Manifest:
+    """Lädt ein Plugin-Archiv von einer Adresse und installiert es.
+
+    Ist ``sha256`` angegeben, muss es passen — sonst wird nichts
+    ausgepackt. Ohne Angabe wird installiert wie bisher; die Oberfläche
+    weist dann darauf hin, dass niemand geprüft hat, was da ankommt.
+    """
+    data = download(url)
+    if sha256:
+        pruefe_sha256(data, sha256)
+    return install_archive(data, filename=url.rsplit("/", 1)[-1])
 
 
 # --------------------------------------------------------------------------

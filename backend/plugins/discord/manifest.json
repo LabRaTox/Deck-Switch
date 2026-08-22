@@ -6,6 +6,7 @@
   "entry": "plugin.py",
   "class": "DiscordPlugin",
   "accent": "#5865f2",
+  "category": "engagement",
   "description": {
     "de": "Steuert den laufenden Discord-Client: Mute, Deafen, Sprach- und Textkanäle.",
     "en": "Controls the running Discord client: mute, deafen, voice and text channels."

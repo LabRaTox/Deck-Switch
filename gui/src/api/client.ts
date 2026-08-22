@@ -21,6 +21,12 @@ import type {
   ScreensaverEntry,
   SessionCapabilities,
   Slot,
+  StoreAccount,
+  StoreLoginStart,
+  StorePlugin,
+  StoreUser,
+  StoreUploadResult,
+  StoreWarnung,
   TouchWallpaper,
   WallpaperEntry,
 } from "../types";
@@ -323,6 +329,10 @@ export const api = {
   /** Symbol eines Plugins — nur aufrufen, wenn `has_icon` gesetzt ist. */
   pluginIconUrl: (pluginId: string) => `${API_BASE}/api/plugins/${pluginId}/icon`,
 
+  /** Bild aus der Detailansicht — angesprochen über die Position. */
+  pluginScreenshotUrl: (pluginId: string, index: number) =>
+    `${API_BASE}/api/plugins/${pluginId}/screenshot/${index}`,
+
   /**
    * Auswahlliste eines Feldes. ``context`` sind die übrigen Einstellungen
    * derselben Belegung — damit kann ein Plugin abhängige Listen liefern
@@ -403,6 +413,49 @@ export const api = {
 
   reloadPlugins: () =>
     request<{ plugins: PluginInfo[] }>("/api/plugins/reload", { method: "POST" }),
+
+  // -- Plugin-Store ---------------------------------------------------------
+
+  /**
+   * Der Katalog. Das Backend hält eine kurze Zwischenspeicherung — Blättern
+   * in der Oberfläche greift also nicht bei jedem Klick ins Netz.
+   */
+  storeCatalog: (kind = "", q = "") =>
+    request<{ count: number; plugins: StorePlugin[] }>(
+      `/api/store/catalog?kind=${encodeURIComponent(kind)}&q=${encodeURIComponent(q)}`,
+    ),
+
+  storePlugin: (slug: string) =>
+    request<StorePlugin>(`/api/store/plugins/${encodeURIComponent(slug)}`),
+
+  /** Installiert aus dem Store — nur bei stimmender Prüfsumme. */
+  storeInstall: (slug: string, version = "") =>
+    request<{ plugin_id: string; version: string; sha256: string; warnings: StoreWarnung[] }>(
+      "/api/store/install",
+      { method: "POST", body: JSON.stringify({ slug, version }) },
+    ),
+
+  storeAccount: () => request<StoreAccount>("/api/store/account"),
+
+  storeLogin: () => request<StoreLoginStart>("/api/store/login", { method: "POST" }),
+
+  storeLoginPoll: (deviceCode: string) =>
+    request<{ status: string; user?: StoreUser }>("/api/store/login/poll", {
+      method: "POST",
+      body: JSON.stringify({ device_code: deviceCode }),
+    }),
+
+  storeLogout: () => request<{ status: string }>("/api/store/logout", { method: "POST" }),
+
+  storeMine: () =>
+    request<{ count: number; plugins: unknown[] }>("/api/store/mine"),
+
+  /** Ein installiertes Plugin beim Store einreichen. */
+  storeUpload: (pluginId: string) =>
+    request<StoreUploadResult>("/api/store/upload", {
+      method: "POST",
+      body: JSON.stringify({ plugin_id: pluginId }),
+    }),
 
   // -- Sitzung --------------------------------------------------------------
 

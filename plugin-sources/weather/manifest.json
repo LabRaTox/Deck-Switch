@@ -9,6 +9,7 @@
   "entry": "plugin.py",
   "class": "WeatherPlugin",
   "accent": "#0ea5e9",
+  "category": "monitoring",
   "description": {
     "de": "Aktuelles Wetter, Vorhersage und Luftqualität auf Tasten und Dials — ohne Konto und ohne API-Schlüssel.",
     "en": "Current weather, forecast and air quality on keys and dials — no account, no API key."

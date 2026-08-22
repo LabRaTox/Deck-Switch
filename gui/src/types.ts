@@ -282,6 +282,28 @@ export interface ActionDescriptor {
   unavailable?: { missing: string[]; reason: string } | null;
 }
 
+/** Schubladen der Plugin-Übersicht — dieselbe Liste wie im Backend. */
+export type PluginCategory =
+  | "system"
+  | "audio"
+  | "business"
+  | "creative"
+  | "development"
+  | "engagement"
+  | "finance"
+  | "gaming"
+  | "lighting"
+  | "monitoring"
+  | "music"
+  | "productivity"
+  | "screensaver"
+  | "smarthome"
+  | "social"
+  | "streaming"
+  | "utilities"
+  | "video"
+  | "other";
+
 export interface Manifest {
   id: string;
   name: LocalizedText;
@@ -290,6 +312,14 @@ export interface Manifest {
   description: LocalizedText;
   author: string;
   accent: string;
+  /** Wohin das Plugin in der Übersicht gehört. */
+  category?: PluginCategory;
+  /** Bis zu drei Bilder für die Detailansicht (Dateinamen im Plugin-Ordner). */
+  screenshots?: string[];
+  /** Projektseite, Forum oder Fehlerberichte. */
+  support?: string;
+  /** Was sich zuletzt geändert hat. */
+  changelog?: LocalizedText;
   /** Dateiname eines 256×256-Symbols im Plugin-Ordner. */
   icon?: string | null;
   config_schema: SettingsField[];
@@ -344,6 +374,8 @@ export interface InstallRequest {
   url: string;
   origin: string;
   created_at: number;
+  /** Angekündigte Prüfsumme. Leer = niemand hat gesagt, was ankommen soll. */
+  sha256?: string;
 }
 
 export interface DeviceInfo {
@@ -416,4 +448,91 @@ export interface InputStatus {
   available: boolean;
   reason: string;
   layout: string;
+}
+
+// -- Der Plugin-Store ------------------------------------------------------
+
+/** Ein Befund der Durchsicht, wie ihn der Store mitschickt. */
+export interface StoreWarnung {
+  kind: string;
+  value: string;
+  file: string;
+  line: number | null;
+}
+
+/** Eine Fassung im Katalog. */
+export interface StoreVersion {
+  version: string;
+  sha256: string;
+  size: number;
+  changelog: string | null;
+  min_app_version: string | null;
+  downloads: number;
+  released_at: string;
+  download_url: string;
+  warnings: StoreWarnung[];
+  /** Nur in der Einzelansicht: `approved` oder `withdrawn`. */
+  state?: string;
+  note?: string | null;
+}
+
+/** Ein Plugin im Katalog. */
+export interface StorePlugin {
+  slug: string;
+  name: string;
+  summary: string;
+  kind: string;
+  category: string;
+  author: string;
+  license: string | null;
+  source_url: string | null;
+  rating: { up: number; down: number };
+  latest: StoreVersion;
+  /** Nur in der Einzelansicht. */
+  description?: string | null;
+  versions?: StoreVersion[];
+}
+
+/** Wer im Store angemeldet ist. */
+export interface StoreUser {
+  id: number;
+  handle: string;
+  permissions: string[];
+  banned: boolean;
+}
+
+/**
+ * Was auf Prüfung wartet — nur gefüllt, wenn der Angemeldete prüfen darf.
+ * Die allermeisten Benutzer sehen hier `null`.
+ */
+export interface StorePending {
+  submissions: number;
+  reports: number;
+  url: string;
+}
+
+export interface StoreAccount {
+  user: StoreUser | null;
+  pending: StorePending | null;
+  store_url: string;
+}
+
+/** Schritt 1 der Anmeldung: der Code, den der Benutzer eintippt. */
+export interface StoreLoginStart {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+}
+
+/** Was beim Hochladen herauskommt. */
+export interface StoreUploadResult {
+  slug: string;
+  version: string;
+  sha256: string;
+  status: string;
+  findings: number;
+  warnings: number;
+  message: string;
 }

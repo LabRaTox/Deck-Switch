@@ -25,6 +25,14 @@ export default function App() {
 
   useEffect(() => {
     void useStore.getState().load();
+    // Einmal beim Start und dann alle fünf Minuten: Eine wartende Einreichung
+    // ist nichts, was auf die Sekunde ankommt — aber sie soll auffallen, ohne
+    // dass jemand die App neu startet.
+    void useStore.getState().refreshStorePending();
+    const pruefungen = window.setInterval(
+      () => void useStore.getState().refreshStorePending(),
+      5 * 60 * 1000,
+    );
 
     // Alles, was das Backend von sich aus meldet, landet hier: Gerät
     // verbunden/getrennt, Seitenwechsel, Plugin-Fehler, Zustände von außen.
@@ -105,7 +113,10 @@ export default function App() {
         if (isOnline) void useStore.getState().load();
       },
     );
-    return disconnect;
+    return () => {
+      window.clearInterval(pruefungen);
+      disconnect();
+    };
   }, []);
 
   // Sprache folgt der Konfiguration im Backend — damit gilt die Einstellung

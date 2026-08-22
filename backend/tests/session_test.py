@@ -6,8 +6,8 @@ nicht als Absturz, sondern als Aktion, die es plötzlich nicht mehr gibt —
 oder als eine, die man ablegen kann und die dann stumm bleibt.
 
 Geprüft wird gegen *gestellte* Umgebungen, nicht gegen die laufende
-Sitzung: Auf Heikos Plasma ist alles verfügbar, und eine Prüfung, die
-überall „ja" sagt, prüft nichts.
+Sitzung: Auf einem vollständigen Plasma ist alles verfügbar, und eine
+Prüfung, die überall „ja" sagt, prüft nichts.
 
 Aufruf (mit eigener Config, damit die echte unangetastet bleibt):
 
@@ -88,7 +88,7 @@ PLASMA_BUS = {
     "org.kde.StatusNotifierWatcher",
     "org.freedesktop.portal.Desktop",
     # Diese beiden stehen nicht dauerhaft am Bus, sind aber aktivierbar —
-    # am 2026-08-21 auf Heikos Plasma nachgesehen, beide vorhanden.
+    # am 2026-08-21 an einer Plasma-Sitzung nachgesehen, beide vorhanden.
     "org.kde.LogoutPrompt",
     "org.kde.Shutdown",
 }
@@ -410,6 +410,73 @@ def main():
     # Beenden auf.
     check("gibt irgendwann auf", 3 <= rt2.session.laeufe <= 10, f"{rt2.session.laeufe} Versuche")
     check("meldet dann nichts nach", rt2.shortcuts.sync.await_count == 0)
+
+    print("\nJedes mitgelieferte Plugin hat eine Kategorie")
+    # Ohne Kategorie landet ein Plugin unter „Sonstiges" — für die
+    # mitgelieferten wäre das schlicht Nachlässigkeit. Und ein Tippfehler
+    # in der Kategorie fiele sonst erst in der Oberfläche auf, wo dann ein
+    # roher Schlüssel statt eines Namens stünde.
+    import typing
+
+    from deckswitch.plugins.base import PluginCategory
+
+    bekannte = set(typing.get_args(PluginCategory))
+    ohne, unbekannte = [], []
+    uebersetzt = json.loads(
+        (WURZEL / "gui" / "src" / "i18n" / "de.json").read_text()
+    )["plugins"]["categories"]
+
+    # Auch die Plugins aus ``plugin-sources`` — sie werden mit ausgeliefert
+    # und landen sonst unbemerkt unter „Sonstiges". Genau das war beim
+    # ersten Einsortieren passiert: geprüft wurden nur die mitgelieferten.
+    quellen = sorted(
+        (WURZEL / "backend" / "plugins").glob("*/manifest.json")
+    ) + sorted((WURZEL / "plugin-sources").glob("*/manifest.json"))
+
+    for datei in quellen:
+        manifest = Manifest.model_validate(json.loads(datei.read_text()))
+        if manifest.category == "other":
+            ohne.append(manifest.id)
+        if manifest.category not in bekannte:
+            unbekannte.append(f"{manifest.id}: {manifest.category}")
+
+    check("keines steht auf 'Sonstiges'", not ohne, ", ".join(ohne) or "keines")
+    check("keine unbekannte Kategorie", not unbekannte, "; ".join(unbekannte) or "keine")
+
+    fehlt = sorted(k for k in bekannte if k not in uebersetzt)
+    check("jede Kategorie ist übersetzt", not fehlt, ", ".join(fehlt) or "keine")
+    check("und 'Alle' gibt es auch", "all" in uebersetzt)
+
+    print("\nBilder für die Detailansicht")
+    from deckswitch.plugins.base import MAX_SCREENSHOTS
+
+    check("höchstens drei sind vorgesehen", MAX_SCREENSHOTS == 3, str(MAX_SCREENSHOTS))
+
+    import pydantic
+
+    fehler = None
+    try:
+        Manifest.model_validate(
+            {"id": "x", "name": "X", "screenshots": ["a.png", "b.png", "c.png", "d.png"]}
+        )
+    except pydantic.ValidationError as exc:
+        fehler = str(exc)
+    check("ein viertes Bild wird abgelehnt", fehler is not None,
+          "durchgelassen" if fehler is None else "abgelehnt")
+
+    drei = Manifest.model_validate(
+        {"id": "x", "name": "X", "screenshots": ["a.png", "b.png", "c.png"]}
+    )
+    check("drei gehen durch", len(drei.screenshots) == 3)
+    check("ohne Angabe bleibt es leer", Manifest(id="x", name="X").screenshots == [])
+
+    # SVG ist als Bildschirmfoto nicht vorgesehen: Es bringt eine ganze
+    # Skriptsprache mit, und die Datei stammt aus fremder Hand.
+    from deckswitch.server import PLUGIN_SCREENSHOT_SUFFIXES
+
+    check("SVG ist als Bildschirmfoto ausgeschlossen",
+          ".svg" not in PLUGIN_SCREENSHOT_SUFFIXES,
+          ", ".join(sorted(PLUGIN_SCREENSHOT_SUFFIXES)))
 
     print("\nDie Erkennung führt nichts aus")
     # ddcutil braucht 1,8 s je Aufruf. Würde die Erkennung Programme

@@ -9,6 +9,7 @@
   "entry": "plugin.py",
   "class": "MultiPlugin",
   "accent": "#a855f7",
+  "category": "system",
   "description": {
     "de": "Mehrere Aktionen auf einer Taste — nacheinander, mit Pausen dazwischen.",
     "en": "Several actions on one key — one after another, with pauses in between."

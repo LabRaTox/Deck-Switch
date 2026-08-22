@@ -22,6 +22,8 @@ Aufruf:
 import _wache  # bricht ab, statt in die echte Config zu schreiben
 _wache.sichere_umgebung()
 import asyncio
+import json
+import inspect
 import contextlib
 import base64
 import os
@@ -209,6 +211,69 @@ async def main():
           all(max(image.size) <= MAX_FRAME_EDGE for image, _ in loaded),
           f"größte Kante {max(max(i.size) for i, _ in loaded)} px")
     sample.unlink()
+
+    # ==================================================================
+    print("\n== Prüfsumme beim Installieren ==")
+    # ==================================================================
+    # Ohne diesen Abgleich ist ein Katalogeintrag nur ein Link, dem man
+    # glauben muss: Wer unterwegs das Archiv austauscht, bekommt seinen
+    # Code ausgepackt und ausgeführt.
+    import hashlib
+    import io
+    import zipfile
+
+    from deckswitch.plugins import installer as inst
+
+    def archiv(plugin_id: str) -> bytes:
+        """Ein winziges, gültiges Plugin-Archiv."""
+        puffer = io.BytesIO()
+        with zipfile.ZipFile(puffer, "w") as z:
+            z.writestr(
+                f"{plugin_id}/manifest.json",
+                json.dumps({"id": plugin_id, "name": plugin_id, "type": "iconset"}),
+            )
+        return puffer.getvalue()
+
+    echt = archiv("echt")
+    untergeschoben = archiv("boese")
+    summe = hashlib.sha256(echt).hexdigest()
+
+    check("die richtige Prüfsumme geht durch",
+          inst.pruefe_sha256(echt, summe) == summe)
+    check("Groß- und Kleinschreibung ist egal",
+          inst.pruefe_sha256(echt, summe.upper()) == summe)
+    check("Leerzeichen ringsum stören nicht",
+          inst.pruefe_sha256(echt, f"  {summe}\n") == summe)
+
+    def lehnt_ab(daten: bytes, erwartet: str) -> str:
+        try:
+            inst.pruefe_sha256(daten, erwartet)
+            return ""
+        except inst.ChecksumError as exc:
+            return str(exc)
+
+    # Der eigentliche Zweck: ein anderes Archiv unter derselben Adresse.
+    grund = lehnt_ab(untergeschoben, summe)
+    check("ein untergeschobenes Archiv wird abgelehnt", bool(grund), grund[:60])
+    check("und die Meldung nennt beide Summen",
+          "erwartet" in grund and "geladen" in grund)
+
+    check("ein gekipptes Bit fällt auf",
+          bool(lehnt_ab(echt[:-1] + bytes([echt[-1] ^ 1]), summe)))
+    check("eine unvollständige Summe wird abgelehnt", bool(lehnt_ab(echt, summe[:32])))
+    check("etwas, das kein Hex ist, ebenso", bool(lehnt_ab(echt, "z" * 64)))
+    check("und eine leere Angabe auch", bool(lehnt_ab(echt, "   ")))
+
+    # Die Prüfung muss *vor* dem Auspacken greifen — sonst landet fremder
+    # Code im Dateisystem, bevor jemand widerspricht.
+    quelle = inspect.getsource(inst.install_url)
+    check("geprüft wird vor dem Auspacken",
+          quelle.index("pruefe_sha256") < quelle.index("install_archive"))
+
+    # Ohne Angabe bleibt es beim bisherigen Verhalten — sonst brechen alle
+    # bestehenden Links. Die Oberfläche weist darauf hin.
+    check("ohne Prüfsumme wird nicht geprüft",
+          "if sha256:" in quelle)
 
     await runtime.stop()
 
