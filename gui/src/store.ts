@@ -24,6 +24,7 @@ import type {
   Selection,
   Slot,
   TouchWallpaper,
+  StoreAccount,
 } from "./types";
 
 interface StoreState {
@@ -45,6 +46,15 @@ interface StoreState {
   /** Erhöht sich bei jeder Änderung und bricht damit den Bild-Cache auf. */
   previewVersion: number;
   view: "editor" | "plugins" | "settings";
+  /**
+   * Wer im Store angemeldet ist und was dort auf Prüfung wartet.
+   *
+   * Steht hier und nicht in der Store-Ansicht, weil mehrere Stellen es
+   * brauchen: die Kopfzeile für die Zahl, das Einreichen für die Frage, ob
+   * überhaupt jemand angemeldet ist. Wer erst hineinklicken muss, um zu
+   * erfahren, dass etwas liegt, erfährt es zu spät.
+   */
+  storeKonto: StoreAccount | null;
 
   load: () => Promise<void>;
   setOnline: (online: boolean) => void;
@@ -120,6 +130,7 @@ interface StoreState {
   setPluginConfig: (pluginId: string, config: Record<string, unknown>) => Promise<void>;
   setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<void>;
   reloadPlugins: () => Promise<void>;
+  refreshStoreKonto: () => Promise<void>;
   setPluginOrder: (order: string[]) => Promise<void>;
   uninstallPlugin: (pluginId: string) => Promise<void>;
   installRequests: InstallRequest[];
@@ -568,6 +579,19 @@ export const useStore = create<StoreState>((set, get) => ({
   reloadPlugins: async () => {
     await api.reloadPlugins();
     await get().load();
+  },
+
+  storeKonto: null,
+
+  refreshStoreKonto: async () => {
+    try {
+      set({ storeKonto: await api.storeAccount() });
+    } catch {
+      // Der Store kann aus sein oder nicht erreichbar — beides ist kein
+      // Grund, in der Oberfläche einen Fehler zu zeigen. Die eigenen
+      // Plugins stehen auch ohne ihn.
+      set({ storeKonto: null });
+    }
   },
 
   installRequests: [],

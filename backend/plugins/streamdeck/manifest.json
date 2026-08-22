@@ -6,6 +6,7 @@
   "entry": "plugin.py",
   "class": "StreamdeckPlugin",
   "accent": "#64748b",
+  "category": "system",
   "description": {
     "de": "Seiten und Ordner: navigieren zwischen mehreren Belegungen.",
     "en": "Pages and folders: navigate between multiple layouts."
@@ -369,6 +370,9 @@
             "en": "Otherwise at a fixed spot."
           }
         }
+      ],
+      "requires": [
+        "overlay"
       ]
     }
   ],

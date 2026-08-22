@@ -9,6 +9,7 @@
   "entry": "plugin.py",
   "class": "SystemPlugin",
   "accent": "#0ea5e9",
+  "category": "system",
   "description": {
     "de": "Programme starten, Dateien und Links öffnen, Systemwerte anzeigen, Monitorhelligkeit regeln.",
     "en": "Launch programs, open files and links, show system metrics, control display brightness."
@@ -111,6 +112,9 @@
           },
           "placeholder": "~/Videos"
         }
+      ],
+      "requires": [
+        "open_uri"
       ]
     },
     {
@@ -133,6 +137,9 @@
             "en": "File"
           }
         }
+      ],
+      "requires": [
+        "open_uri"
       ]
     },
     {
@@ -153,6 +160,9 @@
           "label": "URL",
           "placeholder": "https://"
         }
+      ],
+      "requires": [
+        "open_uri"
       ]
     },
     {
@@ -450,6 +460,9 @@
           },
           "default": "#0ea5e9"
         }
+      ],
+      "requires": [
+        "ddc"
       ]
     },
     {
@@ -527,6 +540,9 @@
             "en": "Hold suits push-to-talk."
           }
         }
+      ],
+      "requires": [
+        "keyboard_input"
       ]
     },
     {
@@ -577,6 +593,9 @@
             "en": "Second combination"
           }
         }
+      ],
+      "requires": [
+        "keyboard_input"
       ]
     },
     {
@@ -632,6 +651,9 @@
             "en": "Some applications drop input that arrives too fast."
           }
         }
+      ],
+      "requires": [
+        "keyboard_input"
       ]
     },
     {
@@ -798,14 +820,20 @@
               "label": {
                 "de": "Bildschirme ausschalten",
                 "en": "Turn displays off"
-              }
+              },
+              "requires": [
+                "screen_power"
+              ]
             },
             {
               "value": "screen_on",
               "label": {
                 "de": "Bildschirme einschalten",
                 "en": "Turn displays on"
-              }
+              },
+              "requires": [
+                "screen_power"
+              ]
             },
             {
               "value": "suspend",
@@ -826,21 +854,30 @@
               "label": {
                 "de": "Abmelden (mit Rückfrage)",
                 "en": "Log out (with prompt)"
-              }
+              },
+              "requires": [
+                "session_manager"
+              ]
             },
             {
               "value": "logout",
               "label": {
                 "de": "Abmelden (sofort)",
                 "en": "Log out (immediately)"
-              }
+              },
+              "requires": [
+                "session_manager"
+              ]
             },
             {
               "value": "reboot_prompt",
               "label": {
                 "de": "Neu starten (mit Rückfrage)",
                 "en": "Reboot (with prompt)"
-              }
+              },
+              "requires": [
+                "session_manager"
+              ]
             },
             {
               "value": "reboot",
@@ -854,7 +891,10 @@
               "label": {
                 "de": "Ausschalten (mit Rückfrage)",
                 "en": "Shut down (with prompt)"
-              }
+              },
+              "requires": [
+                "session_manager"
+              ]
             },
             {
               "value": "poweroff",
@@ -878,6 +918,9 @@
             "en": "The first press only arms the key — against mishaps."
           }
         }
+      ],
+      "requires": [
+        "session_power"
       ]
     },
     {
@@ -971,6 +1014,9 @@
           "max": 10000,
           "step": 100
         }
+      ],
+      "requires": [
+        "screenshot"
       ]
     },
     {
@@ -1014,6 +1060,9 @@
             "en": "No prompt and no saving — for emergencies only."
           }
         }
+      ],
+      "requires": [
+        "process_control"
       ]
     },
     {
@@ -1054,6 +1103,9 @@
             "component"
           ]
         }
+      ],
+      "requires": [
+        "window_control"
       ]
     }
   ],

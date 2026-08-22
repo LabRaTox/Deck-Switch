@@ -102,6 +102,52 @@ class ActionDescriptor(BaseModel):
     settings_schema: list[SettingsField] = Field(default_factory=list)
     #: Akzentfarbe für Hintergrund-Variante „accent“; None = Plugin-Akzent.
     accent: str | None = None
+    #: Was die Sitzung können muss, damit diese Aktion etwas bewirkt —
+    #: Namen aus :mod:`deckswitch.services.session`. Fehlt eine davon,
+    #: taucht die Aktion in der Bibliothek nicht auf, statt sich ablegen zu
+    #: lassen und dann stumm zu bleiben. Leer heißt „läuft überall“.
+    #:
+    #: Unbekannte Namen gelten als erfüllt: Ein Plugin für eine Fähigkeit,
+    #: die wir noch nicht kennen, soll nicht daran scheitern, dass diese
+    #: Liste älter ist als das Plugin.
+    requires: list[str] = Field(default_factory=list)
+
+
+#: Schubladen für die Plugin-Übersicht.
+#:
+#: Die Liste folgt bewusst der von Elgatos Marketplace: Wer von dort kommt,
+#: sucht an derselben Stelle. Ergänzt ist nur ``system`` — bei uns steckt
+#: einiges an Grundfunktion in ganz gewöhnlichen Plugins (Seiten blättern,
+#: Helligkeit, Tastendrücke), und das gehört nicht zwischen die Zutaten
+#: für den nächsten Stream.
+#:
+#: ``other`` ist die Vorgabe: Ein Plugin ohne Angabe verschwindet damit
+#: nicht aus der Übersicht, sondern landet sichtbar unter „Sonstiges".
+PluginCategory = Literal[
+    "system",
+    "audio",
+    "business",
+    "creative",
+    "development",
+    "engagement",
+    "finance",
+    "gaming",
+    "lighting",
+    "monitoring",
+    "music",
+    "productivity",
+    "screensaver",
+    "smarthome",
+    "social",
+    "streaming",
+    "utilities",
+    "video",
+    "other",
+]
+
+
+#: Wie viele Bilder ein Plugin höchstens mitbringt.
+MAX_SCREENSHOTS = 3
 
 
 class Manifest(BaseModel):
@@ -120,6 +166,8 @@ class Manifest(BaseModel):
     #: Bei allen Typen außer ``iconset``: Klassenname in ``entry``.
     plugin_class: str | None = Field(default=None, alias="class")
     accent: str = "#4b5563"
+    #: Wohin das Plugin in der Übersicht gehört. Siehe :data:`PluginCategory`.
+    category: PluginCategory = "other"
     #: Bilddatei im Plugin-Ordner, die das Plugin in der Übersicht vertritt —
     #: 256×256 PNG. Bewusst *nur* dort: In der Aktionsbibliothek stünde
     #: neben jeder Aktion desselben Plugins dasselbe Bild, das hilft beim
@@ -130,6 +178,17 @@ class Manifest(BaseModel):
     config_schema: list[SettingsField] = Field(default_factory=list)
     actions: list[ActionDescriptor] = Field(default_factory=list)
     #: Nur bei type="iconset": Ordner mit den SVG-Dateien.
+    #: Bis zu drei Bilder für die Detailansicht — Dateinamen im
+    #: Plugin-Ordner, wie :attr:`icon`. Mehr als drei nimmt die Ansicht
+    #: nicht an: Wer sein Plugin nicht in drei Bildern zeigen kann, zeigt
+    #: es auch in zehn nicht, und eine Galerie ohne Ende macht aus jedem
+    #: Eintrag eine Diashow.
+    screenshots: list[str] = Field(default_factory=list, max_length=MAX_SCREENSHOTS)
+    #: Wohin bei Fragen — Projektseite, Forum, Fehlerberichte.
+    support: str = ""
+    #: Was sich zuletzt geändert hat, kurz gehalten. Steht in der
+    #: Detailansicht unter „Was ist neu".
+    changelog: LocalizedText = ""
     icons_dir: str = "icons"
     #: Nur bei type="iconset": Lizenzhinweis, den die GUI anzeigt.
     license: str = ""

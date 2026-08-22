@@ -176,6 +176,14 @@ export function Inspector() {
             {plugin && !plugin.loaded && (
               <small className="error-text">{plugin.error ?? t("plugins.loadError")}</small>
             )}
+            {/* Die Aktion liegt auf der Taste, diese Sitzung gibt sie aber
+                nicht her. Ausblenden wäre hier falsch — die Belegung ist
+                echt und soll nach einem Desktop-Wechsel wieder wirken. */}
+            {action?.unavailable && (
+              <small className="error-text">
+                {t("inspector.unavailable", { reason: action.unavailable.reason })}
+              </small>
+            )}
           </div>
           <button
             type="button"

@@ -1526,6 +1526,397 @@ input[type="checkbox"] {
   max-width: 620px;
 }
 
+/* Der Griff im Gruppenkopf der Aktionsbibliothek. Kleiner als in einer
+   Karte: Er steht in einer Zeile mit Name und Farbbalken und darf sie
+   nicht dominieren. */
+.drag-handle.klein {
+  font-size: 12px;
+  opacity: 0.45;
+  padding: 0 2px;
+}
+
+.drag-handle.klein:hover {
+  opacity: 0.9;
+}
+
+/* Ziel beim Umsortieren — dieselbe Sprache wie beim Ablegen im Raster. */
+.library-group.drop {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* ------------------------------------------------ Plugin: Detailansicht */
+
+.plugin-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.zurueck {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Derselbe Chevron wie in Pfadangaben, nur andersherum — ein eigenes
+   Zurück-Icon wäre ein zweites Symbol für dieselbe Aussage. */
+.zurueck-pfeil {
+  transform: rotate(180deg);
+}
+
+.detail-kopf {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.detail-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  object-fit: contain;
+  flex: none;
+}
+
+.detail-icon.platzhalter {
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.detail-kategorie {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.detail-kopf h2 {
+  margin: 2px 0;
+}
+
+.detail-autor {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.detail-spalten {
+  display: grid;
+  /* Die Angaben rechts brauchen wenig Platz, aber festen: Eine mitwandernde
+     Spalte ließe die Werte je Plugin an anderer Stelle stehen. */
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 24px;
+  align-items: start;
+}
+
+.detail-haupt h3,
+.detail-angaben h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.detail-text {
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin: 0 0 20px;
+}
+
+.detail-bild-gross {
+  /* Bildschirmfotos kommen in allen Seitenverhältnissen. Höhe begrenzen,
+     damit ein hohes Bild nicht die Seite füllt — und die Breite dem Bild
+     überlassen, sonst steht ein 16:9-Bild in einem viel breiteren Kasten
+     mit dunklen Rändern links und rechts. */
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 420px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.detail-bild-reihe {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 20px;
+}
+
+.detail-bild-klein {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.detail-bild-klein.aktiv {
+  border-color: var(--accent);
+}
+
+.detail-bild-klein img {
+  width: 96px;
+  height: 60px;
+  object-fit: cover;
+  display: block;
+}
+
+.detail-angaben {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.detail-angaben dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-zeile {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+
+.detail-zeile + .detail-zeile {
+  border-top: 1px solid var(--border);
+}
+
+.detail-zeile dt {
+  color: var(--text-dim);
+}
+
+.detail-zeile dd {
+  margin: 0;
+  text-align: right;
+}
+
+/* Der Name in der Kachel führt in die Detailansicht — er sieht aus wie
+   Text, verhält sich aber wie ein Verweis. */
+.plugin-name {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plugin-name:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .detail-spalten {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------------------------------------- Plugin-Übersicht: Reiter */
+
+.plugin-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.plugin-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  /* Der Rahmen sitzt auf der Trennlinie darunter — sonst springt die
+     Zeile um zwei Pixel, sobald ein Reiter aktiv wird. */
+  margin-bottom: -1px;
+}
+
+.plugin-tab:hover {
+  color: var(--text);
+}
+
+.plugin-tab.aktiv {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.plugin-tab-zahl,
+.kategorie-zahl {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+}
+
+/* ------------------------------------- Plugin-Übersicht: Menü und Inhalt */
+
+.plugin-layout {
+  display: grid;
+  /* Feste Spalte fürs Menü: Die Kategorienamen sind unterschiedlich lang,
+     und eine mitwandernde Kante beim Umschalten wäre unruhig. */
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.plugin-kategorien {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: sticky;
+  top: 0;
+}
+
+.kategorie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kategorie:hover {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+/* Leere Kategorien bleiben sichtbar, aber zurückgenommen — sie zeigen den
+   Rahmen des Möglichen, ohne zum Klick einzuladen. */
+.kategorie.leer {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.kategorie.leer:hover {
+  background: none;
+  color: var(--text-dim);
+}
+
+.kategorie.aktiv {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.kategorie.aktiv .kategorie-zahl {
+  background: var(--accent);
+  color: #fff;
+}
+
+.plugin-inhalt {
+  min-width: 0;
+}
+
+/* Schmale Fenster: Das Menü wandert über den Inhalt und legt sich um. */
+@media (max-width: 900px) {
+  .plugin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .plugin-kategorien {
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+  }
+}
+
+/* Pfeil in Pfadangaben („Einstellungen › Decks"). Als Icon statt als
+   Schriftzeichen: Der Textpfeil sitzt je nach Schnitt zu hoch und wirkt
+   dünner als alles daneben. */
+.pfad-pfeil {
+  vertical-align: -2px;
+  margin: 0 1px;
+  opacity: 0.7;
+}
+
+/* ------------------------------------------------- Fähigkeiten der Sitzung */
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.session-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+/* Der Punkt vorn trägt die Aussage — Farbe allein reicht nicht, wenn
+   jemand sie nicht unterscheiden kann. Deshalb steht rechts ohnehin
+   entweder der Weg oder der Grund als Text. */
+.session-name::before {
+  content: "●";
+  margin-right: 8px;
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+.session-list .is-available .session-name::before {
+  color: var(--ok);
+}
+
+.session-list .is-missing .session-name::before {
+  color: var(--text-dim);
+}
+
+.session-list .is-missing .session-name {
+  color: var(--text-dim);
+}
+
+/* Die Karte ist eine Flex-Spalte — ohne das zöge sich der Knopf über die
+   ganze Breite und sähe aus wie ein Hauptbefehl. */
+.session-recheck {
+  align-self: flex-start;
+}
+
+.session-detail {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: right;
+  /* Begründungen sind ganze Sätze — sie dürfen umbrechen, statt die
+     Karte in die Breite zu ziehen. */
+  flex: 1 1 55%;
+}
+
 /* --------------------------------------------------------------- Scrollbars */
 
 ::-webkit-scrollbar {
@@ -2312,4 +2703,227 @@ input[type="checkbox"] {
   flex: 1;
   font-size: 12px;
   word-break: break-all;
+}
+
+/* ── Der Plugin-Store ───────────────────────────────────────────────── */
+
+/* Eine Kachel aus dem Store steht neben den installierten — gestrichelt,
+   damit auf einen Blick klar ist, was noch nicht auf dem Rechner liegt. */
+.plugin-card.store {
+  border-style: dashed;
+  border-left-color: var(--accent);
+}
+
+.tag-store {
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  color: var(--accent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Die Zahl am Reiter „Plugins" in der Kopfleiste: offene Prüfungen. */
+.nav-tab-zahl {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 8px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 18px;
+}
+
+/* Der Hinweis für Moderatoren. Volle Breite und oben — wer ihn übersieht,
+   erfährt von einer wartenden Einreichung erst beim nächsten Nachsehen. */
+.store-hinweis {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.store-anmeldung {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.store-code {
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 16px;
+  letter-spacing: 0.16em;
+}
+
+.plugin-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plugin-card-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.plugin-card-version {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.plugin-card-summary {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* Zugeklappt, aber da: Was die Durchsicht gefunden hat, soll niemanden
+   erschlagen — und wer es wissen will, klickt einmal. */
+.store-warnungen {
+  border: 1px solid var(--warn, #f59e0b);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.store-warnungen summary {
+  cursor: pointer;
+  color: var(--warn, #f59e0b);
+}
+
+.store-warnungen ul {
+  margin: 8px 0 4px;
+  padding-left: 18px;
+  word-break: break-all;
+}
+
+.error-note {
+  border-left: 3px solid var(--danger, #ef4444);
+  padding-left: 12px;
+  color: var(--danger, #ef4444);
+  font-size: 13px;
+}
+
+/* Einreichen und die eigenen Einreichungen. */
+.store-einreichen,
+.store-meine {
+  list-style: none;
+  margin: 8px 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.store-einreichen li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.store-meine li {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.store-meine-kopf {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.store-fassungen {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.store-fassungen td {
+  padding: 3px 8px 3px 0;
+  vertical-align: top;
+}
+
+/* Der Knopf zum Zurücknehmen steht rechts außen und nimmt nur so viel
+   Breite, wie er braucht — die Spalten davor sollen sich nicht danach
+   richten. */
+.store-fassung-knopf {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Der Stand einer Fassung. Farbe statt Symbol: Was abgelehnt wurde, soll
+   man sehen, ohne es zu lesen — und was wartet, soll nicht wie ein Fehler
+   aussehen. */
+.zustand {
+  padding: 1px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.zustand.approved { border-color: var(--ok, #22c55e); color: var(--ok, #22c55e); }
+.zustand.pending { border-color: var(--accent); color: var(--accent); }
+.zustand.rejected,
+.zustand.blocked { border-color: var(--danger, #ef4444); color: var(--danger, #ef4444); }
+.zustand.withdrawn { color: var(--text-dim); }
+
+/* Die Quittung nach dem Einreichen. */
+.store-quittung {
+  border-left: 3px solid var(--accent);
+  background: var(--bg-sunken);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.store-quittung.gut {
+  border-left-color: var(--ok, #22c55e);
+}
+
+.store-quittung p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+/* Das Feld zum Einreichen. Ziehen oder klicken — beides führt zum selben. */
+.ablegefeld {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 28px 16px;
+  margin: 8px 0;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  cursor: pointer;
+  text-align: center;
+}
+
+.ablegefeld:hover,
+.ablegefeld.ueber {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }

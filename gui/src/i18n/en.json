@@ -40,10 +40,11 @@
   "library": {
     "title": "Actions",
     "search": "Search actions …",
-    "dragHint": "Drag an action onto a key or dial",
+    "dragHint": "Drag an action onto a key or dial. Use the ⠿ handle to reorder plugins.",
     "noResults": "Nothing found",
     "keyOnly": "Keys only",
-    "dialOnly": "Dials only"
+    "dialOnly": "Dials only",
+    "reorder": "Change order"
   },
   "grid": {
     "keys": "Keys",
@@ -130,7 +131,8 @@
     "turnEvery": "Trigger every … detents",
     "turnEveryHint": "A brisk turn is easily a dozen detents. 1 triggers on every one.",
     "remove_left": "Remove turn left",
-    "remove_right": "Remove turn right"
+    "remove_right": "Remove turn right",
+    "unavailable": "Has no effect in this session: {{reason}}"
   },
   "icons": {
     "title": "Choose icon",
@@ -186,8 +188,6 @@
     "disabled": "Disabled",
     "connected": "Connected",
     "disconnected": "Not connected",
-    "reorder": "Reorder",
-    "reorderHint": "Drag plugins by the handle to reorder them — the order also applies to the action list in the editor.",
     "reload": "Reload plugins",
     "actions_one": "{{count}} action",
     "actions_other": "{{count}} actions",
@@ -205,7 +205,7 @@
     "install": "Install plugins",
     "installAction": "Install",
     "installing": "Installing …",
-    "installed": "“{{name}}” installed",
+    "installed": "Installed",
     "dropArchive": "Drop a plugin archive (.zip) here or click",
     "uninstall": "Remove",
     "uninstallConfirm": "Remove “{{name}}”? Assignments using this plugin will be deleted.",
@@ -218,7 +218,57 @@
     "screensaversHint": "Draw the screensaver across the whole deck. Pick one under Settings → Screensaver.",
     "wallpapers": "Touch strip background",
     "wallpapersHint": "Draw the background behind the dial segments. Pick one under Settings → Touch strip wallpaper.",
-    "noneInstalled": "None installed."
+    "noneInstalled": "None installed.",
+    "categories": {
+      "all": "All",
+      "system": "System",
+      "audio": "Audio",
+      "business": "Business",
+      "creative": "Creative tools",
+      "development": "Development",
+      "engagement": "Engagement",
+      "finance": "Finance",
+      "gaming": "Gaming",
+      "lighting": "Lighting",
+      "monitoring": "Monitoring",
+      "music": "Music",
+      "productivity": "Productivity",
+      "screensaver": "Screensaver",
+      "smarthome": "Smart home",
+      "social": "Social",
+      "streaming": "Streaming",
+      "utilities": "Utilities",
+      "video": "Video",
+      "other": "Other"
+    },
+    "types": {
+      "action": "Plugins",
+      "iconset": "Icons",
+      "screensaver": "Screensavers",
+      "wallpaper": "Wallpapers"
+    },
+    "emptyCategory": "Nothing installed in this category.",
+    "iconsetsHint": "Provide the symbols for key images. You pick them while editing a key.",
+    "backToList": "Back to overview",
+    "overview": "Overview",
+    "whatsNew": "What's new",
+    "details": "Details",
+    "noDescription": "No description provided.",
+    "by": "by {{author}}",
+    "detail": {
+      "type": "Type",
+      "category": "Category",
+      "version": "Version",
+      "author": "Author",
+      "license": "License",
+      "actions": "Actions",
+      "dials": "Dials",
+      "source": "Source",
+      "support": "Support",
+      "openSupport": "Open page"
+    },
+    "checksumAnnounced": "Announced checksum: {{hash}}… — verified before unpacking.",
+    "checksumMissing": "No checksum: whatever is at that address will be installed."
   },
   "settings": {
     "title": "Settings",
@@ -263,7 +313,8 @@
     "animationFps": "Frames per second",
     "perDeckHint": "These settings apply to the deck selected above.",
     "version": "Version {{version}}",
-    "versionUnknown": "Version unknown — the backend has not reported in yet."
+    "versionUnknown": "Version unknown — the backend has not reported in yet.",
+    "optionUnavailable": "{{label}} (has no effect in this session)"
   },
   "errors": {
     "title": "Problems",
@@ -420,6 +471,88 @@
     "copy": "Copy",
     "addNetwork": "Network deck",
     "newNetworkName": "Network deck",
-    "addNetworkHint": "A network deck is operated by someone else on the same network in a browser — your mod during a stream, for instance. They only see this one deck and cannot change it. Password and address live in the editor on the right when no key is selected."
+    "addNetworkHint": "A network deck is operated by someone else on the same network in a browser — your mod during a stream, for instance. They only see this one deck and cannot change it. Password and address live in the editor on the right when no key is selected.",
+    "hotkeyEffective": "The desktop assigned {{combo}} for this."
+  },
+  "session": {
+    "title": "What this session supports",
+    "intro": "Detected: {{desktop}} on {{server}}. Actions missing here are not offered in the library at all.",
+    "unknown": "unknown",
+    "missingHint_one": "One capability is missing. After installing what it needs, use “Check again” — otherwise it takes a backend restart.",
+    "missingHint_other": "{{count}} capabilities are missing. After installing what they need, use “Check again” — otherwise it takes a backend restart.",
+    "recheck": "Check again",
+    "checking": "Checking …",
+    "caps": {
+      "keyboard_input": "Send key presses and text",
+      "window_control": "Control windows",
+      "global_shortcuts": "Global shortcuts",
+      "screenshot": "Screenshot",
+      "screen_power": "Turn displays on and off",
+      "session_power": "Log out and shut down",
+      "session_manager": "Log out and confirmation prompts",
+      "overlay": "Virtual deck as an overlay",
+      "ddc": "Display brightness (DDC/CI)",
+      "audio": "Volume and audio devices",
+      "sound_playback": "Play sounds",
+      "tray": "Tray icon",
+      "open_uri": "Open folders, files and links",
+      "process_control": "Find and close programs"
+    }
+  },
+  "store": {
+    "title": "Store",
+    "search": "Search the store",
+    "searchButton": "Search",
+    "loading": "Loading …",
+    "empty": "Nothing found.",
+    "byAuthor": "by {{author}}",
+    "install": "Install",
+    "installing": "Installing …",
+    "alreadyInstalled": "Already installed",
+    "installed": "{{name}} {{version}} is installed.",
+    "warnings_one": "1 finding from the scan",
+    "warnings_other": "{{count}} findings from the scan",
+    "login": "Sign in to the store",
+    "logout": "Sign out",
+    "enterCode": "Enter this code on GitHub:",
+    "openGithub": "Open GitHub",
+    "pendingSubmissions_one": "1 submission awaiting review",
+    "pendingSubmissions_other": "{{count}} submissions awaiting review",
+    "pendingReports_one": "1 open report",
+    "pendingReports_other": "{{count}} open reports",
+    "openReview": "Go to review",
+    "pendingBadge": "Something in the store is awaiting review",
+    "tag": "Store",
+    "source": "Source",
+    "update": "To {{version}}",
+    "newVersion": "Version {{version}} is in the store",
+    "submitTitle": "Submit a plugin",
+    "submitNeedsLogin": "You need to be signed in to the store to submit.",
+    "submitPick": "What goes into the store?",
+    "submit": "Submit",
+    "submitting": "Packing …",
+    "submitFindings_one": "The scan found 1 finding. It will be shown with your version.",
+    "submitFindings_other": "The scan found {{count}} findings. They will be shown with your version.",
+    "mineTitle": "My submissions",
+    "mineEmpty": "Nothing submitted yet.",
+    "delete": "Delete",
+    "withdraw": "Withdraw",
+    "deleteConfirm": "Delete “{{name}}” {{version}}? That version was never in the catalogue — it goes away together with its archive, and the number is free again.",
+    "withdrawConfirm": "Withdraw “{{name}}” {{version}}? The version leaves the catalogue. Anyone who already installed it can still download it.",
+    "status": {
+      "pending": "awaiting review",
+      "approved": "approved",
+      "rejected": "rejected",
+      "withdrawn": "withdrawn",
+      "blocked": "blocked"
+    },
+    "visibility": {
+      "draft": "not in the catalogue yet",
+      "hidden": "hidden",
+      "listed": "in the catalogue"
+    },
+    "dropHere": "Drop an archive here",
+    "dropOrClick": "or click to choose a file",
+    "submitFormats": "ZIP, TAR or tar.gz — anything that can be opened for review is accepted. What ships is always a ZIP, because that is what the app can unpack."
   }
 }

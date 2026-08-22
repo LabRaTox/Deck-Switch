@@ -3,52 +3,135 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { localized } from "../i18n";
+import { KATEGORIEN, TYPEN, type PluginTyp } from "../lib/pluginSchubladen";
 import { useStore } from "../store";
-import type { PluginInfo } from "../types";
+import type { PluginCategory, PluginInfo, StorePlugin } from "../types";
 import { Modal } from "./Modal";
+import { PfadText } from "./PfadText";
+import { PluginDetail } from "./PluginDetail";
 import { PluginInstaller } from "./PluginInstaller";
 import { SettingsForm } from "./SettingsForm";
+import { StoreEinreichen } from "./StoreEinreichen";
+import { StoreAnmeldung, StoreKarte, StoreHinweis } from "./StoreView";
 
 /**
- * Plugin-Übersicht. Die eingebauten Plugins stehen hier ganz normal in der
- * Liste — sie sind technisch keine Sonderfälle, nur von Anfang an dabei.
+ * Ein Eintrag der Liste: entweder etwas Installiertes oder etwas aus dem
+ * Store. Zwei Herkünfte, eine Anzeige.
  */
-const ORDER_MIME = "application/x-streamdeck-plugin";
+type Eintrag =
+  | { art: "installiert"; plugin: PluginInfo }
+  | { art: "store"; plugin: StorePlugin };
 
+/**
+ * Plugin-Übersicht — installiert und Store in einer Liste.
+ *
+ * Die eingebauten Plugins stehen hier ganz normal mit drin: Sie sind
+ * technisch keine Sonderfälle, nur von Anfang an dabei.
+ */
 export function PluginsView() {
   const { t, i18n } = useTranslation();
   const plugins = useStore((s) => s.plugins);
   const reloadPlugins = useStore((s) => s.reloadPlugins);
-  const setPluginOrder = useStore((s) => s.setPluginOrder);
-  const [dragOver, setDragOver] = useState<string | null>(null);
   const [installOpen, setInstallOpen] = useState(false);
+  const [einreichenOpen, setEinreichenOpen] = useState(false);
+  const [typ, setTyp] = useState<PluginTyp>("action");
+  /**
+   * Der Katalog des Stores. `null`, solange er nicht da ist — der Store kann
+   * aus sein oder nicht erreichbar, und die eigenen Plugins stehen trotzdem.
+   */
+  const [katalog, setKatalog] = useState<StorePlugin[] | null>(null);
+  const [storeFehler, setStoreFehler] = useState("");
+  const [laeuft, setLaeuft] = useState("");
+  const [meldung, setMeldung] = useState("");
+  /** Welches Plugin gerade im Ganzen zu sehen ist — ``null`` = die Liste. */
+  const [detail, setDetail] = useState<string | null>(null);
+  /** ``null`` heißt „alle Kategorien". */
+  const [kategorie, setKategorie] = useState<PluginCategory | null>(null);
 
-  const actions = plugins.filter((p) => p.manifest.type === "action");
-  const screensavers = plugins.filter((p) => p.manifest.type === "screensaver");
-  const wallpapers = plugins.filter((p) => p.manifest.type === "wallpaper");
-  const iconsets = plugins.filter((p) => p.manifest.type === "iconset");
+  useEffect(() => {
+    void (async () => {
+      try {
+        const antwort = await api.storeCatalog("", "");
+        setKatalog(antwort.plugins);
+      } catch (exc) {
+        setKatalog([]);
+        setStoreFehler(exc instanceof Error ? exc.message : String(exc));
+      }
+    })();
+  }, []);
 
-  /** Verschiebt das gezogene Plugin an die Position des Ziels. */
-  const reorder = (draggedId: string, targetId: string) => {
-    if (draggedId === targetId) return;
-    const ids = actions.map((p) => p.id);
-    const from = ids.indexOf(draggedId);
-    const to = ids.indexOf(targetId);
-    if (from < 0 || to < 0) return;
-    ids.splice(to, 0, ...ids.splice(from, 1));
-    // Alles Übrige hinten anhängen, damit keine ID aus der Reihenfolge
-    // fällt — was fehlt, sortiert das Backend sonst ans Ende.
-    const rest = plugins
-      .filter((p) => p.manifest.type !== "action")
-      .map((p) => p.id);
-    void setPluginOrder([...ids, ...rest]);
-  };
+  async function installiere(eintrag: StorePlugin) {
+    setLaeuft(eintrag.slug);
+    setStoreFehler("");
+    setMeldung("");
+    try {
+      const ergebnis = await api.storeInstall(eintrag.slug);
+      await reloadPlugins();
+      setMeldung(t("store.installed", { name: eintrag.name, version: ergebnis.version }));
+    } catch (exc) {
+      setStoreFehler(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setLaeuft("");
+    }
+  }
+
+  /**
+   * Eine Liste, zwei Herkünfte.
+   *
+   * Was installiert ist, steht mit seiner gewohnten Karte da — Schalter,
+   * Einstellungen, Deinstallieren. Was nur im Store liegt, steht daneben mit
+   * einem Knopf zum Holen. Bewusst *nicht* getrennt: Wer ein Plugin sucht,
+   * sucht ein Plugin. Ob es schon auf dem Rechner liegt, ist eine Eigenschaft
+   * und kein eigener Ort.
+   */
+  const eintraege: Eintrag[] = [
+    ...plugins.map((p) => ({ art: "installiert" as const, plugin: p })),
+    // Was schon installiert ist, kommt nicht doppelt: Die eigene Karte weiß
+    // mehr — sie kennt den Zustand, die Einstellungen und die Fehler.
+    ...(katalog ?? [])
+      .filter((s) => !plugins.some((p) => p.id === s.slug))
+      .map((s) => ({ art: "store" as const, plugin: s })),
+  ];
+
+  const artVon = (e: Eintrag) =>
+    e.art === "installiert" ? e.plugin.manifest.type : e.plugin.kind;
+  const kategorieVon = (e: Eintrag): PluginCategory =>
+    e.art === "installiert"
+      ? (e.plugin.manifest.category ?? "other")
+      : (e.plugin.category as PluginCategory);
+  const kennungVon = (e: Eintrag) =>
+    e.art === "installiert" ? e.plugin.id : e.plugin.slug;
+
+  /** Alles vom gewählten Typ — die Grundlage für Menü und Liste. */
+  const vomTyp = eintraege.filter((e) => artVon(e) === typ);
+
+  /** Wie viele Plugins je Kategorie, damit das Menü Zahlen zeigen kann. */
+  const anzahl = new Map<PluginCategory, number>();
+  for (const eintrag of vomTyp) {
+    const k = kategorieVon(eintrag);
+    anzahl.set(k, (anzahl.get(k) ?? 0) + 1);
+  }
+
+  const sichtbar = kategorie ? vomTyp.filter((e) => kategorieVon(e) === kategorie) : vomTyp;
+
+  const gezeigt = detail ? plugins.find((p) => p.id === detail) : null;
+  if (gezeigt) {
+    return (
+      <div className="page-view">
+        <PluginDetail plugin={gezeigt} onBack={() => setDetail(null)} />
+      </div>
+    );
+  }
 
   return (
     <div className="page-view">
       <div className="page-head">
         <h2>{t("plugins.title")}</h2>
         <div className="row">
+          <StoreAnmeldung />
+          <button type="button" className="btn" onClick={() => setEinreichenOpen(true)}>
+            {t("store.submitTitle")}
+          </button>
           <button type="button" className="btn" onClick={() => void reloadPlugins()}>
             {t("plugins.reload")}
           </button>
@@ -62,45 +145,118 @@ export function PluginsView() {
         </div>
       </div>
 
-      <p className="hint">{t("plugins.reorderHint")}</p>
+      <StoreHinweis />
+      {storeFehler && <p className="error-note">{storeFehler}</p>}
+      {meldung && <p className="hint">{meldung}</p>}
 
-      <div className="plugin-list">
-        {actions.map((plugin) => (
-          <div
-            key={plugin.id}
-            className={dragOver === plugin.id ? "plugin-slot drop" : "plugin-slot"}
-            onDragOver={(event) => {
-              if (!event.dataTransfer.types.includes(ORDER_MIME)) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-              setDragOver(plugin.id);
-            }}
-            onDragLeave={() => setDragOver((id) => (id === plugin.id ? null : id))}
-            onDrop={(event) => {
-              event.preventDefault();
-              setDragOver(null);
-              const dragged = event.dataTransfer.getData(ORDER_MIME);
-              if (dragged) reorder(dragged, plugin.id);
-            }}
-          >
-            <PluginCard plugin={plugin} />
-          </div>
-        ))}
+      {/* Oben die Art, links das Thema — wie im Elgato-Marketplace, nur
+          ohne Aufklappmenü: Bei zwei Dutzend Kategorien sieht man so auf
+          einen Blick, was es überhaupt gibt. */}
+      <div className="plugin-tabs" role="tablist">
+        {TYPEN.map((eintrag) => {
+          const zahl = eintraege.filter((e) => artVon(e) === eintrag).length;
+          return (
+            <button
+              key={eintrag}
+              type="button"
+              role="tab"
+              aria-selected={typ === eintrag}
+              className={typ === eintrag ? "plugin-tab aktiv" : "plugin-tab"}
+              onClick={() => {
+                setTyp(eintrag);
+                // Beim Wechsel der Art alle Themen zeigen: Die vorher
+                // gewählte Kategorie ist hier womöglich gar nicht belegt,
+                // und eine leere Liste ohne erkennbaren Grund verwirrt.
+                setKategorie(null);
+              }}
+            >
+              {t(`plugins.types.${eintrag}`)}
+              <span className="plugin-tab-zahl">{zahl}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Schoner und Hintergründe belegen keine Taste und stehen deshalb in
-          eigenen Abschnitten — eingestellt werden sie unter Einstellungen. */}
-      <PluginSection
-        title={t("plugins.screensavers")}
-        hint={t("plugins.screensaversHint")}
-        plugins={screensavers}
-      />
+      <div className="plugin-layout">
+        <nav className="plugin-kategorien" aria-label={t("plugins.title")}>
+          <button
+            type="button"
+            className={kategorie === null ? "kategorie aktiv" : "kategorie"}
+            onClick={() => setKategorie(null)}
+          >
+            {t("plugins.categories.all")}
+            <span className="kategorie-zahl">{vomTyp.length}</span>
+          </button>
+          {/* Bewusst *alle* Kategorien, auch die leeren: Die Liste ist
+              dieselbe wie im Elgato-Marketplace, und wer dort sucht, soll
+              hier dieselben Schubladen finden. Leere sind gedämpft und
+              nicht anklickbar — sie zeigen, was es geben *kann*, führen
+              aber nicht auf eine leere Seite. */}
+          {KATEGORIEN.map((k) => {
+            const zahl = anzahl.get(k) ?? 0;
+            return (
+              <button
+                key={k}
+                type="button"
+                disabled={zahl === 0}
+                className={
+                  kategorie === k
+                    ? "kategorie aktiv"
+                    : zahl === 0
+                      ? "kategorie leer"
+                      : "kategorie"
+                }
+                onClick={() => setKategorie(k)}
+              >
+                {t(`plugins.categories.${k}`)}
+                <span className="kategorie-zahl">{zahl}</span>
+              </button>
+            );
+          })}
+        </nav>
 
-      <PluginSection
-        title={t("plugins.wallpapers")}
-        hint={t("plugins.wallpapersHint")}
-        plugins={wallpapers}
-      />
+        <div className="plugin-inhalt">
+          {/* Ohne die Existenzprüfung stünde bei einem neuen Typ der rohe
+              Schlüssel in der Oberfläche — genau das ist beim Einbau der
+              Reiter passiert („plugins.iconsetsHint"). */}
+          {typ !== "action" && i18n.exists(`plugins.${typ}sHint`) && (
+            <p className="hint">
+              <PfadText text={t(`plugins.${typ}sHint`)} />
+            </p>
+          )}
+
+          {sichtbar.length === 0 ? (
+            <p className="empty-note">{t("plugins.emptyCategory")}</p>
+          ) : (
+            <div className="plugin-list">
+              {sichtbar.map((eintrag) =>
+                eintrag.art === "installiert" ? (
+                  <PluginCard
+                    key={kennungVon(eintrag)}
+                    plugin={eintrag.plugin}
+                    // Steht dieselbe Kennung auch im Store, und zwar mit einer
+                    // anderen Fassung, gehört das an die Karte: Sonst erfährt
+                    // niemand von einer neuen Fassung, der nicht sucht.
+                    imStore={katalog?.find((s) => s.slug === eintrag.plugin.id) ?? null}
+                    laeuft={laeuft === eintrag.plugin.id}
+                    onAktualisieren={(s) => void installiere(s)}
+                    onOeffnen={() => setDetail(eintrag.plugin.id)}
+                  />
+                ) : (
+                  <StoreKarte
+                    key={kennungVon(eintrag)}
+                    plugin={eintrag.plugin}
+                    laeuft={laeuft === eintrag.plugin.slug}
+                    onInstallieren={() => void installiere(eintrag.plugin)}
+                  />
+                ),
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {einreichenOpen && <StoreEinreichen onClose={() => setEinreichenOpen(false)} />}
 
       {installOpen && (
         <Modal
@@ -111,75 +267,10 @@ export function PluginsView() {
           <PluginInstaller onInstalled={() => setInstallOpen(false)} />
         </Modal>
       )}
-
-      <h3 className="section-title">{t("plugins.iconsets")}</h3>
-      <div className="plugin-list">
-        {iconsets.map((plugin) => (
-          <div
-            key={plugin.id}
-            className="plugin-card"
-            style={{ borderLeftColor: plugin.manifest.accent }}
-          >
-            <div className="plugin-head">
-              <PluginIcon plugin={plugin} />
-              <div className="plugin-title">
-                <strong>{localized(plugin.manifest.name, i18n.language)}</strong>
-                <small>
-                  v{plugin.manifest.version}
-                  {plugin.manifest.license ? ` · ${plugin.manifest.license}` : ""}
-                </small>
-              </div>
-              {plugin.builtin && <span className="badge">{t("plugins.builtin")}</span>}
-            </div>
-            <p className="plugin-description">
-              {localized(plugin.manifest.description, i18n.language)}
-            </p>
-            {plugin.error && <p className="error-text">{plugin.error}</p>}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
 
-/**
- * Abschnitt für Plugins, die keine Taste belegen.
- *
- * Bleibt sichtbar, auch wenn noch keines installiert ist — sonst wäre nicht
- * erkennbar, dass es die Sorte überhaupt gibt.
- */
-function PluginSection({
-  title,
-  hint,
-  plugins,
-}: {
-  title: string;
-  hint: string;
-  plugins: PluginInfo[];
-}) {
-  const { t } = useTranslation();
-  return (
-    <>
-      <h3 className="section-title">{title}</h3>
-      <p className="hint">{hint}</p>
-      {plugins.length === 0 ? (
-        <p className="empty-note">{t("plugins.noneInstalled")}</p>
-      ) : (
-        <div className="plugin-list">
-          {plugins.map((plugin) => (
-            <PluginCard key={plugin.id} plugin={plugin} sortable={false} />
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-/**
- * Symbol eines Plugins. Ohne eigenes Bild bleibt ein farbiges Feld mit dem
- * Anfangsbuchstaben — besser als eine Lücke, und die Akzentfarbe ist ohnehin
- * das, woran man die Plugins in der Liste auseinanderhält.
- */
 function PluginIcon({ plugin }: { plugin: PluginInfo }) {
   const { i18n } = useTranslation();
   const name = localized(plugin.manifest.name, i18n.language);
@@ -221,11 +312,17 @@ function ConnectionDot({ status }: { status: PluginInfo["status"] }) {
 
 function PluginCard({
   plugin,
-  sortable = true,
+  imStore,
+  laeuft,
+  onAktualisieren,
+  onOeffnen,
 }: {
   plugin: PluginInfo;
-  /** Nur Aktions-Plugins haben eine Reihenfolge, die etwas bedeutet. */
-  sortable?: boolean;
+  /** Dasselbe Plugin im Store, falls es dort steht — sonst `null`. */
+  imStore: StorePlugin | null;
+  laeuft: boolean;
+  onAktualisieren: (plugin: StorePlugin) => void;
+  onOeffnen: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const setPluginConfig = useStore((s) => s.setPluginConfig);
@@ -259,34 +356,43 @@ function PluginCard({
       style={{ borderLeftColor: plugin.manifest.accent }}
     >
       <div className="plugin-head">
-        {/* Nur der Griff ist ziehbar — sonst könnte man beim Bedienen der
-            Schalter versehentlich die Reihenfolge verändern. */}
-        {sortable && (
-          <span
-            className="drag-handle"
-            draggable
-            title={t("plugins.reorder")}
-            onDragStart={(event) => {
-              event.dataTransfer.setData(ORDER_MIME, plugin.id);
-              event.dataTransfer.effectAllowed = "move";
-            }}
-          >
-            ⠿
-          </span>
-        )}
         <PluginIcon plugin={plugin} />
         <ConnectionDot status={plugin.status} />
         <div className="plugin-title">
-          <strong>{localized(plugin.manifest.name, i18n.language)}</strong>
+          {/* Nur der Name öffnet die Detailansicht, nicht die ganze Karte:
+              Darin stecken Schalter, Knöpfe und ein Formular — ein Klick
+              darauf soll nicht die Ansicht wechseln. */}
+          <button type="button" className="plugin-name" onClick={onOeffnen}>
+            {localized(plugin.manifest.name, i18n.language)}
+          </button>
           <small>
             v{plugin.manifest.version}
             {/* Die Aktionszahl nur dort, wo sie etwas aussagt — bei einem
                 Schoner stünde dauerhaft "0 Aktionen". */}
             {plugin.manifest.type === "action" &&
               ` · ${t("plugins.actions", { count: plugin.manifest.actions.length })}`}
+            {/* Iconsets haben keine Aktionen, dafür eine Lizenz — die stand
+                bisher nur im eigenen Abschnitt und ginge sonst verloren. */}
+            {plugin.manifest.license ? ` · ${plugin.manifest.license}` : ""}
             {plugin.status && ` · ${plugin.status.detail}`}
           </small>
         </div>
+
+        {/* Steht im Store eine andere Fassung, gehört das an die Karte.
+            Verglichen wird auf *ungleich* und nicht auf *neuer*: Welche
+            Versionsnummer die größere ist, ist Ansichtssache (ist 1.10 mehr
+            als 1.9?), und der Store führt ohnehin nur die neueste. */}
+        {imStore && imStore.latest.version !== plugin.manifest.version && (
+          <button
+            type="button"
+            className="btn small"
+            disabled={laeuft}
+            title={t("store.newVersion", { version: imStore.latest.version })}
+            onClick={() => onAktualisieren(imStore)}
+          >
+            {laeuft ? t("store.installing") : t("store.update", { version: imStore.latest.version })}
+          </button>
+        )}
 
         {plugin.builtin ? (
           <span className="badge">{t("plugins.builtin")}</span>

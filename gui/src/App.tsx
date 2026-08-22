@@ -25,6 +25,14 @@ export default function App() {
 
   useEffect(() => {
     void useStore.getState().load();
+    // Einmal beim Start und dann alle fünf Minuten: Eine wartende Einreichung
+    // ist nichts, was auf die Sekunde ankommt — aber sie soll auffallen, ohne
+    // dass jemand die App neu startet.
+    void useStore.getState().refreshStoreKonto();
+    const pruefungen = window.setInterval(
+      () => void useStore.getState().refreshStoreKonto(),
+      5 * 60 * 1000,
+    );
 
     // Alles, was das Backend von sich aus meldet, landet hier: Gerät
     // verbunden/getrennt, Seitenwechsel, Plugin-Fehler, Zustände von außen.
@@ -32,10 +40,31 @@ export default function App() {
       (event) => {
         const store = useStore.getState();
         switch (event.type) {
-          case "device_state":
+          case "device_state": {
             store.setOnline(true);
-            useStore.setState({ device: event.data as unknown as DeviceInfo });
+            // Nur das Deck übernehmen, das der Editor gerade zeigt — genau
+            // wie bei `page_changed` darunter. Ohne diese Prüfung überschrieb
+            // jede Meldung eines *anderen* Decks die Ansicht: Man bearbeitete
+            // ein 3×2-Overlay, das Stream Deck+ meldete nebenbei seinen
+            // Zustand (Verbindung, Helligkeit, Leerlauf-Dimmen), und das
+            // Raster sprang auf dessen 4×2 um, während die Eigenschaften
+            // rechts beim bearbeiteten Deck blieben. Am 2026-08-22 mit drei
+            // Decks gleichzeitig aufgefallen.
+            const info = event.data as unknown as DeviceInfo;
+            const gemeint = String((info as { id?: string }).id ?? "");
+            if (gemeint && gemeint !== store.activeDeck) {
+              // Fremdes Deck: Der Zustand gehört trotzdem in die Deckliste,
+              // damit Verbindungspunkte und Namen stimmen.
+              useStore.setState({
+                decks: store.decks.map((deck) =>
+                  deck.id === gemeint ? { ...deck, ...info } : deck,
+                ),
+              });
+              break;
+            }
+            useStore.setState({ device: info });
             break;
+          }
           case "page_changed": {
             // Nur das Deck, das der Editor gerade zeigt. Blättert ein
             // anderes weiter — jemand drückt einen Ordner am Gerät, oder
@@ -84,7 +113,10 @@ export default function App() {
         if (isOnline) void useStore.getState().load();
       },
     );
-    return disconnect;
+    return () => {
+      window.clearInterval(pruefungen);
+      disconnect();
+    };
   }, []);
 
   // Sprache folgt der Konfiguration im Backend — damit gilt die Einstellung

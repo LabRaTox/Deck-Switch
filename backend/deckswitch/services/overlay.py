@@ -25,7 +25,6 @@ import asyncio
 import contextlib
 import logging
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -82,13 +81,34 @@ class OverlayService:
     # -- Zustand -----------------------------------------------------------
 
     def available(self) -> tuple[bool, str]:
-        if shutil.which("qml6") is None:
-            return False, "'qml6' fehlt (Paket qt6-declarative)"
-        if not Path("/usr/lib/qt6/qml/org/kde/layershell/qmldir").exists():
-            return False, "'layer-shell-qt' fehlt — ohne das gibt es keine Overlay-Ebene"
+        """Lässt sich hier ein Overlay zeigen — und wenn nicht, warum?
+
+        Die Frage nach Compositor und Programmen beantwortet die
+        Sitzungserkennung; sie kennt auch den X11-Weg. Hier bleibt nur, was
+        sie nicht wissen kann: ob unsere eigene QML-Datei am erwarteten
+        Platz liegt.
+        """
+        session = getattr(self.runtime, "session", None)
+        if session is not None:
+            from .session import OVERLAY as CAP_OVERLAY
+
+            cap = session.caps.get(CAP_OVERLAY)
+            if cap is not None and not cap.available:
+                return False, cap.reason
+
         if not OVERLAY_QML.is_file():
             return False, f"Overlay-Datei nicht gefunden: {OVERLAY_QML}"
         return True, ""
+
+    def _auf_x11(self) -> bool:
+        """Läuft die Sitzung unter X11 — hat das Overlay also kein layer-shell?"""
+        session = getattr(self.runtime, "session", None)
+        if session is None:
+            return False
+        from .session import OVERLAY as CAP_OVERLAY
+
+        cap = session.caps.get(CAP_OVERLAY)
+        return cap is not None and cap.provider == "x11"
 
     def is_visible(self, deck_key: str) -> bool:
         prozess = self._prozesse.get(deck_key)
@@ -116,6 +136,12 @@ class OverlayService:
 
         position = await self._position(deck, at_cursor)
         port = self.runtime.config.app.port
+        # Das Raster gleich mitgeben, statt es das Overlay erfragen zu
+        # lassen. Ohne das rendert es zuerst mit seinen eigenen Vorgaben
+        # (4×2), fragt Kacheln an, die es bei kleineren Decks gar nicht
+        # gibt — am 2026-08-21 im Journal als „Not Found" für key/6 und
+        # key/7 eines 3×2-Decks zu sehen — und springt dann auf die
+        # richtige Größe.
         befehl = [
             "qml6",
             str(OVERLAY_QML),
@@ -124,7 +150,18 @@ class OverlayService:
             "--base", f"http://127.0.0.1:{port}",
             "--x", str(position[0]),
             "--y", str(position[1]),
+            "--columns", str(deck.binding.columns),
+            "--rows", str(deck.binding.rows),
+            "--dials", str(deck.binding.dials),
         ]
+
+        # Unter X11 setzt das Fenster seine Stelle selbst; unter Wayland
+        # erledigen das die Ränder der Layer-Surface. Beides zugleich geht
+        # schief — Qt nagelt die Fläche dann auf den ersten Bildschirm und
+        # verfehlt den oberen Rand (am 2026-08-22 auf drei Monitoren
+        # gesehen). Welcher Weg gilt, weiß die Sitzungserkennung.
+        if self._auf_x11():
+            befehl.append("--x11")
         try:
             self._prozesse[deck_key] = subprocess.Popen(
                 befehl,

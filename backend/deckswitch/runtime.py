@@ -50,6 +50,7 @@ from .services.input import InputService
 from .services.media import MediaService
 from .services.overlay import OverlayService
 from .services.render import RenderService
+from .services.session import SessionCapabilities
 from .services.shortcuts import ShortcutService
 from .services.sound import SoundService
 
@@ -68,6 +69,12 @@ class Runtime:
         self.bus = EventBus()
         self.store = ConfigStore(config_path)
         self.config: Config = self.store.config
+
+        #: Was diese Sitzung hergibt. Gefüllt wird es in :meth:`start`;
+        #: bis dahin meldet es alles als nicht verfügbar. Die Oberfläche
+        #: fragt es ab, um Aktionen gar nicht erst anzubieten, die hier
+        #: ohnehin stumm blieben.
+        self.session = SessionCapabilities()
 
         self.audio = AudioService()
         self.icons = IconService()
@@ -116,6 +123,17 @@ class Runtime:
             self.config = self.store.config
             self._record_error("config", str(exc))
 
+        # Vor allem anderen abtasten, was die Sitzung kann: Die Plugins
+        # bekommen das Ergebnis beim Laden mit, und die Aktionsbibliothek
+        # richtet sich danach. Kostet neun Millisekunden — es wird nichts
+        # ausgeführt, nur nachgesehen.
+        await self.session.detect()
+
+        # Der Desktop-Dienst braucht beides: zu wissen, was die Sitzung
+        # hergibt, und einen Griff in den Event-Loop — seine Aktionen
+        # laufen in einem Arbeitsthread, das Portal spricht asyncio.
+        self.desktop.bind_session(self.session, self._loop)
+
         self.config.ensure_decks()
         self._sync_decks()
         self.load_plugins()
@@ -140,6 +158,17 @@ class Runtime:
         self._tasks = [
             asyncio.create_task(self._connection_loop(), name="connection"),
         ]
+
+        # Als Dienst startet das Backend gelegentlich vor dem Sitzungsbus.
+        # Dann gälte alles, was daran hängt, dauerhaft als nicht verfügbar —
+        # Kurzbefehle, Tray, Fensteraktionen —, obwohl es Sekunden später
+        # längst ginge. Deshalb noch einmal nachfassen, aber nur in genau
+        # diesem Fall: Fehlt eine Fähigkeit, weil dieser Desktop sie nicht
+        # kann, ändert kein Wiederholen etwas daran.
+        if not self.session.bus_reachable:
+            self._tasks.append(
+                asyncio.create_task(self._session_retry_loop(), name="session-retry")
+            )
 
     async def stop(self) -> None:
         for task in self._tasks:
@@ -334,6 +363,40 @@ class Runtime:
                 return deck
         return None
 
+    async def _session_retry_loop(self) -> None:
+        """Noch einmal nach dem Sitzungsbus sehen, mit wachsendem Abstand.
+
+        Die Abstände wachsen, weil die beiden Fälle verschieden aussehen:
+        Startet der Dienst dem Bus nur knapp zuvor, ist er nach zwei
+        Sekunden da. Gibt es gar keinen, soll das Nachfassen nicht ewig
+        weiterlaufen — nach gut zwei Minuten ist Schluss, und der Benutzer
+        kann es in den Einstellungen von Hand auslösen.
+        """
+        for wartezeit in (2, 5, 10, 20, 30, 60):
+            await asyncio.sleep(wartezeit)
+            try:
+                await self.session.detect()
+            except Exception as exc:  # noqa: BLE001
+                log.debug("Erneutes Abtasten der Sitzung: %s", exc)
+                continue
+
+            if not self.session.bus_reachable:
+                continue
+
+            log.info("Sitzungsbus jetzt erreichbar — Fähigkeiten neu erkannt")
+            # Die Kurzbefehle hängen daran und wurden beim Start
+            # übersprungen; jetzt lassen sie sich anmelden.
+            with contextlib.suppress(Exception):
+                await self.shortcuts.sync()
+            # Die Oberfläche zeigt Aktionen nach diesen Angaben an.
+            self.bus.publish(ev.EVT_CONFIG_CHANGED)
+            return
+
+        log.info(
+            "Sitzungsbus blieb unerreichbar — was daran hängt, bleibt aus. "
+            "In den Einstellungen lässt sich erneut prüfen."
+        )
+
     async def _connection_loop(self) -> None:
         """Sucht regelmäßig nach Geräten und hängt sie an ihre Bindung."""
         while True:
@@ -462,6 +525,13 @@ class Runtime:
                 # Warum der Kurzbefehl *nicht* wirkt, muss man sehen können —
                 # sonst belegt man eine Taste und wundert sich später.
                 eintrag["hotkey_reason"] = self.shortcuts.reason(deck.key)
+                # Auf Desktops ohne kglobalaccel entscheidet der Benutzer im
+                # Dialog des Portals, worauf der Kurzbefehl wirklich liegt.
+                # Dann ist die eingetippte Kombination nur noch der Wunsch,
+                # und die Oberfläche zeigt besser, was tatsächlich gilt.
+                vergeben = self.shortcuts.vergebene_kombination(deck.key)
+                if vergeben:
+                    eintrag["hotkey_effective"] = vergeben
             if deck.binding.is_network:
                 # Das Passwort selbst verlässt den Rechner nie — die
                 # Oberfläche muss nur wissen, *ob* eines gesetzt ist.
@@ -647,7 +717,9 @@ class Runtime:
     # Installationsanfragen über streamdeck://
     # ======================================================================
 
-    def add_install_request(self, url: str, origin: str = "") -> "InstallRequest":
+    def add_install_request(
+        self, url: str, origin: str = "", sha256: str = ""
+    ) -> "InstallRequest":
         """Merkt eine angeforderte Installation vor — ohne sie auszuführen.
 
         Ein Klick auf einen Link im Browser darf niemals ungefragt Code
@@ -660,7 +732,11 @@ class Runtime:
         self._expire_install_requests(now)
 
         request = InstallRequest(
-            id=uuid.uuid4().hex[:12], url=url, origin=origin, created_at=now
+            id=uuid.uuid4().hex[:12],
+            url=url,
+            origin=origin,
+            created_at=now,
+            sha256=sha256.strip().lower(),
         )
         self.install_requests.append(request)
         del self.install_requests[:-10]

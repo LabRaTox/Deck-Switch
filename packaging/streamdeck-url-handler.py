@@ -10,6 +10,10 @@ beliebigen Webseite Code auf dem Rechner installieren.
 Unterstützte Adressen:
 
     streamdeck://install?url=https://example.com/mein-plugin.zip
+    streamdeck://install?url=https://…/weather-1.0.0.zip&sha256=a1b2c3…
+
+Die Prüfsumme ist freiwillig, aber dringend zu empfehlen: Ohne sie
+installiert die App, was auch immer unter der Adresse liegt.
 
 Installation siehe scripts/install-url-handler.sh
 """
@@ -103,7 +107,14 @@ def main(argv: list[str]) -> int:
     try:
         status, body = post(
             "/api/plugins/install-request",
-            {"url": target, "origin": (params.get("origin") or [""])[0]},
+            {
+                "url": target,
+                "origin": (params.get("origin") or [""])[0],
+                # Der Store hängt die erwartete Prüfsumme an den Link. Wir
+                # geben sie unverändert weiter — geprüft wird sie erst
+                # dort, wo auch heruntergeladen wird.
+                "sha256": (params.get("sha256") or [""])[0],
+            },
         )
     except urllib.error.URLError:
         notify(

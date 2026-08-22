@@ -19,7 +19,15 @@ import type {
   Page,
   PluginInfo,
   ScreensaverEntry,
+  SessionCapabilities,
   Slot,
+  StoreAccount,
+  StoreLoginStart,
+  StoreMinePlugin,
+  StorePlugin,
+  StoreUser,
+  StoreUploadResult,
+  StoreWarnung,
   TouchWallpaper,
   WallpaperEntry,
 } from "../types";
@@ -80,10 +88,18 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Bei einem Formular *keinen* Content-Type setzen: Den bestimmt der Browser
+  // selbst und hängt die Grenze der Mehrteil-Nachricht an. Wer ihn von Hand
+  // auf application/json setzt, schickt eine Nachricht, die auf der anderen
+  // Seite niemand zerlegen kann — und der Server sieht ein leeres Formular.
+  const istFormular = init?.body instanceof FormData;
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: istFormular
+        ? { ...(init?.headers ?? {}) }
+        : { "Content-Type": "application/json", ...(init?.headers ?? {}) },
       ...init,
     });
   } catch {
@@ -322,6 +338,10 @@ export const api = {
   /** Symbol eines Plugins — nur aufrufen, wenn `has_icon` gesetzt ist. */
   pluginIconUrl: (pluginId: string) => `${API_BASE}/api/plugins/${pluginId}/icon`,
 
+  /** Bild aus der Detailansicht — angesprochen über die Position. */
+  pluginScreenshotUrl: (pluginId: string, index: number) =>
+    `${API_BASE}/api/plugins/${pluginId}/screenshot/${index}`,
+
   /**
    * Auswahlliste eines Feldes. ``context`` sind die übrigen Einstellungen
    * derselben Belegung — damit kann ein Plugin abhängige Listen liefern
@@ -402,6 +422,91 @@ export const api = {
 
   reloadPlugins: () =>
     request<{ plugins: PluginInfo[] }>("/api/plugins/reload", { method: "POST" }),
+
+  // -- Plugin-Store ---------------------------------------------------------
+
+  /**
+   * Der Katalog. Das Backend hält eine kurze Zwischenspeicherung — Blättern
+   * in der Oberfläche greift also nicht bei jedem Klick ins Netz.
+   */
+  storeCatalog: (kind = "", q = "") =>
+    request<{ count: number; plugins: StorePlugin[] }>(
+      `/api/store/catalog?kind=${encodeURIComponent(kind)}&q=${encodeURIComponent(q)}`,
+    ),
+
+  storePlugin: (slug: string) =>
+    request<StorePlugin>(`/api/store/plugins/${encodeURIComponent(slug)}`),
+
+  /** Installiert aus dem Store — nur bei stimmender Prüfsumme. */
+  storeInstall: (slug: string, version = "") =>
+    request<{ plugin_id: string; version: string; sha256: string; warnings: StoreWarnung[] }>(
+      "/api/store/install",
+      { method: "POST", body: JSON.stringify({ slug, version }) },
+    ),
+
+  storeAccount: () => request<StoreAccount>("/api/store/account"),
+
+  storeLogin: () => request<StoreLoginStart>("/api/store/login", { method: "POST" }),
+
+  storeLoginPoll: (deviceCode: string) =>
+    request<{ status: string; user?: StoreUser; backoff?: number }>("/api/store/login/poll", {
+      method: "POST",
+      body: JSON.stringify({ device_code: deviceCode }),
+    }),
+
+  storeLogout: () => request<{ status: string }>("/api/store/logout", { method: "POST" }),
+
+  storeMine: () =>
+    request<{ count: number; plugins: StoreMinePlugin[] }>("/api/store/mine"),
+
+  /**
+   * Eine eigene Einreichung zurücknehmen.
+   *
+   * Was daraus wird, steht in `aktion`: `geloescht` heißt weg, samt Archiv —
+   * `zurueckgezogen` heißt raus aus dem Katalog, aber weiter herunterladbar
+   * für alle, die die Fassung schon haben.
+   */
+  storeWithdraw: (slug: string, version: string) =>
+    request<{ slug: string; version: string; aktion: string; pluginWeg: boolean }>(
+      `/api/store/mine/${encodeURIComponent(slug)}/${encodeURIComponent(version)}`,
+      { method: "DELETE" },
+    ),
+
+  /** Ob eine Kennung im Store noch zu haben ist. */
+  storeSlug: (slug: string) =>
+    request<{ slug: string; frei: boolean; grund: string; aehnlich: string[] }>(
+      `/api/store/slugs/${encodeURIComponent(slug)}`,
+    ),
+
+  /** Ein installiertes Plugin beim Store einreichen — gepackt wird im Backend. */
+  storeUpload: (pluginId: string) =>
+    request<StoreUploadResult>("/api/store/upload", {
+      method: "POST",
+      body: JSON.stringify({ plugin_id: pluginId }),
+    }),
+
+  /**
+   * Ein fertiges Archiv einreichen.
+   *
+   * Ohne `Content-Type`: Den setzt der Browser selbst und hängt die Grenze
+   * der Mehrteil-Nachricht an. Wer ihn von Hand setzt, schickt eine Nachricht,
+   * die niemand zerlegen kann.
+   */
+  storeUploadArchive: (datei: File) => {
+    const formular = new FormData();
+    formular.append("file", datei);
+    return request<StoreUploadResult>("/api/store/upload-archive", {
+      method: "POST",
+      body: formular,
+    });
+  },
+
+  // -- Sitzung --------------------------------------------------------------
+
+  session: () => request<SessionCapabilities>("/api/session"),
+
+  refreshSession: () =>
+    request<SessionCapabilities>("/api/session/refresh", { method: "POST" }),
 
   // -- Icons und Uploads --------------------------------------------------
 

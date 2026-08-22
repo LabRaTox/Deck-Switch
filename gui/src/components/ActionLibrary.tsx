@@ -16,6 +16,13 @@ export interface ActionDragPayload {
   action_id: string;
 }
 
+/**
+ * Beim Ziehen einer *Gruppe* mitgegeben — bewusst eine andere Kennung als
+ * :data:`DRAG_MIME`. Sonst hielte das Tastenraster einen Gruppenkopf für
+ * eine Aktion und legte etwas Sinnloses ab.
+ */
+const ORDER_MIME = "application/x-streamdeck-plugin";
+
 /** Wo der Aufklapp-Zustand liegt: reine Ansichtssache, also lokal. */
 const COLLAPSED_KEY = "streamdeck.library.collapsed";
 
@@ -29,14 +36,43 @@ function loadCollapsed(): Record<string, boolean> {
 
 /**
  * Linke Spalte: alle Aktionen aller geladenen Plugins, nach Plugin gruppiert.
- * Von hier zieht man eine Aktion auf eine Taste oder einen Dial. Die
- * Reihenfolge der Gruppen kommt aus der Plugin-Liste (dort sortierbar).
+ * Von hier zieht man eine Aktion auf eine Taste oder einen Dial.
+ *
+ * Die Reihenfolge der Gruppen wird ebenfalls hier festgelegt — am Griff im
+ * Gruppenkopf. Früher stand das in der Plugin-Übersicht; die wird zum
+ * Schaufenster für den Store, und dort hat das Sortieren der eigenen
+ * Arbeitsumgebung nichts mehr verloren. Hier sieht man ohnehin unmittelbar,
+ * was sich ändert.
  */
 export function ActionLibrary() {
   const { t, i18n } = useTranslation();
   const plugins = useStore((s) => s.plugins);
+  const setPluginOrder = useStore((s) => s.setPluginOrder);
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
+  const [dragOver, setDragOver] = useState<string | null>(null);
+
+  /**
+   * Schiebt eine Gruppe an die Stelle einer anderen.
+   *
+   * Gerechnet wird auf *allen* Aktions-Plugins, nicht auf den gerade
+   * sichtbaren: Beim Sortieren zählt die vollständige Reihenfolge, sonst
+   * verlöre alles Ausgeblendete seinen Platz.
+   */
+  const verschiebe = (gezogen: string, ziel: string) => {
+    if (gezogen === ziel) return;
+    const ids = plugins.filter((p) => p.manifest.type === "action").map((p) => p.id);
+    const von = ids.indexOf(gezogen);
+    const nach = ids.indexOf(ziel);
+    if (von < 0 || nach < 0) return;
+    ids.splice(nach, 0, ...ids.splice(von, 1));
+    // Alles Übrige hinten anhängen, damit keine ID aus der Reihenfolge
+    // fällt — was fehlt, sortiert das Backend sonst ans Ende.
+    const rest = plugins
+      .filter((p) => p.manifest.type !== "action")
+      .map((p) => p.id);
+    void setPluginOrder([...ids, ...rest]);
+  };
 
   // Zugeklappte Gruppen überleben das Neuladen der Seite.
   useEffect(() => {
@@ -54,6 +90,11 @@ export function ActionLibrary() {
       .map((plugin) => ({
         plugin,
         actions: plugin.manifest.actions.filter((action) => {
+          // Was diese Sitzung nicht hergibt, gehört nicht in die
+          // Bibliothek: Man könnte es ablegen, und die Taste bliebe stumm.
+          // Auf einer bereits belegten Taste bleibt die Aktion sichtbar —
+          // dort steht dann der Grund, siehe Inspector.
+          if (action.unavailable) return false;
           if (!needle) return true;
           const haystack = [
             localized(action.name, i18n.language),
@@ -89,7 +130,28 @@ export function ActionLibrary() {
         {groups.length === 0 && <p className="empty-note">{t("library.noResults")}</p>}
 
         {groups.map(({ plugin, actions }) => (
-          <section key={plugin.id} className="library-group">
+          <section
+            key={plugin.id}
+            className={
+              dragOver === plugin.id ? "library-group drop" : "library-group"
+            }
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes(ORDER_MIME)) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              setDragOver(plugin.id);
+            }}
+            onDragLeave={() =>
+              setDragOver((id) => (id === plugin.id ? null : id))
+            }
+            onDrop={(event) => {
+              if (!event.dataTransfer.types.includes(ORDER_MIME)) return;
+              event.preventDefault();
+              setDragOver(null);
+              const gezogen = event.dataTransfer.getData(ORDER_MIME);
+              if (gezogen) verschiebe(gezogen, plugin.id);
+            }}
+          >
             <button
               type="button"
               className="library-group-head"
@@ -97,6 +159,24 @@ export function ActionLibrary() {
                 setCollapsed((state) => ({ ...state, [plugin.id]: !state[plugin.id] }))
               }
             >
+              {/* Der Griff ist das Einzige, was sich ziehen lässt — sonst
+                  verschöbe schon der Klick zum Zuklappen die Reihenfolge.
+                  Bei aktiver Suche bleibt er weg: Man sähe nur einen Teil
+                  der Gruppen und schöbe blind an unsichtbaren vorbei. */}
+              {!query.trim() && (
+                <span
+                  className="drag-handle klein"
+                  draggable
+                  title={t("library.reorder")}
+                  onClick={(event) => event.stopPropagation()}
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData(ORDER_MIME, plugin.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                >
+                  ⠿
+                </span>
+              )}
               {/* Farbbalken = Zugehörigkeit, kein Status. Runde Punkte sind
                   in dieser Oberfläche ausschließlich Verbindungsanzeigen. */}
               <span className="accent-bar" style={{ background: plugin.manifest.accent }} />

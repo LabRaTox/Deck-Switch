@@ -196,6 +196,12 @@ export interface DeckInfo extends DeviceInfo {
   overlay_hotkey?: string;
   /** Warum der Kurzbefehl gerade *nicht* wirkt. Leer = er wirkt. */
   hotkey_reason?: string;
+  /**
+   * Womit der Kurzbefehl tatsächlich ausgelöst wird. Nur gesetzt, wenn der
+   * Desktop das selbst entschieden hat (Portal-Weg) und es von der
+   * eingetippten Kombination abweichen kann.
+   */
+  hotkey_effective?: string;
 }
 
 export interface AppSettings {
@@ -234,7 +240,14 @@ export interface SettingsField {
   default?: unknown;
   placeholder?: LocalizedText;
   help?: LocalizedText;
-  options: { value: unknown; label: LocalizedText }[];
+  options: {
+    value: unknown;
+    label: LocalizedText;
+    /** Was die Sitzung können muss, damit dieser Auswahlwert etwas bewirkt. */
+    requires?: string[];
+    /** Gesetzt, wenn diese Sitzung ihn nicht hergibt. */
+    unavailable?: { missing: string[]; reason: string } | null;
+  }[];
   options_source?: string | null;
   options_depend_on?: string[];
   min?: number | null;
@@ -259,7 +272,37 @@ export interface ActionDescriptor {
   states: ActionState[];
   settings_schema: SettingsField[];
   accent?: string | null;
+  /** Was die Sitzung können muss, damit die Aktion etwas bewirkt. */
+  requires?: string[];
+  /**
+   * Gesetzt, wenn diese Sitzung die Aktion nicht hergibt. Die Bibliothek
+   * blendet sie dann aus — auf einer schon belegten Taste bleibt sie
+   * sichtbar und zeigt den Grund an.
+   */
+  unavailable?: { missing: string[]; reason: string } | null;
 }
+
+/** Schubladen der Plugin-Übersicht — dieselbe Liste wie im Backend. */
+export type PluginCategory =
+  | "system"
+  | "audio"
+  | "business"
+  | "creative"
+  | "development"
+  | "engagement"
+  | "finance"
+  | "gaming"
+  | "lighting"
+  | "monitoring"
+  | "music"
+  | "productivity"
+  | "screensaver"
+  | "smarthome"
+  | "social"
+  | "streaming"
+  | "utilities"
+  | "video"
+  | "other";
 
 export interface Manifest {
   id: string;
@@ -269,11 +312,41 @@ export interface Manifest {
   description: LocalizedText;
   author: string;
   accent: string;
+  /** Wohin das Plugin in der Übersicht gehört. */
+  category?: PluginCategory;
+  /** Bis zu drei Bilder für die Detailansicht (Dateinamen im Plugin-Ordner). */
+  screenshots?: string[];
+  /** Projektseite, Forum oder Fehlerberichte. */
+  support?: string;
+  /** Was sich zuletzt geändert hat. */
+  changelog?: LocalizedText;
   /** Dateiname eines 256×256-Symbols im Plugin-Ordner. */
   icon?: string | null;
   config_schema: SettingsField[];
   actions: ActionDescriptor[];
   license: string;
+}
+
+/** Eine Fähigkeit der laufenden Sitzung. */
+export interface Capability {
+  id: string;
+  available: boolean;
+  /** Womit sie umgesetzt wird — "spectacle", "portal", "kwin". */
+  provider: string;
+  /** Warum nicht, in einem Satz. Leer, wenn verfügbar. */
+  reason: string;
+}
+
+export interface SessionInfo {
+  /** "kde", "gnome", "hyprland", … oder "" wenn unbekannt. */
+  desktop: string;
+  /** "wayland", "x11" oder "". */
+  display_server: string;
+}
+
+export interface SessionCapabilities {
+  session: SessionInfo;
+  capabilities: Capability[];
 }
 
 /** Verbindungszustand — nur bei Plugins, die von etwas Externem abhängen. */
@@ -301,6 +374,8 @@ export interface InstallRequest {
   url: string;
   origin: string;
   created_at: number;
+  /** Angekündigte Prüfsumme. Leer = niemand hat gesagt, was ankommen soll. */
+  sha256?: string;
 }
 
 export interface DeviceInfo {
@@ -373,4 +448,116 @@ export interface InputStatus {
   available: boolean;
   reason: string;
   layout: string;
+}
+
+// -- Der Plugin-Store ------------------------------------------------------
+
+/** Ein Befund der Durchsicht, wie ihn der Store mitschickt. */
+export interface StoreWarnung {
+  kind: string;
+  value: string;
+  file: string;
+  line: number | null;
+}
+
+/** Eine Fassung im Katalog. */
+export interface StoreVersion {
+  version: string;
+  sha256: string;
+  size: number;
+  changelog: string | null;
+  min_app_version: string | null;
+  downloads: number;
+  released_at: string;
+  download_url: string;
+  warnings: StoreWarnung[];
+  /** Nur in der Einzelansicht: `approved` oder `withdrawn`. */
+  state?: string;
+  note?: string | null;
+}
+
+/** Ein Plugin im Katalog. */
+export interface StorePlugin {
+  slug: string;
+  name: string;
+  summary: string;
+  kind: string;
+  category: string;
+  author: string;
+  license: string | null;
+  source_url: string | null;
+  rating: { up: number; down: number };
+  latest: StoreVersion;
+  /** Nur in der Einzelansicht. */
+  description?: string | null;
+  versions?: StoreVersion[];
+}
+
+/** Wer im Store angemeldet ist. */
+export interface StoreUser {
+  id: number;
+  handle: string;
+  permissions: string[];
+  banned: boolean;
+}
+
+/**
+ * Was auf Prüfung wartet — nur gefüllt, wenn der Angemeldete prüfen darf.
+ * Die allermeisten Benutzer sehen hier `null`.
+ */
+export interface StorePending {
+  submissions: number;
+  reports: number;
+  url: string;
+}
+
+export interface StoreAccount {
+  user: StoreUser | null;
+  pending: StorePending | null;
+  store_url: string;
+}
+
+/** Eine Fassung in der Übersicht der eigenen Einreichungen. */
+export interface StoreMineVersion {
+  version: string;
+  /** pending | approved | rejected | withdrawn | blocked */
+  status: string;
+  /** Warum zurückgezogen oder gesperrt. */
+  stateNote: string | null;
+  /** Was die Moderation dazugeschrieben hat — auch bei einer Ablehnung. */
+  reviewNote: string | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+  downloadCount: number;
+}
+
+/** Ein eigenes Plugin im Store, mit allen Fassungen. */
+export interface StoreMinePlugin {
+  id: number;
+  slug: string;
+  name: string;
+  kind: string;
+  visibility: string;
+  removedAt: string | null;
+  versions: StoreMineVersion[];
+}
+
+/** Schritt 1 der Anmeldung: der Code, den der Benutzer eintippt. */
+export interface StoreLoginStart {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+}
+
+/** Was beim Hochladen herauskommt. */
+export interface StoreUploadResult {
+  slug: string;
+  version: string;
+  sha256: string;
+  status: string;
+  findings: number;
+  warnings: number;
+  message: string;
 }

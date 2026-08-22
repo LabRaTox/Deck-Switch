@@ -9,6 +9,7 @@
   "entry": "plugin.py",
   "class": "SoundPlugin",
   "accent": "#f97316",
+  "category": "audio",
   "description": {
     "de": "Klänge auf Knopfdruck — wahlweise auf einem eigenen Ausgabegerät.",
     "en": "Sounds at the push of a key — optionally on a separate output device."
@@ -115,6 +116,9 @@
           },
           "default": false
         }
+      ],
+      "requires": [
+        "sound_playback"
       ]
     },
     {
@@ -129,7 +133,10 @@
       },
       "inputs": ["key", "dial"],
       "default_icon": "player-stop",
-      "settings_schema": []
+      "settings_schema": [],
+      "requires": [
+        "sound_playback"
+      ]
     }
   ]
 }

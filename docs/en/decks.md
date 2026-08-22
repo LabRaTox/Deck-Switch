@@ -1,170 +1,167 @@
 # Decks: hardware, overlay and network
 
-*[Deutsche Fassung](../de/decks.md)* · Back to the
-[overview](../../README.md).
+*[Deutsche Fassung](../de/decks.md)* · Back to the [overview](../../README.md).
 
-In DECK//SWITCH a "deck" is not necessarily a device on your USB port. There
-are three kinds, and above the input layer they are equivalent: each has its
-own profile with its own page tree, key logic with double press and hold,
-multi actions, dial stacks, screen saver. The tiles of all three come out of
-the same rendering chain.
+A "deck" in DECK//SWITCH is not necessarily a device on a USB port. There are
+three kinds, and above the level of operating them they are equal: their own
+profile with their own page tree, key logic with double press and hold, multi
+actions, dial stacks, screen saver. The tiles are drawn in the same chain for
+all three.
 
-| Kind | Operated via | What for |
+| Kind | Operated through | What for |
 | --- | --- | --- |
-| **Hardware** | an Elgato Stream Deck on USB | the normal case |
-| **Virtual deck** | an overlay on your own screen | when the device is out of reach |
-| **Network deck** | a browser on another machine | when someone else should join in |
+| **Hardware** | Elgato Stream Deck on USB | the normal case |
+| **Virtual deck** | overlay on your own screen | when the device is out of reach |
+| **Network deck** | browser on another machine | when someone else should help out |
 
 ## Several decks at once
 
-Any number of Stream Decks can be connected at the same time. Each device
-stands on its own: its own profile, its own brightness, its own screen
-saver, its own timings for hold and double press.
+You can have several Stream Decks connected at the same time. Each device
+stands on its own: its own profile, its own brightness, its own screen saver,
+its own timings for hold and double press.
 
-They are matched by **serial number**. A deck may therefore sit on a
-different USB port or be detected in a different order and still find its
-layout again. When a previously unknown device turns up, the app creates an
-empty profile for it.
+They are matched by **serial number**. A deck may sit on a different USB port
+or be detected in a different order and still finds its layout again. If a
+device turns up that the app has not seen before, it creates an empty profile
+for it.
 
-The header shows the decks as a switcher as soon as there is more than one —
-the editor always edits exactly one. Under *Settings → Decks* devices can be
-renamed; a deck that is gone can be removed there (its profile is kept).
+As soon as there is more than one deck, they appear in the header as a
+switch. The editor always edits exactly one. Under *settings → decks* you can
+rename devices. A deck that is no longer around can be removed there, and its
+profile stays.
 
-If you only have one deck you notice none of this.
+If you only have one deck, none of this shows up.
 
 ## Which Stream Deck?
 
-The interface follows the connected device: key count, grid layout and the
-presence of dials come from the device report, not from a fixed assumption.
-A Stream Deck XL shows 8 × 4 keys, a Mini 3 × 2, and without dials the touch
-strip area disappears entirely. Developed and tested on real hardware with
-the **Stream Deck +**; the other models are tested against simulated device
-reports but never against the actual thing.
+The interface follows the connected device. Key count, grid layout and
+whether there are dials come from what the device reports, not from a fixed
+assumption. A Stream Deck XL shows 8 × 4 keys, a Mini 3 × 2, and without
+dials the touch strip area disappears entirely.
+
+Development and device testing happened on a **Stream Deck +**. The other
+models are tested against faked device reports, never on real hardware.
 
 ---
 
 ## Virtual deck (overlay)
 
-Under *Settings → Decks → **+ Virtual deck*** you get a deck with a freely
-chosen grid (columns, rows, dials, tile size) that sits as an **overlay** on
-top of your screen.
+Under *settings → decks → **+ virtual deck*** you get a deck with a grid of
+your choosing (columns, rows, dials, tile size) that sits as an **overlay**
+on the screen.
 
 **It is deliberately not a window.** Through `zwlr_layer_shell_v1` the
-surface lives on the overlay layer: no entry in the task bar, no Alt-Tab, no
-frame — and above all **no focus**. That is the point where such a thing
-usually fails: if clicking a key stole the focus, the *type text* action
-would afterwards type into the deck instead of the application you came
-from. Measured under KWin — the click arrives, the focus stays with the
-foreground window.
+surface sits on the overlay layer: no entry in the task bar, no Alt-Tab, no
+frame, and above all **no focus**. That is where things like this usually
+fail. If a click on the key stole the focus, the *type text* action would
+type into the deck afterwards instead of the application you came from.
+Measured under KWin: the click arrives, the focus stays with the foreground
+window.
 
-**Summoning it** works three ways:
+**Calling it up** works three ways:
 
-* via a **global shortcut** — see below
-* via *Settings → Decks → Show overlay*
-* via the **Virtual deck** action (plugin *Streamdeck*) on a key of the real
-  deck — optionally toggling, and optionally **at the mouse pointer**
+* through a **global shortcut**, see below
+* through *settings → decks → show overlay*
+* through the **virtual deck** action (*Streamdeck* plugin) on a key of the
+  real deck, toggling if you like and optionally **at the mouse pointer**
 
-No client protocol reveals the pointer position under Wayland; that is by
-design. KWin knows it, though, and KWin scripts may call D-Bus, so we ask
-ourselves back through a tiny KWin script. Without KDE the overlay appears
-at its remembered place — not a fault, just less convenient.
+No client protocol on Wayland tells you where the pointer is, and that is on
+purpose. KWin knows though, and it may call D-Bus, so we ask ourselves back
+through a tiny KWin script. Without KDE the overlay appears at its remembered
+spot. Not an error, just less convenient.
 
-### Moving and placing it
+### Moving it around
 
-With *Appear at mouse pointer* switched **off**, the overlay can be put
-where it belongs — the spot is stored and used on every further call:
+With *appear at pointer* **off** you can put the overlay where it belongs.
+The spot is stored and applies every time it comes up:
 
-* **left mouse button** on the margin around the tiles
-* **right mouse button** anywhere, including on the tiles — necessary when a
-  transparent background and hidden empty tiles leave hardly any free area
+* **left mouse button** on the border around the tiles
+* **right mouse button** anywhere, tiles included. You need that when a
+  transparent background and hidden empty tiles leave hardly any free area.
 
-While dragging, the overlay steps back and jumps to the new place when you
-let go. It does not glide along: a layer-shell surface cannot be moved while
-it is up — `Window::setMargins` from layer-shell-qt stores the value and
-emits a signal, but never reaches the running Wayland surface. So it is
-rebuilt at the new position instead.
+While you drag, the overlay steps back and jumps to the new spot when you let
+go. It does not glide along, because a layer shell surface cannot be moved
+while it runs. `Window::setMargins` from layer-shell-qt remembers the value
+and emits it as a signal, but never reaches the live Wayland surface. So the
+app rebuilds it at the new spot.
 
 ### Settings
 
-In the editor, grid and overlay switches sit on the right in the page
-properties. The tile size is continuous; there are two switches next to it:
+In the editor the grid and the overlay switches are on the right in the page
+properties. Tile size is continuous, and there are two switches:
 
-* **Transparent background** — without a plate underneath, only the tiles
-  float above the screen.
-* **Hide empty tiles** — unassigned slots stay invisible and take no clicks
-  either. Their space is kept, though, so the remaining tiles do not jump
-  around whenever something is assigned.
+* **Transparent background.** Without a plate underneath, only the tiles
+  float over the screen.
+* **Hide empty tiles.** Unassigned slots stay invisible and take no clicks.
+  Their space stays reserved though, so the other tiles do not jump around
+  every time you assign something.
 
 ### Shortcut
 
-Below those sits the **shortcut** that brings up this very overlay and sends
-it away again — from anywhere, without opening the interface. If a virtual
-deck is all you have, you need it: a deck without a case has no handle
-otherwise. Press *Record* and type the combination; the field can also be
-filled in by hand (`ctrl+alt+d`), because the browser swallows some
-combinations before the page ever sees them.
+Below that is the **shortcut** that fetches this particular overlay and sends
+it away again, from anywhere and without opening the interface. If you only
+have a virtual deck, you need it: a deck without a case has no other handle.
+Press *record* and type the combination. You can also write into the field by
+hand (`ctrl+alt+d`), because the browser catches some combinations before the
+page sees them.
 
 The shortcut is registered with Plasma (`kglobalaccel`). That has three
 consequences worth knowing:
 
-* It afterwards also shows up in **KDE System Settings** under *Shortcuts →
-  DECK//SWITCH*, where it can be changed.
-* A combination that is **already taken is refused, not stolen** — the field
-  then says who owns it (for instance “KWin — Show Desktop”). If you want it
-  anyway, take it away there first.
-* Once the backend quits, the shortcut is free again. Nothing is left behind
-  that no program stands behind any more.
+* It then also shows up in the **KDE system settings** under *shortcuts →
+  DECK//SWITCH* and can be changed there.
+* A **combination that is already taken is refused**, not taken away. Below
+  the field you then see who owns it, for instance "KWin — peek at desktop".
+  If you want it anyway, remove it there first.
+* When the backend quits, the shortcut is free again. Nothing is left behind
+  with no program behind it.
 
-`AltGr` does not work — Qt has no modifier level for it that a global
-shortcut could express. An empty field means: no shortcut.
+`AltGr` does not work. In Qt that is not a modifier level a global shortcut
+can express. An empty field means: no shortcut.
 
-The tiles get **rounded corners with real transparency** — the rounding
-happens during rendering, not in the overlay, because Qt can only clip
-rectangularly and the corners would otherwise stay square.
+The tiles get **rounded corners with real transparency**. The rounding
+happens while drawing and not in the overlay, because Qt can only clip
+rectangles and the corners would stay as squares.
 
-There is no **brightness** here: an overlay has no backlight to dim. Both
-conceivable translations are worse than none — as opacity the tile becomes
-translucent and unreadable on a light background, as dimming the colours no
-longer match the preview. The slider is therefore disabled.
+There is no **brightness** here. An overlay has no backlight to dim, and both
+conceivable translations would be worse than none: as opacity the tile
+becomes see-through and unreadable on a light background, as darkening the
+colours no longer match the preview. The slider is switched off.
 
 **Requirements:** `qt6-declarative` (which brings `qml6`) and
-`layer-shell-qt`. If either is missing, the interface says so plainly
-instead of offering a button that does nothing.
-
-A global **keyboard shortcut** for summoning it is still missing. The clean
-route would be the `org.freedesktop.portal.GlobalShortcuts` portal; KDE's
-`kglobalaccel` accepts the registration but never delivers the signal
-(measured).
+`layer-shell-qt`. If one of them is missing, the interface says so in plain
+words.
 
 ---
 
 ## Network deck
 
-A network deck is operated **from another machine on the same network** in a
-browser — meant for the moderator who should join in during a stream without
-walking over to your machine. They see exactly this one deck and cannot
+A network deck is operated by **someone else on the same network** in a
+browser. It is meant for the moderator who should help out during a stream
+without walking over to your machine. They see this one deck and cannot
 change anything about it.
 
-Create it under *Settings → Decks → **+ Network deck***. Assign it like any
-other deck; in the editor, grid, password and address sit on the right.
+You create one under *settings → decks → **+ network deck***. Assigning works
+like any other deck, and the editor shows grid, password and address on the
+right.
 
 ### Setting it up
 
-1. Create the deck and assign its keys.
-2. In the editor under *Access*, set a **password** (at least 4 characters).
-3. Pass the displayed **address** to your guest, for example
+1. Create the deck and assign the keys.
+2. Set a **password** under *access* in the editor, at least 4 characters.
+3. Pass the **address** shown there to your guest, for example
    `http://192.168.178.37:8771/deck/net-a1b2c3d4`.
 
-The guest opens the address, enters the password and has the deck in front
-of them. Nothing to install — the page is a single file without libraries
-and runs on phones, tablets and borrowed laptops.
+Your guest opens the address, enters the password and has the deck in front
+of them. Nothing to install. The page is a single file without libraries and
+runs on a phone, a tablet and a borrowed laptop.
 
-Press and release are sent separately, so hold, double press and
-push-to-talk behave exactly as they do on the device. Dials have − and +
-with repetition while held.
+Press and release go to the backend separately, so hold, double press and
+push-to-talk work exactly as on the device. Dials get − and + with repeat
+while held.
 
-If a firewall is running, the port needs to be open — better for your own
-subnet only than for everyone:
+If a firewall is running, the port needs to be open. Better for your own
+subnet only than for everything:
 
 ```sh
 sudo ufw allow from 192.168.178.0/24 to any port 8771 proto tcp
@@ -172,30 +169,29 @@ sudo ufw allow from 192.168.178.0/24 to any port 8771 proto tcp
 
 ### How it is secured
 
-The regular server serving the interface binds **exclusively to
-`127.0.0.1`**, and it stays that way. It may do everything: change layouts,
-install plugins, export the configuration — including the credentials in the
-plugin settings. Something like that does not belong on the network.
+The regular server that serves the interface binds **only to `127.0.0.1`**
+and stays there. It may do everything: change assignments, install plugins,
+export the configuration, credentials in the plugin settings included. That
+does not belong on a network.
 
-What goes onto the network instead is a **second, deliberately tiny
-application** on its own port (8771 by default). It can do three things: log
-in, show tiles, press keys. There simply is no endpoint that could change
-anything — the protection lies in what is absent, not in a rule someone
-might soften later.
+What goes onto the network is a **second, deliberately tiny application** on
+its own port, 8771 by default. It can do three things: sign in, show tiles,
+press keys. There simply is no endpoint that could change anything. The
+protection lies in what is absent and not in a rule somebody softens later.
 
 On top of that:
 
 * The **password** is only stored derived (PBKDF2-HMAC-SHA256, 210,000
-  rounds, its own salt) — no plain text in the configuration file.
-* After logging in a **token** applies, twelve hours, bound to exactly one
+  rounds, its own salt). There is no plain text in the config file.
+* After signing in a **token** applies, twelve hours, tied to exactly one
   deck.
 * A **password change disconnects everyone** currently connected.
-* After five failed attempts the address is **locked out** for five minutes;
-  every failed attempt costs an extra half second anyway.
-* **Without a password a deck is not offered at all.** Once no network deck
-  is active any more, the server stops listening entirely — an open port
-  without purpose is attack surface without benefit.
+* After five failed attempts the address is **locked** for five minutes, and
+  every failed attempt costs an extra half second.
+* **Without a password a deck is not offered at all.** If no network deck is
+  active any more, the server stops listening entirely. An open port with no
+  purpose is attack surface without benefit.
 
-What this does **not** provide: the connection is unencrypted. On your own
-network that is acceptable — across foreign networks, let alone the
-internet, a network deck does not belong.
+What this does **not** do: the connection is unencrypted. On your own network
+that is fine. Over foreign networks or the internet a network deck has no
+business.
