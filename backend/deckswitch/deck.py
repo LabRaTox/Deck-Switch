@@ -572,11 +572,6 @@ class Deck:
             page_id=ctx.page_id,
             suffix=f"step-{step.id}",
         )
-        # Der gewünschte Zustand hängt am Kontext und nicht an den Settings:
-        # Er gehört zum Schritt, nicht zur Belegung, und ein Plugin, das ihn
-        # nicht kennt, soll ihn auch nicht in seinen Einstellungen finden.
-        step_ctx.desired_state = step.desired_state
-
         for hook, name in (
             (plugin.on_key_down, "on_key_down"),
             (plugin.on_key_up, "on_key_up"),

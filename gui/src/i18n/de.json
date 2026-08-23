@@ -132,8 +132,7 @@
     "turnEveryHint": "Ein zügiger Dreh sind schnell ein Dutzend Rasten. 1 löst bei jeder aus.",
     "remove_left": "Linksdrehung entfernen",
     "remove_right": "Rechtsdrehung entfernen",
-    "unavailable": "Wirkungslos in dieser Sitzung: {{reason}}",
-    "pluginOwnSettings": "Diese Seite gehört dem Plugin. DECK//SWITCH reicht sie nur durch."
+    "unavailable": "Wirkungslos in dieser Sitzung: {{reason}}"
   },
   "icons": {
     "title": "Icon auswählen",
@@ -209,7 +208,7 @@
     "installAction": "Installieren",
     "installing": "Wird installiert …",
     "installed": "Nachinstalliert",
-    "dropArchive": "Plugin-Archiv (.zip oder .streamDeckPlugin) hierher ziehen oder klicken",
+    "dropArchive": "Plugin-Archiv (.zip) hierher ziehen oder klicken",
     "uninstall": "Entfernen",
     "uninstallConfirm": "„{{name}}“ entfernen? Belegungen dieses Plugins werden gelöscht.",
     "fromUrl": "Von einer Adresse installieren",

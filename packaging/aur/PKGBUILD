@@ -23,7 +23,6 @@ depends=(
   'python-xkbcommon'
   'python-elgato-streamdeck'
   'uvicorn'
-  'python-websockets'
   'python-watchfiles'
   'python-httptools'
   'python-uvloop'

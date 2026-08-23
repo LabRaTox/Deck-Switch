@@ -90,10 +90,7 @@ export function PluginInstaller({ onInstalled }: { onInstalled?: () => void } = 
         <input
           ref={fileInput}
           type="file"
-          // ``.streamDeckPlugin`` gehört dazu: Ein Plugin aus Elgatos
-          // Marktplatz wird hier genauso eingelesen, nur eben übersetzt.
-          // Ohne die Endung blendet der Dateidialog es aus.
-          accept=".zip,.sdplugin,.streamDeckPlugin,application/zip"
+          accept=".zip,.sdplugin,application/zip"
           hidden
           onChange={(event) => {
             const file = event.target.files?.[0];

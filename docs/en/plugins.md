@@ -155,51 +155,6 @@ minutes.
 Every assignment can get its own city through *different location*. That way
 home and holiday destination sit next to each other on the deck.
 
-## Plugins from the Elgato marketplace
-
-A `.streamDeckPlugin` file installs like any other plugin: drop it under
-*plugins → install plugins*. DECK//SWITCH translates the foreign manifest and
-starts the plugin the way the Stream Deck software would.
-
-Elgato plugins are programs of their own. They get a WebSocket from us,
-register on it and talk JSON from then on: we send key presses and dial
-turns, they send images, titles and states back. Their settings page shows up
-in the key's properties, in a sandboxed frame — it belongs to the plugin, we
-only pass it through.
-
-Every plugin runs in its own process. If one hangs, it hangs alone.
-
-There are three kinds, and they need different things:
-
-| Kind | How to spot it | Needs |
-| --- | --- | --- |
-| Node | `CodePath` ends in `.js` | `node` |
-| Browser | `CodePath` ends in `.html` | Chromium |
-| Windows | `CodePath` ends in `.exe` | `wine` plus the plugin's runtime |
-
-A Windows plugin runs in a Windows environment under
-`~/.local/share/deckswitch/wine`. Most are written in .NET and do **not**
-ship the runtime; it has to go into that environment once:
-
-```sh
-./scripts/setup-wine-dotnet.py            # fetches runtime and desktop runtime
-./scripts/setup-wine-dotnet.py --pruefen  # only look at what is there
-```
-
-The script downloads about 80 MB from Microsoft. Deliberately not a button in
-the app: an application should not do that unasked, and it is one-time setup.
-If the runtime is missing, the plugin card says so.
-
-**Displays above the dials.** A plugin sends title, value and level and
-describes in a layout file where those go — that file is followed pixel by
-pixel. If it asks for one of Elgato's six pre-defined layouts (`$X1` … `$C1`)
-we build it from their description: what goes where is right, the exact
-measurements are ours. Elgato does not publish them.
-
-**Not there yet:** profiles a plugin brings along (`Profiles` in the
-manifest) — switching to a profile of *this* app does work. Plus anything
-Elgato's software offers beyond the protocol.
-
 ## Installing plugins
 
 Under *plugins* the tiles from the **store** sit right next to your own. What

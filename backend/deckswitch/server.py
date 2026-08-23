@@ -1177,45 +1177,6 @@ def create_app(
             headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
         return FileResponse(candidate, media_type=media, headers=headers)
 
-    @app.get("/api/plugins/{plugin_id}/pi/{pfad:path}")
-    async def plugin_property_inspector(
-        plugin_id: str, pfad: str, context: str = "", action: str = ""
-    ) -> Response:
-        """Die Einstellungsseite eines Elgato-Plugins und alles, was sie lädt.
-
-        Elgato-Plugins beschreiben ihre Einstellungen nicht in Feldern, die
-        wir nachbauen könnten, sondern bringen eine eigene HTML-Seite mit.
-        Die liegt im Plugin-Ordner und wird hier ausgeliefert — samt ihrer
-        Skripte und Stile, sonst lädt sie halb.
-
-        Beim Aufruf mit ``context`` hängt diese Route der Seite den Anschluss
-        an: Elgato sieht dafür eine Funktion vor, die die Software mit Port,
-        Kennung und Zustand aufruft. Die GUI kann das nicht selbst tun — sie
-        zeigt die Seite in einem abgeschotteten Rahmen und kommt an deren
-        Inhalt bewusst nicht heran.
-        """
-        from .plugins.elgato import UNTERORDNER, ElgatoPlugin
-
-        plugin = runtime.registry.instance(plugin_id)
-        if not isinstance(plugin, ElgatoPlugin):
-            raise HTTPException(404, "Dieses Plugin hat keine eigene Einstellungsseite")
-
-        wurzel = (runtime.registry.get(plugin_id).directory / UNTERORDNER).resolve()
-        ziel = (wurzel / pfad).resolve()
-        # Der Pfad kommt aus einem fremden Manifest bzw. aus der Seite selbst.
-        if wurzel not in ziel.parents or not ziel.is_file():
-            raise HTTPException(404, "Datei nicht gefunden")
-
-        typ = mimetypes.guess_type(ziel.name)[0] or "application/octet-stream"
-        kopf = {"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"}
-
-        if not (context and ziel.suffix.lower() in (".html", ".htm")):
-            return FileResponse(ziel, media_type=typ, headers=kopf)
-
-        anschluss = plugin.anschluss(context, action)
-        seite = ziel.read_text(encoding="utf-8", errors="replace") + anschluss
-        return Response(content=seite, media_type="text/html; charset=utf-8", headers=kopf)
-
     @app.get("/api/plugins/{plugin_id}/screenshot/{index}")
     async def plugin_screenshot(plugin_id: str, index: int) -> Response:
         """Eines der Bilder aus der Detailansicht.

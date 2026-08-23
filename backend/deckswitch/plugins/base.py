@@ -100,11 +100,6 @@ class ActionDescriptor(BaseModel):
     default_label: LocalizedText = ""
     states: list[ActionState] = Field(default_factory=list)
     settings_schema: list[SettingsField] = Field(default_factory=list)
-    #: Pfad zu einer eigenen Einstellungsseite (HTML) innerhalb des Plugins.
-    #: Nur Elgato-Plugins bringen so etwas mit; unsere eigenen beschreiben
-    #: ihre Felder im ``settings_schema`` und lassen die GUI das Formular
-    #: bauen. Steht hier etwas, zeigt die GUI stattdessen diese Seite.
-    property_inspector: str | None = None
     #: Akzentfarbe für Hintergrund-Variante „accent“; None = Plugin-Akzent.
     accent: str | None = None
     #: Was die Sitzung können muss, damit diese Aktion etwas bewirkt —
@@ -319,11 +314,6 @@ class SlotContext:
     slot: "Slot"
     #: Von der Runtime gesetzt: ob dies der Long-Press-Zweig einer Taste ist.
     is_long_press: bool = False
-    #: In einer Multi-Aktion: welchen Zustand dieser Schritt herstellen soll.
-    #: ``None`` außerhalb von Ketten und überall dort, wo einfach umgeschaltet
-    #: wird. Plugins mit mehreren Zuständen sollten sich daran halten, statt
-    #: blind zu wechseln.
-    desired_state: int | None = None
     #: Laufzeit in Sekunden, aus der animierte Bilder ihr Einzelbild wählen.
     #: Für stehende Kacheln bleibt sie 0 — dann ändert sich nichts.
     frame_time: float = 0.0

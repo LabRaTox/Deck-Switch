@@ -149,12 +149,6 @@ class Step(BaseModel):
     #: Abgeschaltete Schritte bleiben in der Kette stehen, laufen aber nicht
     #: mit — praktisch beim Suchen, welcher Schritt hakt.
     enabled: bool = True
-    #: Welchen Zustand dieser Schritt herstellen soll — ``None`` heißt
-    #: „umschalten wie ein gewöhnlicher Druck". Gedacht für Aktionen mit
-    #: mehreren Zuständen: In einer Kette will man meist „stumm **an**" und
-    #: nicht „stumm umschalten", sonst hängt das Ergebnis davon ab, wie es
-    #: vorher stand. Elgato nennt das ``userDesiredState``.
-    desired_state: int | None = None
 
 
 class Slot(BaseModel):
