@@ -31,7 +31,6 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from .. import paths
-from . import elgato
 from .base import Manifest
 
 log = logging.getLogger(__name__)
@@ -190,16 +189,6 @@ def install_archive(data: bytes, *, filename: str = "") -> Manifest:
     with tempfile.TemporaryDirectory(prefix="streamdeck-plugin-") as tmp:
         staging = Path(tmp) / "unpacked"
         staging.mkdir()
-
-        # Ein Elgato-Archiv nimmt einen eigenen Weg: Es bringt ein fremdes
-        # Manifest mit, das erst übersetzt werden muss. Alles danach — Ordner,
-        # Ablösen der alten Fassung, Rückbau bei Fehlern — ist dasselbe.
-        if elgato.ist_elgato_archiv(data, filename):
-            try:
-                uebersetzt = elgato.lies_ein(data, staging)
-            except elgato.ElgatoError as exc:
-                raise InstallError(str(exc)) from exc
-            return _install_from_directory(staging, uebersetzt["id"])
 
         _extract(data, staging)
 

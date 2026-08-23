@@ -2150,18 +2150,6 @@ input[type="checkbox"] {
   background: #000;
 }
 
-/* Der Rahmen für die Einstellungsseite eines Elgato-Plugins. Die Höhe ist
-   geraten und muss es sein: Was in der Seite steht, weiß nur das Plugin,
-   und ein Rahmen, der mitwächst, ginge nur mit Zugriff auf ihren Inhalt —
-   genau den hat er absichtlich nicht. */
-.pi-rahmen {
-  width: 100%;
-  height: 420px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-sunken);
-}
-
 /* Die Profilwahl sitzt über dem Seitenbaum — beim Bauen gebraucht, nicht
    beim Einrichten. */
 .profilbar {

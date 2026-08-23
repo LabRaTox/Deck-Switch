@@ -478,29 +478,6 @@ export function Inspector() {
           </section>
         )}
 
-        {/* ---------------- Einstellungsseite eines Elgato-Plugins -------- */}
-        {branch === "press" && action?.property_inspector && (
-          <section className="inspector-section">
-            <h3>{t("inspector.settings")}</h3>
-            {/* Fremdes HTML in einem abgeschotteten Rahmen: ohne
-                allow-same-origin bekommt die Seite einen eigenen Ursprung.
-                Sie darf Skripte ausführen und ihren WebSocket zur Brücke
-                öffnen, kommt aber weder an unser DOM noch an unsere API. */}
-            <iframe
-              className="pi-rahmen"
-              title={t("inspector.settings")}
-              sandbox="allow-scripts allow-forms allow-popups"
-              src={api.pluginPropertyInspectorUrl(
-                editing.plugin_id,
-                action.property_inspector,
-                `${pageId}:${inputType}:${selection.index}`,
-                editing.action_id,
-              )}
-            />
-            <p className="hint">{t("inspector.pluginOwnSettings")}</p>
-          </section>
-        )}
-
         {/* ---------------- Plugin-Einstellungen ---------------- */}
         {branch === "press" && action && action.settings_schema.length > 0 && (
           <section className="inspector-section">

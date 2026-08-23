@@ -283,11 +283,6 @@ export interface ActionDescriptor {
   default_label: LocalizedText;
   states: ActionState[];
   settings_schema: SettingsField[];
-  /**
-   * Eigene Einstellungsseite (HTML) statt eines Formulars aus dem Schema.
-   * Nur Elgato-Plugins bringen so etwas mit.
-   */
-  property_inspector?: string | null;
   accent?: string | null;
   /** Was die Sitzung können muss, damit die Aktion etwas bewirkt. */
   requires?: string[];

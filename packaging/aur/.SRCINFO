@@ -25,7 +25,6 @@ pkgbase = deckswitch
 	depends = python-xkbcommon
 	depends = python-elgato-streamdeck
 	depends = uvicorn
-	depends = python-websockets
 	depends = python-watchfiles
 	depends = python-httptools
 	depends = python-uvloop

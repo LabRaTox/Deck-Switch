@@ -378,23 +378,6 @@ export const api = {
   /** Symbol eines Plugins — nur aufrufen, wenn `has_icon` gesetzt ist. */
   pluginIconUrl: (pluginId: string) => `${API_BASE}/api/plugins/${pluginId}/icon`,
 
-  /**
-   * Die Einstellungsseite eines Elgato-Plugins.
-   *
-   * ``context`` ist die Belegung, zu der sie gehört — dieselbe Kennung, die
-   * das Backend für seine Kontexte benutzt (Seite, Eingabeart, Index).
-   */
-  pluginPropertyInspectorUrl: (
-    pluginId: string,
-    pfad: string,
-    context: string,
-    actionId: string,
-  ) =>
-    `${API_BASE}/api/plugins/${encodeURIComponent(pluginId)}/pi/${pfad
-      .split("/")
-      .map(encodeURIComponent)
-      .join("/")}?context=${encodeURIComponent(context)}&action=${encodeURIComponent(actionId)}`,
-
   /** Bild aus der Detailansicht — angesprochen über die Position. */
   pluginScreenshotUrl: (pluginId: string, index: number) =>
     `${API_BASE}/api/plugins/${pluginId}/screenshot/${index}`,
