@@ -93,10 +93,21 @@ Nachinstallieren geht auf vier Wegen: über den **Store** direkt in der App,
 aus einer ZIP-Datei, von einer Adresse oder über einen `streamdeck://`-Link
 im Browser.
 
-**Plugin-Übersicht und Einstellungen**
+**Integrierter Plugin-Store**
+Er zeigt dir alle verfügbaren Plugins, auch die installierten. Noch nicht
+installierte erkennst du am gestrichelten Rahmen. Ein Klick auf den Namen
+öffnet die Detailseite mit Bildern, Beschreibung, Lizenz und Größe. Links
+filterst du nach Thema, oben nach Art.
 
 <p align="center">
-  <img src="docs/screenshots/plugins.png" alt="Plugin-Übersicht" width="49%">
+  <img src="docs/screenshots/plugins.png" alt="Plugin-Übersicht mit Store-Karten" width="49%">
+  <img src="docs/screenshots/store.png" alt="Ein Plugin aus dem Store" width="49%">
+</p>
+
+**Einstellungen**
+Sprache, Standard-Iconset, Autostart und alles zu den Decks.
+
+<p align="center">
   <img src="docs/screenshots/einstellungen.png" alt="Einstellungen" width="49%">
 </p>
 
