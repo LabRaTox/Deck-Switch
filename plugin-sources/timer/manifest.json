@@ -1,0 +1,490 @@
+{
+  "id": "timer",
+  "name": {
+    "de": "Timer",
+    "en": "Timer"
+  },
+  "version": "1.0.0",
+  "type": "action",
+  "author": "LabRaTox",
+  "category": "productivity",
+  "accent": "#f59e0b",
+  "description": {
+    "de": "Countdown, Stoppuhr und Wecker auf Tasten und Dials. Zeiten lassen sich eintragen oder am Dial drehen; am Ende klingelt es.",
+    "en": "Countdown, stopwatch and alarm clock on keys and dials. Set times by typing or by turning a dial; it rings when the time is up."
+  },
+  "changelog": {
+    "de": "Erste Fassung: Countdown, Stoppuhr und Wecker, mit mitgelieferter Klingel.",
+    "en": "First release: countdown, stopwatch and alarm clock, with a bundled bell."
+  },
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/Deck-Switch",
+  "icon": "icon.png",
+  "screenshots": [
+    "screenshots/aktionen.png",
+    "screenshots/zustaende.png",
+    "screenshots/dials.png"
+  ],
+  "entry": "plugin.py",
+  "class": "TimerPlugin",
+  "actions": [
+    {
+      "id": "countdown",
+      "name": {
+        "de": "Countdown",
+        "en": "Countdown"
+      },
+      "description": {
+        "de": "Zählt eine eingestellte Zeit herunter. Druck startet und pausiert, am Dial stellt Drehen die Zeit.",
+        "en": "Counts down from a set time. Press to start and pause; on a dial, turning sets the time."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "hourglass",
+      "default_label": {
+        "de": "Timer",
+        "en": "Timer"
+      },
+      "states": [
+        {
+          "id": "bereit",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          },
+          "default_icon": "hourglass"
+        },
+        {
+          "id": "laeuft",
+          "name": {
+            "de": "Läuft",
+            "en": "Running"
+          },
+          "default_icon": "hourglass-high"
+        },
+        {
+          "id": "pausiert",
+          "name": {
+            "de": "Pausiert",
+            "en": "Paused"
+          },
+          "default_icon": "player-pause"
+        },
+        {
+          "id": "abgelaufen",
+          "name": {
+            "de": "Abgelaufen",
+            "en": "Finished"
+          },
+          "default_icon": "bell-ringing"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "duration",
+          "type": "text",
+          "label": {
+            "de": "Dauer",
+            "en": "Duration"
+          },
+          "default": "5:00",
+          "placeholder": {
+            "de": "5:00",
+            "en": "5:00"
+          },
+          "help": {
+            "de": "Als mm:ss oder hh:mm:ss. Auch „90“ (Sekunden), „5m“, „1h30m“ werden verstanden.",
+            "en": "As mm:ss or hh:mm:ss. Plain “90” (seconds), “5m” and “1h30m” work too."
+          }
+        },
+        {
+          "key": "on_press",
+          "type": "select",
+          "label": {
+            "de": "Ein Druck",
+            "en": "A press"
+          },
+          "default": "start_pause",
+          "options": [
+            {
+              "value": "start_pause",
+              "label": {
+                "de": "startet und pausiert",
+                "en": "starts and pauses"
+              }
+            },
+            {
+              "value": "restart",
+              "label": {
+                "de": "startet von vorn",
+                "en": "starts over"
+              }
+            },
+            {
+              "value": "reset",
+              "label": {
+                "de": "setzt zurück",
+                "en": "resets"
+              }
+            }
+          ],
+          "help": {
+            "de": "Zum Zurücksetzen dieselbe Aktion mit „setzt zurück“ auf den Doppeldruck legen.",
+            "en": "To reset, put the same action with “resets” on the double press."
+          }
+        },
+        {
+          "key": "step",
+          "type": "number",
+          "label": {
+            "de": "Schritt am Dial (Sekunden)",
+            "en": "Dial step (seconds)"
+          },
+          "default": 30,
+          "min": 1,
+          "max": 3600,
+          "step": 1
+        },
+        {
+          "key": "sound",
+          "type": "select",
+          "label": {
+            "de": "Ton am Ende",
+            "en": "Sound when finished"
+          },
+          "default": "bell",
+          "options": [
+            {
+              "value": "bell",
+              "label": {
+                "de": "Mitgelieferte Klingel",
+                "en": "Bundled bell"
+              }
+            },
+            {
+              "value": "file",
+              "label": {
+                "de": "Eigene Datei",
+                "en": "Own file"
+              }
+            },
+            {
+              "value": "none",
+              "label": {
+                "de": "Kein Ton",
+                "en": "No sound"
+              }
+            }
+          ]
+        },
+        {
+          "key": "sound_file",
+          "type": "file",
+          "label": {
+            "de": "Audiodatei",
+            "en": "Audio file"
+          },
+          "depends_on": {
+            "sound": "file"
+          },
+          "help": {
+            "de": "WAV, FLAC, OGG, Opus oder MP3.",
+            "en": "WAV, FLAC, OGG, Opus or MP3."
+          }
+        },
+        {
+          "key": "repeat",
+          "type": "bool",
+          "label": {
+            "de": "Ton wiederholen",
+            "en": "Repeat the sound"
+          },
+          "default": false,
+          "help": {
+            "de": "Klingelt so lange, bis die Taste gedrückt wird.",
+            "en": "Rings until the key is pressed."
+          }
+        },
+        {
+          "key": "volume",
+          "type": "number",
+          "label": {
+            "de": "Lautstärke",
+            "en": "Volume"
+          },
+          "default": 80,
+          "min": 0,
+          "max": 100,
+          "step": 5
+        }
+      ]
+    },
+    {
+      "id": "stopwatch",
+      "name": {
+        "de": "Stoppuhr",
+        "en": "Stopwatch"
+      },
+      "description": {
+        "de": "Zählt hoch, bis sie angehalten wird. Druck startet und hält an.",
+        "en": "Counts up until stopped. Press to start and stop."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "stopwatch",
+      "default_label": {
+        "de": "Stoppuhr",
+        "en": "Stopwatch"
+      },
+      "states": [
+        {
+          "id": "bereit",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          },
+          "default_icon": "stopwatch"
+        },
+        {
+          "id": "laeuft",
+          "name": {
+            "de": "Läuft",
+            "en": "Running"
+          },
+          "default_icon": "player-play"
+        },
+        {
+          "id": "pausiert",
+          "name": {
+            "de": "Angehalten",
+            "en": "Stopped"
+          },
+          "default_icon": "player-pause"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "on_press",
+          "type": "select",
+          "label": {
+            "de": "Ein Druck",
+            "en": "A press"
+          },
+          "default": "start_pause",
+          "options": [
+            {
+              "value": "start_pause",
+              "label": {
+                "de": "startet und hält an",
+                "en": "starts and stops"
+              }
+            },
+            {
+              "value": "restart",
+              "label": {
+                "de": "startet von vorn",
+                "en": "starts over"
+              }
+            },
+            {
+              "value": "reset",
+              "label": {
+                "de": "setzt zurück",
+                "en": "resets"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alarm",
+      "name": {
+        "de": "Wecker",
+        "en": "Alarm clock"
+      },
+      "description": {
+        "de": "Klingelt zu einer festen Uhrzeit, wahlweise nur an bestimmten Tagen. Druck schaltet ihn scharf oder aus.",
+        "en": "Rings at a fixed time of day, optionally only on certain days. Press to arm or disarm."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "alarm",
+      "default_label": {
+        "de": "Wecker",
+        "en": "Alarm"
+      },
+      "states": [
+        {
+          "id": "scharf",
+          "name": {
+            "de": "Scharf",
+            "en": "Armed"
+          },
+          "default_icon": "alarm"
+        },
+        {
+          "id": "aus",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          },
+          "default_icon": "alarm-off"
+        },
+        {
+          "id": "klingelt",
+          "name": {
+            "de": "Klingelt",
+            "en": "Ringing"
+          },
+          "default_icon": "bell-ringing"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "time",
+          "type": "text",
+          "label": {
+            "de": "Uhrzeit",
+            "en": "Time of day"
+          },
+          "default": "07:00",
+          "placeholder": {
+            "de": "07:30",
+            "en": "07:30"
+          },
+          "help": {
+            "de": "24-Stunden-Format. Am Dial lässt sie sich in Fünf-Minuten-Schritten drehen.",
+            "en": "24-hour format. On a dial you can turn it in five-minute steps."
+          }
+        },
+        {
+          "key": "days",
+          "type": "select",
+          "label": {
+            "de": "Wann",
+            "en": "When"
+          },
+          "default": "daily",
+          "options": [
+            {
+              "value": "daily",
+              "label": {
+                "de": "Täglich",
+                "en": "Every day"
+              }
+            },
+            {
+              "value": "weekdays",
+              "label": {
+                "de": "Montag bis Freitag",
+                "en": "Monday to Friday"
+              }
+            },
+            {
+              "value": "weekend",
+              "label": {
+                "de": "Samstag und Sonntag",
+                "en": "Saturday and Sunday"
+              }
+            },
+            {
+              "value": "once",
+              "label": {
+                "de": "Einmalig",
+                "en": "Once"
+              }
+            }
+          ]
+        },
+        {
+          "key": "armed",
+          "type": "bool",
+          "label": {
+            "de": "Scharf",
+            "en": "Armed"
+          },
+          "default": true,
+          "help": {
+            "de": "Der Druck auf die Taste schaltet das um. Nach einem Neustart gilt wieder, was hier steht.",
+            "en": "Pressing the key toggles this. After a restart, whatever is set here applies again."
+          }
+        },
+        {
+          "key": "sound",
+          "type": "select",
+          "label": {
+            "de": "Ton",
+            "en": "Sound"
+          },
+          "default": "bell",
+          "options": [
+            {
+              "value": "bell",
+              "label": {
+                "de": "Mitgelieferte Klingel",
+                "en": "Bundled bell"
+              }
+            },
+            {
+              "value": "file",
+              "label": {
+                "de": "Eigene Datei",
+                "en": "Own file"
+              }
+            },
+            {
+              "value": "none",
+              "label": {
+                "de": "Kein Ton",
+                "en": "No sound"
+              }
+            }
+          ]
+        },
+        {
+          "key": "sound_file",
+          "type": "file",
+          "label": {
+            "de": "Audiodatei",
+            "en": "Audio file"
+          },
+          "depends_on": {
+            "sound": "file"
+          }
+        },
+        {
+          "key": "repeat",
+          "type": "bool",
+          "label": {
+            "de": "Ton wiederholen",
+            "en": "Repeat the sound"
+          },
+          "default": true,
+          "help": {
+            "de": "Klingelt so lange, bis die Taste gedrückt wird. Ausgeschaltet klingelt er einmal.",
+            "en": "Rings until the key is pressed. Turned off it rings once."
+          }
+        },
+        {
+          "key": "volume",
+          "type": "number",
+          "label": {
+            "de": "Lautstärke",
+            "en": "Volume"
+          },
+          "default": 80,
+          "min": 0,
+          "max": 100,
+          "step": 5
+        }
+      ]
+    }
+  ]
+}

@@ -23,6 +23,7 @@ import type {
   SessionCapabilities,
   Slot,
   StoreAccount,
+  StoreBewertung,
   StoreLoginStart,
   StoreMinePlugin,
   StorePlugin,
@@ -376,11 +377,20 @@ export const api = {
   plugins: () => request<PluginInfo[]>("/api/plugins"),
 
   /** Symbol eines Plugins — nur aufrufen, wenn `has_icon` gesetzt ist. */
-  pluginIconUrl: (pluginId: string) => `${API_BASE}/api/plugins/${pluginId}/icon`,
+  /*
+   * ``version`` steht nur in der Adresse, das Backend liest sie gar nicht.
+   * Sie hängt dort, damit eine neue Fassung auch eine neue Adresse bekommt:
+   * Ein Bild, das der Browser schon geladen hat, tauscht er von sich aus
+   * nicht mehr aus — auch nicht bei ``no-cache``, solange die Seite steht.
+   * Genau so blieb nach dem Wechsel auf das echte OBS-Logo tagelang das
+   * alte, selbst gezeichnete Symbol im Fenster stehen.
+   */
+  pluginIconUrl: (pluginId: string, version = "") =>
+    `${API_BASE}/api/plugins/${pluginId}/icon?v=${encodeURIComponent(version)}`,
 
   /** Bild aus der Detailansicht — angesprochen über die Position. */
-  pluginScreenshotUrl: (pluginId: string, index: number) =>
-    `${API_BASE}/api/plugins/${pluginId}/screenshot/${index}`,
+  pluginScreenshotUrl: (pluginId: string, index: number, version = "") =>
+    `${API_BASE}/api/plugins/${pluginId}/screenshot/${index}?v=${encodeURIComponent(version)}`,
 
   /**
    * Symbol eines Plugins, das nur im Store liegt.
@@ -501,6 +511,23 @@ export const api = {
     ),
 
   storeAccount: () => request<StoreAccount>("/api/store/account"),
+
+  /** Wie ein Plugin ankommt — samt eigener Stimme, wenn man angemeldet ist. */
+  storeBewertung: (slug: string) =>
+    request<StoreBewertung>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`),
+
+  /** Daumen hoch (`1`) oder runter (`-1`), auf Wunsch mit einem Satz dazu. */
+  storeBewerten: (slug: string, value: 1 | -1, comment = "") =>
+    request<StoreBewertung>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`, {
+      method: "PUT",
+      body: JSON.stringify({ value, comment }),
+    }),
+
+  /** Die eigene Stimme zurückziehen. */
+  storeBewertungLoeschen: (slug: string) =>
+    request<StoreBewertung>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`, {
+      method: "DELETE",
+    }),
 
   storeLogin: () => request<StoreLoginStart>("/api/store/login", { method: "POST" }),
 

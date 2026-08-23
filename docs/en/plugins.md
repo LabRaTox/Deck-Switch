@@ -86,7 +86,7 @@ safety net.
 
 ## Plugins to install afterwards
 
-These five do not ship with the app. Their sources are in
+These six do not ship with the app. Their sources are in
 [plugin-sources/](../../plugin-sources/) though.
 
 | Plugin | Actions |
@@ -96,6 +96,7 @@ These five do not ship with the app. Their sources are in
 | **Spotify** | playback, next/previous track, start playlist, shuffle, repeat, volume, multimedia dial |
 | **Weather** | current weather, multi-day forecast, air quality |
 | **Clock screensaver** | screen saver: the time as one digit per key |
+| **Timer** | countdown, stopwatch, alarm clock |
 
 ### Discord
 
@@ -154,6 +155,39 @@ minutes.
 
 Every assignment can get its own city through *different location*. That way
 home and holiday destination sit next to each other on the deck.
+
+### Timer
+
+Three actions, and every assignment runs its own clock — two countdowns side
+by side do not interfere.
+
+**Countdown** counts down from a set time. Type the duration as `5:00` or
+`1:30:00`; `90`, `5m` and `1h30m` work too. A press starts and pauses it; on
+a dial, turning sets the time, even while it runs — like adding a minute on a
+microwave. When the time is up it rings and the key blinks red until you
+press it.
+
+To reset, put the same action with *A press → resets* on the double press of
+the same key.
+
+**Stopwatch** counts up until you stop it. A green frame means it is
+running, an amber one that it stands still — a progress bar is not possible
+here, as there is nothing to count towards. Turning the dial resets it while
+it stands still.
+
+**Alarm clock** rings at a fixed time of day: every day, Monday to Friday, at
+the weekend, or once. A press arms or disarms it; on a dial the time moves in
+five-minute steps. Below the time it says how long is left.
+
+It keeps ringing until you press the key — an alarm that beeps once and then
+goes quiet wakes nobody. *Repeat the sound* turns that off. The countdown is
+the other way round: it rings once, but can be set to keep going.
+
+The sound ships with the plugin; you can pick your own file instead (WAV,
+FLAC, OGG, Opus or MP3) or turn it off.
+
+What a backend restart does not survive: running clocks and times turned on a
+dial. After that, whatever is in the form applies again.
 
 ## Installing plugins
 

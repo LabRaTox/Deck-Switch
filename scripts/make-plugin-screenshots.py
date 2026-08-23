@@ -18,6 +18,17 @@ anzeigt, hängt an Konten, Kanälen und Geräten, die dieses Skript nicht kennt
 
 Ein Schoner ist die Ausnahme, und zwar keine halbe: Er wird wirklich
 ausgeführt. Was auf ``schoner.png`` steht, hat das Plugin selbst gezeichnet.
+
+**Plugins, die ihre Kacheln selbst zeichnen, machen auch ihre Bilder selbst.**
+Das Tastenfeld hier oben baut jede Kachel aus Symbol und Namen — richtig für
+alle, die die gewöhnliche Darstellung nutzen, falsch für eines, das
+``render`` überschreibt. Der Timer zeigt eine Uhrzeit, einen Balken und einen
+farbigen Rahmen; ein Bild mit Sanduhr und dem Wort „Countdown" behauptete
+etwas, das auf keinem Deck steht. Liegt im Plugin-Ordner ein
+``screenshots.py`` mit einer Funktion ``erzeuge(ziel, werkzeug)``, wird die
+gerufen und ihr Ergebnis genommen — das Plugin führt sich mit seinem eigenen
+Zeichencode vor. ``werkzeug`` ist dieses Modul, damit Maße und Blattlayout
+dieselben bleiben.
 """
 
 import json
@@ -400,6 +411,27 @@ def _schoner_blatt(ordner: Path, manifest: dict) -> Image.Image | None:
     return blatt
 
 
+def _eigene_bilder(ordner: Path, ziel: Path) -> list[str] | None:
+    """Lässt das Plugin seine Bilder selbst machen, wenn es das anbietet."""
+    datei = ordner / "screenshots.py"
+    if not datei.is_file():
+        return None
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(f"bilder_{ordner.name}", datei)
+    if spec is None or spec.loader is None:
+        return None
+    modul = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = modul
+    spec.loader.exec_module(modul)
+    erzeuge = getattr(modul, "erzeuge", None)
+    if erzeuge is None:
+        print(f"  ! {ordner.name}: screenshots.py ohne erzeuge(), übersprungen")
+        return None
+    return list(erzeuge(ziel, sys.modules[__name__]))
+
+
 def baue(ordner: Path) -> bool:
     datei = ordner / "manifest.json"
     if not datei.is_file():
@@ -411,6 +443,15 @@ def baue(ordner: Path) -> bool:
     ziel.mkdir(exist_ok=True)
 
     bilder: list[str] = []
+
+    eigene = _eigene_bilder(ordner, ziel)
+    if eigene is not None:
+        manifest["screenshots"] = eigene[:3]
+        datei.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                         encoding="utf-8")
+        print(f"  ✔ {ordner.name:14} {len(eigene)} Bild(er) vom Plugin selbst: "
+              f"{', '.join(eigene)}")
+        return True
 
     if manifest.get("type") in ("screensaver", "wallpaper"):
         try:

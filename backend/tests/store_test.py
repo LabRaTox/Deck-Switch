@@ -278,6 +278,59 @@ def main() -> None:
             check("die Prüfsumme stimmt mit der des Archivs überein",
                   ergebnis["sha256"] == hashlib.sha256(archiv).hexdigest())
 
+            print("\nBewerten")
+            # Angemeldet ist gerade der Moderator; der Autor kommt gleich
+            # als zweite Stimme dazu.
+            leer = store.bewertung(slug)
+            check("am Anfang hat niemand abgestimmt",
+                  (leer["up"], leer["down"], leer["mine"]) == (0, 0, None),
+                  json.dumps(leer))
+
+            hoch = store.bewerte(slug, 1, "Läuft bei mir seit Tagen.")
+            check("ein Daumen hoch zählt", hoch["up"] == 1, json.dumps(hoch))
+            check("und gilt als die eigene Stimme", hoch["mine"] == 1)
+            check("der Kommentar steht dabei",
+                  hoch["comment"] == "Läuft bei mir seit Tagen.", str(hoch["comment"]))
+
+            store.vergiss()
+            im_katalog = store.katalog(q=slug)["plugins"][0]["rating"]
+            check("der Katalog zeigt dieselbe Zahl", im_katalog["up"] == 1,
+                  json.dumps(im_katalog))
+
+            umentschieden = store.bewerte(slug, -1)
+            check("eine zweite Stimme ersetzt die erste, statt sich zu addieren",
+                  (umentschieden["up"], umentschieden["down"]) == (0, 1),
+                  json.dumps(umentschieden))
+
+            zurueckgezogen = store.bewertung_zuruecknehmen(slug)
+            check("zurückziehen räumt sie weg",
+                  (zurueckgezogen["up"], zurueckgezogen["down"], zurueckgezogen["mine"])
+                  == (0, 0, None), json.dumps(zurueckgezogen))
+            check("und ein zweites Mal ist kein Fehler",
+                  store.bewertung_zuruecknehmen(slug)["mine"] is None)
+
+            store.bewerte(slug, 1, "Von der Moderation.")
+            store.schreib_token(token)
+            zweite = store.bewerte(slug, 1, "Und vom Autor.")
+            check("zwei Leute sind zwei Stimmen", zweite["up"] == 2, json.dumps(zweite))
+            check("jeder sieht nur die eigene als seine", zweite["mine"] == 1)
+            fremde = [k for k in zweite["comments"] if k["author"] != autor]
+            check("der Kommentar des anderen ist zu lesen",
+                  any(k["comment"] == "Von der Moderation." for k in fremde),
+                  json.dumps(zweite["comments"]))
+
+            check("etwas anderes als 1 oder -1 nimmt er nicht",
+                  _wirft(lambda: store.bewerte(slug, 5), store.StoreError))
+
+            store.schreib_token("")
+            check("ohne Anmeldung lässt sich lesen",
+                  store.bewertung(slug)["up"] == 2)
+            check("aber nicht abstimmen",
+                  _wirft(lambda: store.bewerte(slug, 1), store.StoreError))
+            check("und die eigene Stimme ist dann keine",
+                  store.bewertung(slug)["mine"] is None)
+            store.schreib_token(mod_token)
+
             print("\nWenn unterwegs etwas ausgetauscht wird")
             # Die Datei im Store ersetzen, die Prüfsumme im Katalog stehen
             # lassen: genau der Fall, gegen den die Prüfung gedacht ist.

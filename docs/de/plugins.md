@@ -89,7 +89,7 @@ nur das Sicherheitsnetz.
 
 ## Nachinstallierbare Plugins
 
-Diese fünf gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
+Diese sechs gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
 [plugin-sources/](../../plugin-sources/).
 
 | Plugin | Aktionen |
@@ -99,6 +99,7 @@ Diese fünf gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
 | **Spotify** | Wiedergabe, nächster/vorheriger Titel, Playlist starten, Shuffle, Wiederholung, Lautstärke, Multimedia-Dial |
 | **Wetter** | Aktuelles Wetter, Mehrtagesvorhersage, Luftqualität |
 | **Uhr-Schoner** | Bildschirmschoner: Uhrzeit als je eine Ziffer pro Taste |
+| **Timer** | Countdown, Stoppuhr, Wecker |
 
 ### Discord
 
@@ -162,6 +163,40 @@ der Trefferliste. Die Daten frischt das Plugin alle zehn Minuten auf.
 
 Jede Belegung kann über *Abweichender Ort* eine eigene Stadt bekommen. So
 liegen Heimatort und Urlaubsziel nebeneinander auf dem Deck.
+
+### Timer
+
+Drei Aktionen, und jede Belegung führt ihre eigene Uhr — zwei Countdowns
+nebeneinander stören sich nicht.
+
+**Countdown** zählt eine eingestellte Zeit herunter. Die Dauer trägst du als
+`5:00` oder `1:30:00` ein; `90`, `5m` und `1h30m` versteht er auch. Ein Druck
+startet und pausiert, am Dial stellt Drehen die Zeit — auch während er läuft,
+wie an einer Mikrowelle, an der man nachlegt. Am Ende klingelt es und die
+Kachel blinkt rot, bis du sie mit einem Druck abstellst.
+
+Zum Zurücksetzen legst du dieselbe Aktion mit *Ein Druck → setzt zurück* auf
+den Doppeldruck derselben Taste.
+
+**Stoppuhr** zählt hoch, bis du sie anhältst. Ein grüner Rahmen heißt: sie
+läuft, ein bernsteinfarbener: sie steht. Einen Balken kann sie nicht haben,
+weil sie kein Ziel hat. Drehen am Dial setzt sie zurück, solange sie steht.
+
+**Wecker** klingelt zu einer festen Uhrzeit, wahlweise täglich, montags bis
+freitags, am Wochenende oder einmalig. Ein Druck schaltet ihn scharf oder
+aus, am Dial geht die Weckzeit in Fünf-Minuten-Schritten. Unter der Uhrzeit
+steht, wie lange es noch dauert.
+
+Er klingelt in Schleife, bis du auf die Taste drückst — ein Wecker, der einmal
+piept und dann schweigt, weckt niemanden. Über *Ton wiederholen* lässt sich
+das abstellen. Beim Countdown ist es andersherum: Der klingelt einmal, kann
+aber auf Dauerklingeln gestellt werden.
+
+Der Klang ist mitgeliefert; du kannst stattdessen eine eigene Datei wählen
+(WAV, FLAC, OGG, Opus oder MP3) oder den Ton ganz abschalten.
+
+Was ein Neustart des Backends nicht überlebt: laufende Uhren und die am Dial
+gedrehten Zeiten. Danach gilt wieder, was im Formular steht.
 
 ## Nachinstallieren
 

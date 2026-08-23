@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { localized } from "../i18n";
-import type { PluginInfo } from "../types";
+import type { PluginInfo, StorePlugin } from "../types";
+import { Bewertung } from "./Bewertung";
 import { UiIcon } from "./UiIcon";
 
 /**
@@ -20,9 +21,17 @@ import { UiIcon } from "./UiIcon";
  */
 export function PluginDetail({
   plugin,
+  storeEintrag,
   onBack,
 }: {
   plugin: PluginInfo;
+  /**
+   * Derselbe Plugin im Katalog, sofern es ihn dort gibt. Damit stehen auch
+   * bei einem installierten Plugin die Downloadzahl und die Bewertung da —
+   * die verschwanden bisher in dem Moment, in dem man es installiert hat,
+   * also genau dann, wenn man eine Meinung dazu bekommt.
+   */
+  storeEintrag?: StorePlugin | null;
   onBack: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -45,6 +54,10 @@ export function PluginDetail({
     { schluessel: "version", wert: manifest.version },
     { schluessel: "author", wert: manifest.author || null },
     { schluessel: "license", wert: manifest.license || null },
+    {
+      schluessel: "downloads",
+      wert: storeEintrag ? String(storeEintrag.latest.downloads) : null,
+    },
     {
       schluessel: "actions",
       // Bei einem Schoner stünde hier dauerhaft „0 Aktionen".
@@ -73,7 +86,11 @@ export function PluginDetail({
           // mit, und das steht für sich. Ein farbiges Quadrat darunter machte
           // aus dem OBS-Zeichen eine rote Kachel und schluckte die weißen
           // Flächen im Spotify-Zeichen.
-          <img className="detail-icon" src={api.pluginIconUrl(plugin.id)} alt="" />
+          <img
+            className="detail-icon"
+            src={api.pluginIconUrl(plugin.id, manifest.version)}
+            alt=""
+          />
         ) : (
           <span className="detail-icon platzhalter" style={{ background: manifest.accent }}>
             {localized(manifest.name, i18n.language).slice(0, 1)}
@@ -98,7 +115,7 @@ export function PluginDetail({
             <div className="detail-bilder">
               <img
                 className="detail-bild-gross"
-                src={api.pluginScreenshotUrl(plugin.id, grosses)}
+                src={api.pluginScreenshotUrl(plugin.id, grosses, manifest.version)}
                 alt=""
               />
               {/* Die Reihe darunter nur, wenn es etwas zu wechseln gibt. */}
@@ -111,7 +128,7 @@ export function PluginDetail({
                       className={i === grosses ? "detail-bild-klein aktiv" : "detail-bild-klein"}
                       onClick={() => setGrosses(i)}
                     >
-                      <img src={api.pluginScreenshotUrl(plugin.id, i)} alt="" />
+                      <img src={api.pluginScreenshotUrl(plugin.id, i, manifest.version)} alt="" />
                     </button>
                   ))}
                 </div>
@@ -157,6 +174,7 @@ export function PluginDetail({
               </div>
             )}
           </dl>
+          {storeEintrag && <Bewertung slug={storeEintrag.slug} />}
         </aside>
       </div>
     </div>

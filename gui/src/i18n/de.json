@@ -561,7 +561,16 @@
     "dropHere": "Archiv hierher ziehen",
     "dropOrClick": "oder klicken, um eine Datei zu wählen",
     "submitFormats": "ZIP, TAR oder tar.gz — angenommen wird, was sich zum Prüfen öffnen lässt. Ausgeliefert wird immer ein ZIP, denn nur das kann die App auspacken.",
-    "versions": "Fassungen"
+    "versions": "Fassungen",
+    "rating": "Bewertung",
+    "ratingLoading": "Bewertung wird geladen …",
+    "ratingUpHint": "Empfehlen",
+    "ratingDownHint": "Nicht empfehlen",
+    "ratingNeedsLogin": "Zum Bewerten im Store anmelden",
+    "ratingAddComment": "Etwas dazu schreiben",
+    "ratingEditComment": "Text ändern",
+    "ratingCommentPlaceholder": "Was ist dir aufgefallen? Höchstens 500 Zeichen.",
+    "ratingYours": "deine Bewertung"
   },
   "profiles": {
     "title": "Profil",

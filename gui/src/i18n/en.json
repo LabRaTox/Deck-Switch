@@ -561,7 +561,16 @@
     "dropHere": "Drop an archive here",
     "dropOrClick": "or click to choose a file",
     "submitFormats": "ZIP, TAR or tar.gz — anything that can be opened for review is accepted. What ships is always a ZIP, because that is what the app can unpack.",
-    "versions": "Versions"
+    "versions": "Versions",
+    "rating": "Rating",
+    "ratingLoading": "Loading the rating …",
+    "ratingUpHint": "Recommend",
+    "ratingDownHint": "Do not recommend",
+    "ratingNeedsLogin": "Sign in to the store to rate",
+    "ratingAddComment": "Write something about it",
+    "ratingEditComment": "Edit your text",
+    "ratingCommentPlaceholder": "What did you notice? 500 characters at most.",
+    "ratingYours": "your rating"
   },
   "profiles": {
     "title": "Profile",
