@@ -86,7 +86,7 @@ safety net.
 
 ## Plugins to install afterwards
 
-These six do not ship with the app. Their sources are in
+These eight do not ship with the app. Their sources are in
 [plugin-sources/](../../plugin-sources/) though.
 
 | Plugin | Actions |
@@ -97,6 +97,8 @@ These six do not ship with the app. Their sources are in
 | **Weather** | current weather, multi-day forecast, air quality |
 | **Clock screensaver** | screen saver: the time as one digit per key |
 | **Timer** | countdown, stopwatch, alarm clock |
+| **Twitch** | title, category, commercial, marker, clip, raid, chat, chat mode, clear chat, shoutout, poll, prediction, stream status, followers |
+| **Govee** | on/off, brightness, colour, colour temperature, scene, every device at once |
 
 ### Discord
 
@@ -193,6 +195,96 @@ FLAC, OGG, Opus or MP3) or turn it off.
 
 What a backend restart does not survive: running clocks and times turned on a
 dial. After that, whatever is in the form applies again.
+
+### Twitch
+
+Fourteen actions for the things you do while streaming, without switching
+away from the game.
+
+**Signing in.** There is nothing to set up. Twitch wants a client ID with
+every call; it belongs to a registered app and ships with the plugin. No
+secret is involved — anything that sits on other people's machines would not
+be one. Instead the device code flow: under *plugins → Twitch → plugin
+settings* press *connect to Twitch*, type the code shown at
+[twitch.tv/activate](https://www.twitch.tv/activate), done. The token then
+lives in `~/.config/deckswitch/twitch-token.json`, readable only by you.
+
+**Running the stream.** *Set title* puts a prepared title on a key,
+optionally with a category — several keys, several titles. *Set category*
+comes with a search list. Plus *commercial* (30 seconds to 3 minutes), *set
+marker* for a spot you can find again in the recording, *create clip*
+(optionally opening the editor afterwards) and *raid*, where a second press
+cancels the countdown.
+
+**Chat and moderation.** A prepared *chat message*, and *chat mode* for slow,
+subscribers-only, followers-only, emotes-only and unique messages — the key
+shows what is on and a press toggles it. Plus *clear chat* and *shoutout*.
+
+**Polls and predictions.** Question and answers live in the assignment,
+separated by a vertical bar. If a poll is already running, a press ends it.
+For a prediction the first press locks betting, the next resolves it to the
+outcome you set.
+
+**Displays.** *Stream status* shows viewers, uptime or followers — you choose
+what is large; a coloured strip at the bottom says live or not. *Followers*
+shows just the number. Both work on a dial as well.
+
+**What Twitch cannot do: start the stream.** The Helix API simply has no
+call for it — its stream endpoints are limited to fetching the stream key,
+looking up streams, setting markers and managing the schedule. That follows
+from how it works: Twitch only *receives*; the stream is sent by your own
+software. So you go live with the *stream* action from the OBS plugin. If
+you want both on one key — set the title and go live — build a multi action:
+first step *Twitch → set title*, second step *OBS → stream*.
+
+What cannot be shown is not claimed: without a connection it says “not
+connected” and no number. Figures are refreshed every 20 seconds — Twitch
+limits how often you may ask, and eight keys should not cause eight
+requests.
+
+### Govee
+
+**Setting up.** Govee gives everyone their own key: request it in the Govee
+Home app under *profile → settings → Apply for API Key*, it arrives by
+email. Then enter it under *plugins → Govee → plugin settings*.
+
+**Two interfaces, one switch.** Govee runs two APIs side by side, and which
+one works with which device cannot be told from the outside. On an H615C the
+new one reported brightness as 154 and rejected that very value when setting
+it as “out of range”; it considered the device offline while the old one
+switched it fine; and it acknowledged colour commands with “success” without
+anything changing. So this is a choice rather than a guess:
+
+* **Old** (default) — `developer-api.govee.com`. Proven, but no scenes.
+* **New** — `openapi.api.govee.com`. Knows scenes.
+* **Both** — every command goes down both paths. For devices where the new
+  one acknowledges without acting. After that
+the dropdowns fill themselves — which devices exist and what they can do
+comes from Govee, nothing is guessed here.
+
+**On/off** toggles a device, or only switches on or only off if a key should
+always do the same thing. The key carries a coloured border: yellow when on,
+grey when off, red when the device does not answer. If a colour is lit, the
+border has it.
+
+**Brightness** sets a fixed value; on a dial you turn it in steps you choose.
+**Colour** and **colour temperature** work the same way — the key shows the
+colour before you press, and for white roughly the light's tint from warm to
+daylight.
+
+**Scene** calls up whatever scenes the device itself offers. The list comes
+from the device; a model without scenes shows an empty one.
+
+**All devices** is the key for the way out. Toggling means: if any light is
+on, everything goes off. Toggling each device separately would leave a
+half-lit room, and after that nobody knows what the next press will do.
+
+**Govee counts requests.** Thirty state queries per minute and device — eight
+keys checking every second would be blocked at once. So queries are bundled,
+every 25 seconds, and only for devices currently on a visible key. What you
+switch yourself shows on the key immediately, without waiting for the next
+query. If Govee does throttle, it says so plainly instead of “unknown
+error”.
 
 ## Installing plugins
 

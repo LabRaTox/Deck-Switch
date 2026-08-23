@@ -275,7 +275,14 @@
       "minApp": "Braucht App-Version"
     },
     "checksumAnnounced": "Angekündigte Prüfsumme: {{hash}}… — sie wird vor dem Auspacken geprüft.",
-    "checksumMissing": "Ohne Prüfsumme: Es wird installiert, was gerade unter der Adresse liegt."
+    "checksumMissing": "Ohne Prüfsumme: Es wird installiert, was gerade unter der Adresse liegt.",
+    "twitchConnect": "Mit Twitch verbinden",
+    "twitchConnecting": "Verbinde …",
+    "twitchConnected": "Verbunden als {{user}}",
+    "twitchForget": "Abmelden",
+    "twitchEnterCode": "Diesen Code bei Twitch eingeben:",
+    "twitchOpenPage": "twitch.tv/activate öffnen",
+    "twitchWaiting": "Warte auf die Bestätigung bei Twitch …"
   },
   "settings": {
     "title": "Einstellungen",
@@ -531,7 +538,7 @@
     "pendingBadge": "Im Store wartet etwas auf Prüfung",
     "tag": "Store",
     "source": "Quelltext",
-    "update": "Auf {{version}}",
+    "update": "{{version}}",
     "newVersion": "Im Store steht Fassung {{version}}",
     "submitTitle": "Plugin einreichen",
     "submitNeedsLogin": "Zum Einreichen musst du im Store angemeldet sein.",
@@ -570,7 +577,14 @@
     "ratingAddComment": "Etwas dazu schreiben",
     "ratingEditComment": "Text ändern",
     "ratingCommentPlaceholder": "Was ist dir aufgefallen? Höchstens 500 Zeichen.",
-    "ratingYours": "deine Bewertung"
+    "ratingYours": "deine Bewertung",
+    "updatesAvailable": "{{count}} Aktualisierung verfügbar",
+    "updatesAvailable_other": "{{count}} Aktualisierungen verfügbar",
+    "updateAll": "Alle aktualisieren",
+    "updatedAll": "{{count}} Plugin aktualisiert",
+    "updatedAll_other": "{{count}} Plugins aktualisiert",
+    "updateNeedsNewerApp": "Manches braucht eine neuere Fassung von DECK//SWITCH.",
+    "updateNeedsApp": "Braucht DECK//SWITCH {{version}} oder neuer"
   },
   "profiles": {
     "title": "Profil",

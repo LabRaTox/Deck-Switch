@@ -509,6 +509,20 @@ export interface StorePlugin {
   versions?: StoreVersion[];
 }
 
+/** Ein Plugin, für das im Store eine neuere Fassung liegt. */
+export interface StoreUpdate {
+  slug: string;
+  name: string;
+  installed: string;
+  available: string;
+  changelog: string | null;
+  size: number | null;
+  released_at: string | null;
+  min_app_version: string | null;
+  /** `false`, wenn die neue Fassung eine neuere App verlangt als diese. */
+  usable: boolean;
+}
+
 /** Eine Stimme mit Kommentar, so wie sie andere abgegeben haben. */
 export interface StoreKommentar {
   value: number;

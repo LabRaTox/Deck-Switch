@@ -39,13 +39,21 @@ def load_plugin_module():
     sys.modules.setdefault("deckswitch.plugins", types.ModuleType("deckswitch.plugins"))
     sys.modules["deckswitch.plugins.base"] = base
 
-    stub = types.ModuleType("mpris")
+    # Das Plugin ist ein Paket und importiert ``from .mpris import …`` — die
+    # Attrappe muss deshalb unter dem Paketnamen stehen, nicht unter dem
+    # nackten Modulnamen. Ohne D-Bus soll hier nichts nach draußen greifen.
+    paket = "spotify_plugin"
+    spec = importlib.util.spec_from_file_location(
+        paket, SPOTIFY / "plugin.py", submodule_search_locations=[str(SPOTIFY)]
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[paket] = module
+
+    stub = types.ModuleType(f"{paket}.mpris")
     stub.LOOP_CYCLE = []
     stub.MprisPlayer = object
-    sys.modules["mpris"] = stub
+    sys.modules[f"{paket}.mpris"] = stub
 
-    spec = importlib.util.spec_from_file_location("spotify_plugin", SPOTIFY / "plugin.py")
-    module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 

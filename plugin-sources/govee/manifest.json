@@ -1,0 +1,402 @@
+{
+  "id": "govee",
+  "name": {
+    "de": "Govee",
+    "en": "Govee"
+  },
+  "version": "1.0.0",
+  "type": "action",
+  "author": "LabRaTox",
+  "category": "lighting",
+  "accent": "#7c3aed",
+  "description": {
+    "de": "Govee-Lampen schalten, dimmen, einfärben und Szenen abrufen — über Govees Cloud-API.",
+    "en": "Switch, dim and colour your Govee lights and call up scenes — through Govee's cloud API."
+  },
+  "changelog": {
+    "de": "Erste Fassung: An und aus, Helligkeit am Dial, Farbe, Farbtemperatur, Szenen und eine Taste für alle Geräte auf einmal.",
+    "en": "First release: on and off, brightness on a dial, colour, colour temperature, scenes, and one key for every device at once."
+  },
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/Deck-Switch",
+  "icon": "icon.png",
+  "entry": "plugin.py",
+  "class": "GoveePlugin",
+  "config_schema": [
+    {
+      "key": "api_key",
+      "type": "password",
+      "label": {
+        "de": "API-Schlüssel",
+        "en": "API key"
+      },
+      "help": {
+        "de": "Aus der Govee-Home-App: Profil → Einstellungen → „Apply for API Key“. Er kommt per Mail.",
+        "en": "From the Govee Home app: profile → settings → “Apply for API Key”. It arrives by email."
+      }
+    },
+    {
+      "key": "api",
+      "type": "select",
+      "label": {
+        "de": "Schnittstelle",
+        "en": "Interface"
+      },
+      "default": "alt",
+      "options": [
+        {
+          "value": "alt",
+          "label": {
+            "de": "Alte (developer-api)",
+            "en": "Old (developer-api)"
+          }
+        },
+        {
+          "value": "neu",
+          "label": {
+            "de": "Neue (openapi)",
+            "en": "New (openapi)"
+          }
+        },
+        {
+          "value": "beide",
+          "label": {
+            "de": "Beide — neue zuerst",
+            "en": "Both — new one first"
+          }
+        }
+      ],
+      "help": {
+        "de": "Govee betreibt zwei APIs. Die alte ist erprobt, kann aber keine Szenen. Die neue kennt Szenen, führt bei manchen Geräten aber Befehle nicht aus. „Beide“ schickt jeden Befehl über beide Wege.",
+        "en": "Govee runs two APIs. The old one is proven but has no scenes. The new one knows scenes but silently ignores commands on some devices. “Both” sends every command down both paths."
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "power",
+      "name": {
+        "de": "An/Aus",
+        "en": "On/off"
+      },
+      "description": {
+        "de": "Schaltet ein Gerät um. Die Taste zeigt, ob es an ist.",
+        "en": "Toggles a device. The key shows whether it is on."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "bulb",
+      "default_label": {
+        "de": "Licht",
+        "en": "Light"
+      },
+      "states": [
+        {
+          "id": "aus",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          },
+          "default_icon": "bulb-off"
+        },
+        {
+          "id": "an",
+          "name": {
+            "de": "An",
+            "en": "On"
+          },
+          "default_icon": "bulb"
+        },
+        {
+          "id": "weg",
+          "name": {
+            "de": "Nicht erreichbar",
+            "en": "Unreachable"
+          },
+          "default_icon": "plug-off"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "device",
+          "type": "select",
+          "label": {
+            "de": "Gerät",
+            "en": "Device"
+          },
+          "options_source": "geraete"
+        },
+        {
+          "key": "mode",
+          "type": "select",
+          "label": {
+            "de": "Was der Druck tut",
+            "en": "What a press does"
+          },
+          "default": "toggle",
+          "options": [
+            {
+              "value": "toggle",
+              "label": {
+                "de": "Umschalten",
+                "en": "Toggle"
+              }
+            },
+            {
+              "value": "on",
+              "label": {
+                "de": "Nur einschalten",
+                "en": "Switch on only"
+              }
+            },
+            {
+              "value": "off",
+              "label": {
+                "de": "Nur ausschalten",
+                "en": "Switch off only"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "brightness",
+      "name": {
+        "de": "Helligkeit",
+        "en": "Brightness"
+      },
+      "description": {
+        "de": "Setzt eine feste Helligkeit. Am Dial lässt sie sich drehen, der Druck schaltet aus und wieder an.",
+        "en": "Sets a fixed brightness. On a dial you can turn it; a press switches off and on again."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "sun",
+      "default_label": {
+        "de": "Helligkeit",
+        "en": "Brightness"
+      },
+      "settings_schema": [
+        {
+          "key": "device",
+          "type": "select",
+          "label": {
+            "de": "Gerät",
+            "en": "Device"
+          },
+          "options_source": "geraete"
+        },
+        {
+          "key": "value",
+          "type": "number",
+          "label": {
+            "de": "Helligkeit in Prozent",
+            "en": "Brightness in percent"
+          },
+          "default": 60,
+          "min": 1,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "step",
+          "type": "number",
+          "label": {
+            "de": "Schritt am Dial",
+            "en": "Dial step"
+          },
+          "default": 5,
+          "min": 1,
+          "max": 50
+        }
+      ]
+    },
+    {
+      "id": "color",
+      "name": {
+        "de": "Farbe",
+        "en": "Colour"
+      },
+      "description": {
+        "de": "Stellt eine Farbe ein. Die Taste trägt sie als Rand, damit man sie sieht, bevor man drückt.",
+        "en": "Sets a colour. The key carries it as a border, so you see it before pressing."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "palette",
+      "default_label": {
+        "de": "Farbe",
+        "en": "Colour"
+      },
+      "settings_schema": [
+        {
+          "key": "device",
+          "type": "select",
+          "label": {
+            "de": "Gerät",
+            "en": "Device"
+          },
+          "options_source": "geraete"
+        },
+        {
+          "key": "color",
+          "type": "color",
+          "label": {
+            "de": "Farbe",
+            "en": "Colour"
+          },
+          "default": "#ff8800"
+        }
+      ]
+    },
+    {
+      "id": "temperature",
+      "name": {
+        "de": "Farbtemperatur",
+        "en": "Colour temperature"
+      },
+      "description": {
+        "de": "Von warmweiß bis tageslichtweiß. Am Dial in Hundert-Kelvin-Schritten.",
+        "en": "From warm white to daylight. On a dial in steps of a hundred kelvin."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "temperature",
+      "default_label": {
+        "de": "Weiß",
+        "en": "White"
+      },
+      "settings_schema": [
+        {
+          "key": "device",
+          "type": "select",
+          "label": {
+            "de": "Gerät",
+            "en": "Device"
+          },
+          "options_source": "geraete"
+        },
+        {
+          "key": "kelvin",
+          "type": "number",
+          "label": {
+            "de": "Kelvin",
+            "en": "Kelvin"
+          },
+          "default": 4000,
+          "min": 2000,
+          "max": 9000,
+          "step": 100
+        }
+      ]
+    },
+    {
+      "id": "scene",
+      "name": {
+        "de": "Szene",
+        "en": "Scene"
+      },
+      "description": {
+        "de": "Ruft eine Szene des Geräts ab. Welche es gibt, sagt das Gerät selbst.",
+        "en": "Calls up one of the device's scenes. Which ones exist is up to the device."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "sparkles",
+      "default_label": {
+        "de": "Szene",
+        "en": "Scene"
+      },
+      "settings_schema": [
+        {
+          "key": "device",
+          "type": "select",
+          "label": {
+            "de": "Gerät",
+            "en": "Device"
+          },
+          "options_source": "geraete"
+        },
+        {
+          "key": "scene",
+          "type": "select",
+          "label": {
+            "de": "Szene",
+            "en": "Scene"
+          },
+          "options_source": "szenen",
+          "options_depend_on": [
+            "device"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "all",
+      "name": {
+        "de": "Alle Geräte",
+        "en": "All devices"
+      },
+      "description": {
+        "de": "Schaltet jedes Gerät auf einmal — für den Weg zur Tür.",
+        "en": "Switches every device at once — for the way to the door."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "bulb-off",
+      "default_label": {
+        "de": "Alles aus",
+        "en": "All off"
+      },
+      "settings_schema": [
+        {
+          "key": "mode",
+          "type": "select",
+          "label": {
+            "de": "Was der Druck tut",
+            "en": "What a press does"
+          },
+          "default": "off",
+          "options": [
+            {
+              "value": "off",
+              "label": {
+                "de": "Alles ausschalten",
+                "en": "Switch everything off"
+              }
+            },
+            {
+              "value": "on",
+              "label": {
+                "de": "Alles einschalten",
+                "en": "Switch everything on"
+              }
+            },
+            {
+              "value": "toggle",
+              "label": {
+                "de": "Umschalten",
+                "en": "Toggle"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    "screenshots/aktionen.png",
+    "screenshots/zustaende.png",
+    "screenshots/dials.png"
+  ]
+}

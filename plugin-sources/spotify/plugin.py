@@ -27,7 +27,7 @@ from PIL import Image
 
 from deckswitch.plugins.base import ActionPlugin
 
-from mpris import LOOP_CYCLE, MprisPlayer
+from .mpris import LOOP_CYCLE, MprisPlayer
 
 ACCENT = "#1db954"
 RECONNECT_INTERVAL_S = 5.0

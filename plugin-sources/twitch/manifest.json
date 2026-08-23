@@ -1,0 +1,856 @@
+{
+  "id": "twitch",
+  "name": {
+    "de": "Twitch",
+    "en": "Twitch"
+  },
+  "version": "1.0.0",
+  "type": "action",
+  "author": "LabRaTox",
+  "category": "streaming",
+  "accent": "#9146ff",
+  "description": {
+    "de": "Stream steuern, Chat moderieren, Umfragen starten und sehen, wie viele zuschauen — über Twitchs Helix-API.",
+    "en": "Run your stream, moderate chat, start polls and see who is watching — through Twitch's Helix API."
+  },
+  "changelog": {
+    "de": "Erste Fassung: Titel und Kategorie, Werbung, Marker, Clip, Raid, Chat und Moderation, Umfragen und Vorhersagen, dazu Anzeigen für Zuschauer, Follower und Laufzeit.",
+    "en": "First release: title and category, commercials, markers, clips, raids, chat and moderation, polls and predictions, plus displays for viewers, followers and uptime."
+  },
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/Deck-Switch",
+  "icon_symbol": "brand-twitch",
+  "icon": "icon.png",
+  "entry": "plugin.py",
+  "class": "TwitchPlugin",
+  "config_schema": [],
+  "actions": [
+    {
+      "id": "title",
+      "name": {
+        "de": "Titel setzen",
+        "en": "Set title"
+      },
+      "description": {
+        "de": "Setzt den Streamtitel auf einen vorbereiteten Text. Auf mehreren Tasten liegen mehrere Titel bereit.",
+        "en": "Sets the stream title to a prepared text. Several keys hold several titles."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "edit",
+      "default_label": {
+        "de": "Titel",
+        "en": "Title"
+      },
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          }
+        },
+        {
+          "id": "aktiv",
+          "name": {
+            "de": "Läuft gerade",
+            "en": "Currently set"
+          },
+          "default_icon": "check"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": {
+            "de": "Titel",
+            "en": "Title"
+          },
+          "placeholder": {
+            "de": "Was heute läuft",
+            "en": "What's on today"
+          }
+        },
+        {
+          "key": "category",
+          "type": "text",
+          "label": {
+            "de": "Kategorie dazu",
+            "en": "Category as well"
+          },
+          "placeholder": {
+            "de": "leer = unverändert",
+            "en": "empty = leave as is"
+          },
+          "help": {
+            "de": "Name des Spiels oder der Kategorie. Leer lässt die aktuelle stehen.",
+            "en": "Name of the game or category. Empty keeps the current one."
+          }
+        }
+      ]
+    },
+    {
+      "id": "category",
+      "name": {
+        "de": "Kategorie setzen",
+        "en": "Set category"
+      },
+      "description": {
+        "de": "Wechselt Spiel oder Kategorie des Kanals.",
+        "en": "Switches the channel's game or category."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "device-gamepad-2",
+      "default_label": {
+        "de": "Kategorie",
+        "en": "Category"
+      },
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          }
+        },
+        {
+          "id": "aktiv",
+          "name": {
+            "de": "Läuft gerade",
+            "en": "Currently set"
+          },
+          "default_icon": "check"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "search",
+          "type": "text",
+          "label": {
+            "de": "Kategorie suchen",
+            "en": "Search category"
+          },
+          "placeholder": {
+            "de": "Name eintippen",
+            "en": "Type a name"
+          }
+        },
+        {
+          "key": "category",
+          "type": "select",
+          "label": {
+            "de": "Kategorie",
+            "en": "Category"
+          },
+          "options_source": "kategorien",
+          "options_depend_on": [
+            "search"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commercial",
+      "name": {
+        "de": "Werbung",
+        "en": "Commercial"
+      },
+      "description": {
+        "de": "Startet einen Werbeblock. Twitch lässt das nur im laufenden Stream zu.",
+        "en": "Starts a commercial break. Twitch only allows this while live."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "movie",
+      "default_label": {
+        "de": "Werbung",
+        "en": "Ad"
+      },
+      "settings_schema": [
+        {
+          "key": "length",
+          "type": "select",
+          "label": {
+            "de": "Dauer",
+            "en": "Length"
+          },
+          "default": "60",
+          "options": [
+            {
+              "value": "30",
+              "label": {
+                "de": "30 Sekunden",
+                "en": "30 seconds"
+              }
+            },
+            {
+              "value": "60",
+              "label": {
+                "de": "60 Sekunden",
+                "en": "60 seconds"
+              }
+            },
+            {
+              "value": "90",
+              "label": {
+                "de": "90 Sekunden",
+                "en": "90 seconds"
+              }
+            },
+            {
+              "value": "120",
+              "label": {
+                "de": "2 Minuten",
+                "en": "2 minutes"
+              }
+            },
+            {
+              "value": "180",
+              "label": {
+                "de": "3 Minuten",
+                "en": "3 minutes"
+              }
+            }
+          ]
+        },
+        {
+          "key": "confirm",
+          "type": "bool",
+          "label": {
+            "de": "Rückfrage",
+            "en": "Ask first"
+          },
+          "default": true,
+          "help": {
+            "de": "Zwei Drücke statt einem. Werbung lässt sich nicht zurücknehmen.",
+            "en": "Two presses instead of one. A commercial cannot be undone."
+          }
+        }
+      ]
+    },
+    {
+      "id": "marker",
+      "name": {
+        "de": "Marker setzen",
+        "en": "Set marker"
+      },
+      "description": {
+        "de": "Setzt eine Stelle in der Aufzeichnung, die man später wiederfindet.",
+        "en": "Marks a spot in the recording that you can find again later."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "bookmark",
+      "default_label": {
+        "de": "Marker",
+        "en": "Marker"
+      },
+      "settings_schema": [
+        {
+          "key": "description",
+          "type": "text",
+          "label": {
+            "de": "Beschreibung",
+            "en": "Description"
+          },
+          "placeholder": {
+            "de": "z. B. Highlight",
+            "en": "e.g. highlight"
+          }
+        }
+      ]
+    },
+    {
+      "id": "clip",
+      "name": {
+        "de": "Clip erstellen",
+        "en": "Create clip"
+      },
+      "description": {
+        "de": "Schneidet die letzten Sekunden mit. Auf Wunsch öffnet sich danach der Editor.",
+        "en": "Captures the last few seconds. Optionally opens the editor afterwards."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "scissors",
+      "default_label": {
+        "de": "Clip",
+        "en": "Clip"
+      },
+      "settings_schema": [
+        {
+          "key": "open_editor",
+          "type": "bool",
+          "label": {
+            "de": "Editor öffnen",
+            "en": "Open the editor"
+          },
+          "default": false
+        },
+        {
+          "key": "delay",
+          "type": "bool",
+          "label": {
+            "de": "Verzögert schneiden",
+            "en": "Add a delay"
+          },
+          "default": false,
+          "help": {
+            "de": "Berücksichtigt die Streamverzögerung — der Clip trifft dann das, was die Zuschauer gerade sehen.",
+            "en": "Accounts for the stream delay, so the clip matches what viewers just saw."
+          }
+        }
+      ]
+    },
+    {
+      "id": "raid",
+      "name": {
+        "de": "Raid",
+        "en": "Raid"
+      },
+      "description": {
+        "de": "Schickt die Zuschauer zu einem anderen Kanal. Ein zweiter Druck bricht ab, solange der Countdown läuft.",
+        "en": "Sends your viewers to another channel. A second press cancels while the countdown runs."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "swords",
+      "default_label": {
+        "de": "Raid",
+        "en": "Raid"
+      },
+      "states": [
+        {
+          "id": "default",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          }
+        },
+        {
+          "id": "laeuft",
+          "name": {
+            "de": "Countdown läuft",
+            "en": "Counting down"
+          },
+          "default_icon": "x"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "search",
+          "type": "text",
+          "label": {
+            "de": "Kanal suchen",
+            "en": "Search channel"
+          }
+        },
+        {
+          "key": "channel",
+          "type": "select",
+          "label": {
+            "de": "Kanal",
+            "en": "Channel"
+          },
+          "options_source": "kanaele",
+          "options_depend_on": [
+            "search"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "name": {
+        "de": "Chatnachricht",
+        "en": "Chat message"
+      },
+      "description": {
+        "de": "Schickt einen vorbereiteten Text in den eigenen Chat.",
+        "en": "Sends a prepared text to your own chat."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "message",
+      "default_label": {
+        "de": "Chat",
+        "en": "Chat"
+      },
+      "settings_schema": [
+        {
+          "key": "message",
+          "type": "text",
+          "label": {
+            "de": "Nachricht",
+            "en": "Message"
+          },
+          "placeholder": {
+            "de": "Was gesendet werden soll",
+            "en": "What to send"
+          }
+        }
+      ]
+    },
+    {
+      "id": "chat_mode",
+      "name": {
+        "de": "Chatmodus",
+        "en": "Chat mode"
+      },
+      "description": {
+        "de": "Schaltet Slow-, Sub-, Emote- oder Follower-Modus um. Die Taste zeigt, was gerade gilt.",
+        "en": "Toggles slow, subscriber, emote-only or follower mode. The key shows what is on."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "shield",
+      "default_label": {
+        "de": "Modus",
+        "en": "Mode"
+      },
+      "states": [
+        {
+          "id": "aus",
+          "name": {
+            "de": "Aus",
+            "en": "Off"
+          }
+        },
+        {
+          "id": "an",
+          "name": {
+            "de": "An",
+            "en": "On"
+          },
+          "default_icon": "shield-check"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "mode",
+          "type": "select",
+          "label": {
+            "de": "Welcher Modus",
+            "en": "Which mode"
+          },
+          "default": "subscriber",
+          "options": [
+            {
+              "value": "subscriber",
+              "label": {
+                "de": "Nur Abonnenten",
+                "en": "Subscribers only"
+              }
+            },
+            {
+              "value": "follower",
+              "label": {
+                "de": "Nur Follower",
+                "en": "Followers only"
+              }
+            },
+            {
+              "value": "emote",
+              "label": {
+                "de": "Nur Emotes",
+                "en": "Emotes only"
+              }
+            },
+            {
+              "value": "slow",
+              "label": {
+                "de": "Langsamer Chat",
+                "en": "Slow mode"
+              }
+            },
+            {
+              "value": "unique",
+              "label": {
+                "de": "Keine Wiederholungen",
+                "en": "Unique messages"
+              }
+            }
+          ]
+        },
+        {
+          "key": "seconds",
+          "type": "number",
+          "label": {
+            "de": "Sekunden zwischen Nachrichten",
+            "en": "Seconds between messages"
+          },
+          "default": 30,
+          "min": 3,
+          "max": 120,
+          "depends_on": {
+            "mode": "slow"
+          }
+        },
+        {
+          "key": "minutes",
+          "type": "number",
+          "label": {
+            "de": "Mindestens gefolgt seit (Minuten)",
+            "en": "Following for at least (minutes)"
+          },
+          "default": 0,
+          "min": 0,
+          "max": 129600,
+          "depends_on": {
+            "mode": "follower"
+          }
+        }
+      ]
+    },
+    {
+      "id": "clear_chat",
+      "name": {
+        "de": "Chat leeren",
+        "en": "Clear chat"
+      },
+      "description": {
+        "de": "Löscht alle Nachrichten im Chat.",
+        "en": "Removes every message from chat."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "eraser",
+      "default_label": {
+        "de": "Leeren",
+        "en": "Clear"
+      },
+      "settings_schema": [
+        {
+          "key": "confirm",
+          "type": "bool",
+          "label": {
+            "de": "Rückfrage",
+            "en": "Ask first"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "shoutout",
+      "name": {
+        "de": "Shoutout",
+        "en": "Shoutout"
+      },
+      "description": {
+        "de": "Empfiehlt einen anderen Kanal im eigenen Chat.",
+        "en": "Recommends another channel in your chat."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "speakerphone",
+      "default_label": {
+        "de": "Shoutout",
+        "en": "Shoutout"
+      },
+      "settings_schema": [
+        {
+          "key": "search",
+          "type": "text",
+          "label": {
+            "de": "Kanal suchen",
+            "en": "Search channel"
+          }
+        },
+        {
+          "key": "channel",
+          "type": "select",
+          "label": {
+            "de": "Kanal",
+            "en": "Channel"
+          },
+          "options_source": "kanaele",
+          "options_depend_on": [
+            "search"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "poll",
+      "name": {
+        "de": "Umfrage",
+        "en": "Poll"
+      },
+      "description": {
+        "de": "Startet eine Umfrage mit den eingetragenen Antworten. Läuft schon eine, beendet der Druck sie.",
+        "en": "Starts a poll with the answers you entered. If one is running, a press ends it."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "chart-bar",
+      "default_label": {
+        "de": "Umfrage",
+        "en": "Poll"
+      },
+      "states": [
+        {
+          "id": "aus",
+          "name": {
+            "de": "Keine läuft",
+            "en": "None running"
+          }
+        },
+        {
+          "id": "laeuft",
+          "name": {
+            "de": "Läuft",
+            "en": "Running"
+          },
+          "default_icon": "chart-bar-popular"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "question",
+          "type": "text",
+          "label": {
+            "de": "Frage",
+            "en": "Question"
+          }
+        },
+        {
+          "key": "choices",
+          "type": "text",
+          "label": {
+            "de": "Antworten",
+            "en": "Answers"
+          },
+          "placeholder": {
+            "de": "Ja | Nein | Vielleicht",
+            "en": "Yes | No | Maybe"
+          },
+          "help": {
+            "de": "Zwei bis fünf, getrennt durch einen senkrechten Strich.",
+            "en": "Two to five, separated by a vertical bar."
+          }
+        },
+        {
+          "key": "duration",
+          "type": "number",
+          "label": {
+            "de": "Dauer (Sekunden)",
+            "en": "Duration (seconds)"
+          },
+          "default": 120,
+          "min": 15,
+          "max": 1800
+        }
+      ]
+    },
+    {
+      "id": "prediction",
+      "name": {
+        "de": "Vorhersage",
+        "en": "Prediction"
+      },
+      "description": {
+        "de": "Startet eine Vorhersage. Läuft eine, sperrt der Druck die Wetten; danach löst er sie zur gewählten Antwort auf.",
+        "en": "Starts a prediction. While one runs, a press locks it; after that it resolves to the chosen outcome."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "crystal-ball",
+      "default_label": {
+        "de": "Vorhersage",
+        "en": "Prediction"
+      },
+      "states": [
+        {
+          "id": "aus",
+          "name": {
+            "de": "Keine läuft",
+            "en": "None running"
+          }
+        },
+        {
+          "id": "offen",
+          "name": {
+            "de": "Wetten offen",
+            "en": "Betting open"
+          },
+          "default_icon": "lock"
+        },
+        {
+          "id": "gesperrt",
+          "name": {
+            "de": "Gesperrt",
+            "en": "Locked"
+          },
+          "default_icon": "flag"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "question",
+          "type": "text",
+          "label": {
+            "de": "Frage",
+            "en": "Question"
+          }
+        },
+        {
+          "key": "choices",
+          "type": "text",
+          "label": {
+            "de": "Antworten",
+            "en": "Outcomes"
+          },
+          "placeholder": {
+            "de": "Schaffe ich | Schaffe ich nicht",
+            "en": "I make it | I don't"
+          },
+          "help": {
+            "de": "Zwei bis zehn, getrennt durch einen senkrechten Strich.",
+            "en": "Two to ten, separated by a vertical bar."
+          }
+        },
+        {
+          "key": "duration",
+          "type": "number",
+          "label": {
+            "de": "Dauer (Sekunden)",
+            "en": "Duration (seconds)"
+          },
+          "default": 120,
+          "min": 30,
+          "max": 1800
+        },
+        {
+          "key": "winner",
+          "type": "number",
+          "label": {
+            "de": "Gewinnende Antwort",
+            "en": "Winning outcome"
+          },
+          "default": 1,
+          "min": 1,
+          "max": 10,
+          "help": {
+            "de": "Die wievielte Antwort gewonnen hat — zum Auflösen einer gesperrten Vorhersage.",
+            "en": "Which outcome won, counted from one — used to resolve a locked prediction."
+          }
+        }
+      ]
+    },
+    {
+      "id": "status",
+      "name": {
+        "de": "Streamstatus",
+        "en": "Stream status"
+      },
+      "description": {
+        "de": "Live oder offline, Zuschauerzahl und Laufzeit. Am Dial steht alles nebeneinander.",
+        "en": "Live or offline, viewer count and uptime. On a dial it all sits side by side."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "broadcast",
+      "default_label": {
+        "de": "Stream",
+        "en": "Stream"
+      },
+      "states": [
+        {
+          "id": "offline",
+          "name": {
+            "de": "Offline",
+            "en": "Offline"
+          },
+          "default_icon": "broadcast-off"
+        },
+        {
+          "id": "live",
+          "name": {
+            "de": "Live",
+            "en": "Live"
+          },
+          "default_icon": "broadcast"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "show",
+          "type": "select",
+          "label": {
+            "de": "Was steht groß",
+            "en": "What is shown large"
+          },
+          "default": "viewers",
+          "options": [
+            {
+              "value": "viewers",
+              "label": {
+                "de": "Zuschauer",
+                "en": "Viewers"
+              }
+            },
+            {
+              "value": "uptime",
+              "label": {
+                "de": "Laufzeit",
+                "en": "Uptime"
+              }
+            },
+            {
+              "value": "followers",
+              "label": {
+                "de": "Follower",
+                "en": "Followers"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "followers",
+      "name": {
+        "de": "Follower",
+        "en": "Followers"
+      },
+      "description": {
+        "de": "Wie viele dem Kanal folgen.",
+        "en": "How many people follow the channel."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "heart",
+      "default_label": {
+        "de": "Follower",
+        "en": "Followers"
+      },
+      "settings_schema": []
+    }
+  ],
+  "screenshots": [
+    "screenshots/aktionen.png",
+    "screenshots/zustaende.png",
+    "screenshots/dials.png"
+  ]
+}

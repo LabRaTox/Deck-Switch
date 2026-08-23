@@ -1,7 +1,7 @@
 {
   "id": "discord",
   "name": "Discord",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "action",
   "author": "LabRaTox",
   "category": "engagement",
@@ -11,8 +11,8 @@
     "en": "Controls the running Discord client: mute, deafen, voice and text channels."
   },
   "changelog": {
-    "de": "1.0.0 — Erste Fassung als nachinstallierbares Plugin. Vorher fest eingebaut, inhaltlich unverändert.",
-    "en": "1.0.0 — First release as an installable plugin. Previously built in, unchanged otherwise."
+    "de": "1.0.1 — Nur innen drin: Das Plugin holt seine Hilfsdatei jetzt relativ. Damit können zwei Plugins Dateien gleich benennen, ohne sich gegenseitig auszubremsen.",
+    "en": "1.0.1 — Under the hood only: the plugin now imports its helper file relatively, so two plugins can name files alike without getting in each other's way."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",

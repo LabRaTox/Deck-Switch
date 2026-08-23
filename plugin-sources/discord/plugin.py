@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw
 from deckswitch import paths
 from deckswitch.plugins.base import ActionPlugin
 
-from ipc import USER_AGENT, DiscordIpc, DiscordIpcError, exchange_code
+from .ipc import USER_AGENT, DiscordIpc, DiscordIpcError, exchange_code
 
 ACCENT = "#5865f2"
 RECONNECT_INTERVAL_S = 8.0

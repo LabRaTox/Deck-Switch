@@ -22,14 +22,15 @@ from datetime import datetime, timedelta
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources" / "timer"
-sys.path.insert(0, str(PLUGIN_DIR))
 
 from deckswitch.config import Appearance, Slot, default_config  # noqa: E402
 from deckswitch.plugins.base import Manifest, Services, SlotContext  # noqa: E402
 from deckswitch.services.icons import IconService  # noqa: E402
 from deckswitch.services.render import RenderService  # noqa: E402
 
-import plugin as timermod  # noqa: E402
+from _pluginlader import lade  # noqa: E402
+
+timermod = lade(PLUGIN_DIR)
 
 FAILS = []
 

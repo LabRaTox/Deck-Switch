@@ -68,6 +68,35 @@ class PluginError:
     traceback: str = ""
 
 
+def _kollision(directory: Path) -> str:
+    """Sucht den Grund, wenn ein Import in einem Plugin fehlgeschlagen ist.
+
+    Ein Plugin darf seine Nachbardateien auch beim kurzen Namen importieren
+    (``from api import …``) — dann teilt es sich den Modulraum mit allen
+    anderen. Hieß dort eine Datei genauso, bekam es stillschweigend die
+    fremde und scheiterte an einem Namen, den es in seiner eigenen Datei
+    sehr wohl gibt; der Fehler zeigte auf den falschen Ordner.
+
+    Gesucht wird das erst, wenn wirklich etwas schiefging. Vorher zu
+    sperren wäre falsch: Wer relativ importiert (``from .api import …``),
+    ist von allem abgeschottet, und zwei gleichnamige Dateien sind dann
+    kein Problem, sondern normal.
+    """
+    for datei in sorted(directory.glob("*.py")):
+        name = datei.stem
+        if name in ("plugin", "screenshots", "__init__"):
+            continue
+        belegt = sys.modules.get(name)
+        anderer = getattr(belegt, "__file__", None) if belegt is not None else None
+        if anderer and Path(anderer).resolve() != datei.resolve():
+            return (
+                f" — Hinweis: Der Modulname '{name}' war schon von {anderer} "
+                f"belegt. Importiere die Nachbardatei relativ "
+                f"('from .{name} import …'), dann kann das nicht passieren."
+            )
+    return ""
+
+
 class PluginRegistry:
     def __init__(self) -> None:
         self.plugins: dict[str, LoadedPlugin] = {}
@@ -170,7 +199,13 @@ class PluginRegistry:
             raise FileNotFoundError(f"Entry-Datei fehlt: {entry}")
 
         module_name = f"streamdeck_plugin_{manifest.id.replace('-', '_')}"
-        spec = importlib.util.spec_from_file_location(module_name, entry)
+        # ``submodule_search_locations`` macht aus dem Modul ein Paket: Damit
+        # findet ``from .api import …`` die Nachbardatei, und zwar genau die
+        # aus *diesem* Ordner. Zwei Plugins dürfen ihre Hilfsdateien dann
+        # gleich benennen, ohne sich in die Quere zu kommen.
+        spec = importlib.util.spec_from_file_location(
+            module_name, entry, submodule_search_locations=[str(directory)]
+        )
         if spec is None or spec.loader is None:
             raise ImportError(f"Kann {entry} nicht laden")
 
@@ -184,6 +219,10 @@ class PluginRegistry:
             sys.path.insert(0, added_path)
         try:
             spec.loader.exec_module(module)
+        except ImportError as exc:
+            # Der häufigste Grund steht nicht in der Meldung — er steht in
+            # sys.modules.
+            raise ImportError(f"{exc}{_kollision(directory)}") from exc
         finally:
             if inserted:
                 sys.path.remove(added_path)

@@ -129,6 +129,20 @@ input[type="checkbox"] {
   background: #2f6fd8;
 }
 
+/* „Es liegt was Neues bereit" ist eine gute Nachricht und soll auch so
+   aussehen — gefüllt und grün, damit man sie in einer Reihe grauer Knöpfe
+   findet. Ausgegraut, wenn die Fassung eine neuere App verlangt: Dann ist
+   sie eben nicht bereit. */
+.btn.update {
+  background: #15803d;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.btn.update:hover:not(:disabled) {
+  background: #16a34a;
+}
+
 .btn.danger {
   border-color: #7f1d1d;
   color: #fca5a5;
@@ -1425,6 +1439,10 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Umbrechen statt quetschen: Mit einem Update-Knopf mehr blieb für die
+     Titelzeile so wenig übrig, dass „v1.0.0 · 6 Aktionen · MIT" über sechs
+     Zeilen lief. Lieber rutschen die Knöpfe eine Zeile tiefer. */
+  flex-wrap: wrap;
 }
 
 .plugin-title {
@@ -1432,6 +1450,16 @@ input[type="checkbox"] {
   flex-direction: column;
   flex: 1;
   min-width: 0;
+}
+
+/* Umbruch an einer bestimmten Stelle, statt ihn den Breiten zu überlassen:
+   Wo ein Update-Knopf dazukommt, sollen Symbol und Name zusammen oben
+   stehen und die Knöpfe geschlossen darunter. Ohne diese Marke rutschte
+   mal der Name unter das Symbol, mal der Schalter allein in Zeile zwei —
+   je nach Länge des Plugin-Namens. */
+.zeilenumbruch {
+  flex-basis: 100%;
+  height: 0;
 }
 
 .plugin-title small {
@@ -2148,6 +2176,65 @@ input[type="checkbox"] {
   border-radius: 6px;
   border: 1px solid var(--border);
   background: #000;
+}
+
+/* Der Hinweis auf Aktualisierungen, über der Liste. Er steht dort und
+   nicht in jeder Karte einzeln: Wer vier Updates hat, will einmal drücken
+   und nicht viermal suchen. */
+.update-balken {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 13px;
+}
+
+.update-balken > span:first-child {
+  flex: 1 1 320px;
+}
+
+.update-balken .hint {
+  font-size: 12px;
+}
+
+/* Die Twitch-Anmeldung: erst ein Knopf, dann der Code zum Abtippen. Der
+   Code steht groß und mit weiten Zeichenabständen — er wird von einem
+   Bildschirm auf ein Handy übertragen, und dabei verwechselt man sonst
+   0 und O. */
+.twitch-verbinden {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.twitch-code {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.twitch-code p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.twitch-code strong {
+  font-size: 30px;
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+  color: #9146ff;
 }
 
 /* Bewertung in der Detailspalte: zwei Daumen, darunter was Leute dazu

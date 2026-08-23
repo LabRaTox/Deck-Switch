@@ -14,13 +14,14 @@ _wache.sichere_umgebung()
 import json, pathlib, sys
 
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[1] / "plugins" / "audio"
-sys.path.insert(0, str(PLUGIN_DIR))
 from deckswitch.plugins.base import Manifest, Services, SlotContext
 from deckswitch.config import Appearance, Slot, default_config
 from deckswitch.services.audio import DEFAULT_SINK, VolumeState
 from deckswitch.services.icons import IconService
 from deckswitch.services.render import RenderService
-import plugin as audiomod
+from _pluginlader import lade
+
+audiomod = lade(PLUGIN_DIR)
 
 FAILS = []
 def check(n, c, d=""):
