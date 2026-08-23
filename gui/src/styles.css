@@ -2150,6 +2150,98 @@ input[type="checkbox"] {
   background: #000;
 }
 
+/* Bewertung in der Detailspalte: zwei Daumen, darunter was Leute dazu
+   geschrieben haben. Die eigene Stimme ist eingefärbt — grün für hoch, rot
+   für runter —, damit man ohne Nachdenken sieht, ob man schon abgestimmt
+   hat. */
+.bewertung {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.bewertung h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.bewertung-knoepfe {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn.daumen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn.daumen.aktiv {
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.btn.daumen.runter.aktiv {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.bewertung-schreiben {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bewertung-schreiben textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.bewertung-eigen {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-sunken);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bewertung-eigen small,
+.bewertung-liste small {
+  width: 100%;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.bewertung-liste {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bewertung-liste li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text);
+}
+
 /* Die Profilwahl sitzt über dem Seitenbaum — beim Bauen gebraucht, nicht
    beim Einrichten. */
 .profilbar {

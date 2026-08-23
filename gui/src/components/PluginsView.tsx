@@ -146,7 +146,11 @@ export function PluginsView() {
   if (gezeigt) {
     return (
       <div className="page-view">
-        <PluginDetail plugin={gezeigt} onBack={() => setDetail(null)} />
+        <PluginDetail
+          plugin={gezeigt}
+          storeEintrag={katalog?.find((s) => s.slug === gezeigt.id) ?? null}
+          onBack={() => setDetail(null)}
+        />
       </div>
     );
   }
@@ -344,7 +348,7 @@ function PluginIcon({ plugin }: { plugin: PluginInfo }) {
   const name = localized(plugin.manifest.name, i18n.language);
 
   if (plugin.has_icon) {
-    return <img className="plugin-icon" src={api.pluginIconUrl(plugin.id)} alt="" />;
+    return <img className="plugin-icon" src={api.pluginIconUrl(plugin.id, plugin.manifest.version)} alt="" />;
   }
   return (
     <span

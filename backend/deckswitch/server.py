@@ -1400,6 +1400,37 @@ def create_app(
         except store.StoreError as exc:
             raise HTTPException(502, str(exc)) from exc
 
+    @app.get("/api/store/plugins/{slug}/rating")
+    async def store_bewertung(slug: str) -> dict[str, Any]:
+        """Wie ein Plugin ankommt — und wie man selbst abgestimmt hat.
+
+        Steht vor den Adressen mit ``{version}``, weil ``rating`` sonst als
+        Versionsnummer gelesen würde: FastAPI nimmt die erste Route, die
+        passt.
+        """
+        try:
+            return await _im_hintergrund(lambda: store.bewertung(slug))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.put("/api/store/plugins/{slug}/rating")
+    async def store_bewerten(slug: str, payload: dict[str, Any]) -> dict[str, Any]:
+        wert = payload.get("value")
+        if wert not in (1, -1):
+            raise HTTPException(400, "value muss 1 oder -1 sein")
+        kommentar = str(payload.get("comment") or "")
+        try:
+            return await _im_hintergrund(lambda: store.bewerte(slug, wert, kommentar))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.delete("/api/store/plugins/{slug}/rating")
+    async def store_bewertung_loeschen(slug: str) -> dict[str, Any]:
+        try:
+            return await _im_hintergrund(lambda: store.bewertung_zuruecknehmen(slug))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
     @app.get("/api/store/plugins/{slug}/{version}/icon")
     async def store_icon(slug: str, version: str) -> Response:
         """Das Symbol eines Plugins, das nur im Store liegt."""

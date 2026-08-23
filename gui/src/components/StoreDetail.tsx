@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import type { StorePlugin } from "../types";
+import { Bewertung } from "./Bewertung";
 import { UiIcon } from "./UiIcon";
 import { Warnungen } from "./StoreView";
 
@@ -208,6 +209,7 @@ export function StoreDetail({
                 </div>
               ))}
           </dl>
+          <Bewertung slug={plugin.slug} />
         </aside>
       </div>
     </div>

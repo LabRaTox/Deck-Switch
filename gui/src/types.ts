@@ -509,6 +509,28 @@ export interface StorePlugin {
   versions?: StoreVersion[];
 }
 
+/** Eine Stimme mit Kommentar, so wie sie andere abgegeben haben. */
+export interface StoreKommentar {
+  value: number;
+  comment: string | null;
+  author: string;
+  at: string;
+}
+
+/**
+ * Die Bewertung eines Plugins.
+ *
+ * `mine` ist die eigene Stimme — `null`, wenn man nicht abgestimmt hat oder
+ * gar nicht angemeldet ist.
+ */
+export interface StoreBewertung {
+  up: number;
+  down: number;
+  mine: number | null;
+  comment: string | null;
+  comments: StoreKommentar[];
+}
+
 /** Wer im Store angemeldet ist. */
 export interface StoreUser {
   id: number;

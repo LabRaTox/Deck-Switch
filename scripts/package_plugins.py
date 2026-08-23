@@ -26,6 +26,12 @@ TARGET = REPO / "dist" / "plugins"
 SKIP_DIRS = {"__pycache__", ".git", ".mypy_cache", ".ruff_cache"}
 SKIP_SUFFIXES = {".pyc", ".pyo"}
 
+# Build-time helpers that live in the repo, not on the user's machine.
+# ``screenshots.py`` draws a plugin's own store images and is run by
+# ``make-plugin-screenshots.py``; shipping it would put a script into every
+# installation that never runs there.
+SKIP_NAMES = {"screenshots.py"}
+
 
 def package(directory: Path) -> Path | None:
     manifest_file = directory / "manifest.json"
@@ -51,6 +57,7 @@ def package(directory: Path) -> Path | None:
         if path.is_file()
         and not SKIP_DIRS.intersection(path.parts)
         and path.suffix not in SKIP_SUFFIXES
+        and path.name not in SKIP_NAMES
     ]
 
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:

@@ -88,9 +88,16 @@ def _anfrage(
     rumpf: bytes | None = None,
     typ: str = "",
     mit_token: bool = False,
+    token_falls_da: bool = False,
     **abfrage: Any,
 ) -> Any:
-    """Eine Anfrage an den Store — Antwort als JSON."""
+    """Eine Anfrage an den Store — Antwort als JSON.
+
+    ``mit_token`` verlangt eine Anmeldung, ``token_falls_da`` schickt sie
+    nur mit, wenn es eine gibt: Die Bewertung eines Plugins darf jeder
+    lesen, aber wer angemeldet ist, soll dabei auch die eigene Stimme
+    zurückbekommen.
+    """
     kopf = {"Accept": "application/json", "User-Agent": "DeckSwitch/1.0"}
     if typ:
         kopf["Content-Type"] = typ
@@ -99,6 +106,10 @@ def _anfrage(
         if not token:
             raise StoreError("Dafür musst du im Store angemeldet sein")
         kopf["Authorization"] = f"Bearer {token}"
+    elif token_falls_da:
+        token = lies_token()
+        if token:
+            kopf["Authorization"] = f"Bearer {token}"
 
     anfrage = urllib.request.Request(
         _url(pfad, **abfrage), data=rumpf, headers=kopf, method=methode
@@ -168,6 +179,46 @@ def plugin(slug: str) -> dict[str, Any]:
 
 def beliebt(*, kind: str = "") -> dict[str, Any]:
     return _anfrage("/api/popular", kind=kind)
+
+
+# --------------------------------------------------------------------------
+# Bewertungen
+# --------------------------------------------------------------------------
+#
+# Nicht zwischengespeichert: Wer gerade auf „Daumen hoch" gedrückt hat, will
+# das sofort sehen und nicht in fünf Minuten. Es ist eine kleine Antwort und
+# sie wird nur beim Öffnen einer Detailansicht geholt.
+
+
+def bewertung(slug: str) -> dict[str, Any]:
+    """Stimmen, die eigene Stimme und die letzten Kommentare."""
+    return _anfrage(
+        f"/api/catalog/{urllib.parse.quote(slug)}/rating", token_falls_da=True
+    )
+
+
+def bewerte(slug: str, wert: int, kommentar: str = "") -> dict[str, Any]:
+    """Daumen hoch (``1``) oder runter (``-1``), auf Wunsch mit einem Satz."""
+    if wert not in (1, -1):
+        raise StoreError("Eine Bewertung ist entweder 1 oder -1")
+    rumpf = json.dumps({"value": wert, "comment": kommentar}).encode("utf-8")
+    daten = _anfrage(
+        f"/api/catalog/{urllib.parse.quote(slug)}/rating",
+        methode="PUT", rumpf=rumpf, typ="application/json", mit_token=True,
+    )
+    # Im Katalog stehen dieselben Zahlen — der Zwischenspeicher wüsste sonst
+    # noch die alten.
+    vergiss()
+    return daten
+
+
+def bewertung_zuruecknehmen(slug: str) -> dict[str, Any]:
+    daten = _anfrage(
+        f"/api/catalog/{urllib.parse.quote(slug)}/rating",
+        methode="DELETE", mit_token=True,
+    )
+    vergiss()
+    return daten
 
 
 def vergiss() -> None:
