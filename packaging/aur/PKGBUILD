@@ -61,7 +61,7 @@ makedepends=(
 # Alles, ohne das die App startet und das meiste kann — nur einzelne
 # Aktionen bleiben dann ohne Wirkung und melden das auch so.
 optdepends=(
-  'python-simpleobsws: OBS-Studio-Aktionen (nicht paketiert, siehe README)'
+  'python-simpleobsws: das nachinstallierbare OBS-Plugin (nicht paketiert, siehe README)'
   'ddcutil: Monitorhelligkeit über DDC/CI'
   'spectacle: Bildschirmfotos'
   'kscreen-doctor: Bildschirme an- und ausschalten'

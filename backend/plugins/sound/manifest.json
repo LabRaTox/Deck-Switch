@@ -25,7 +25,10 @@
         "de": "Spielt eine Audiodatei ab, auf Wunsch nur im Stream.",
         "en": "Plays an audio file, optionally only into the stream."
       },
-      "inputs": ["key", "dial"],
+      "inputs": [
+        "key",
+        "dial"
+      ],
       "default_icon": "music",
       "states": [
         {
@@ -131,12 +134,16 @@
         "de": "Beendet alle laufenden Klänge des Soundboards.",
         "en": "Stops every sound the board is currently playing."
       },
-      "inputs": ["key", "dial"],
+      "inputs": [
+        "key",
+        "dial"
+      ],
       "default_icon": "player-stop",
       "settings_schema": [],
       "requires": [
         "sound_playback"
       ]
     }
-  ]
+  ],
+  "icon": "icon.png"
 }

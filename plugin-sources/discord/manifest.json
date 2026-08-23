@@ -3,14 +3,22 @@
   "name": "Discord",
   "version": "1.0.0",
   "type": "action",
-  "entry": "plugin.py",
-  "class": "DiscordPlugin",
-  "accent": "#5865f2",
+  "author": "LabRaTox",
   "category": "engagement",
+  "accent": "#5865f2",
   "description": {
     "de": "Steuert den laufenden Discord-Client: Mute, Deafen, Sprach- und Textkanäle.",
     "en": "Controls the running Discord client: mute, deafen, voice and text channels."
   },
+  "changelog": {
+    "de": "1.0.0 — Erste Fassung als nachinstallierbares Plugin. Vorher fest eingebaut, inhaltlich unverändert.",
+    "en": "1.0.0 — First release as an installable plugin. Previously built in, unchanged otherwise."
+  },
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/Deck-Switch",
+  "icon": "icon.png",
+  "entry": "plugin.py",
+  "class": "DiscordPlugin",
   "config_schema": [
     {
       "key": "client_id",
@@ -353,5 +361,8 @@
       ]
     }
   ],
-  "icon": "icon.png"
+  "screenshots": [
+    "screenshots/aktionen.png",
+    "screenshots/zustaende.png"
+  ]
 }

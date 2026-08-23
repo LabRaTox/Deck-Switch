@@ -470,6 +470,10 @@ export interface StoreVersion {
   downloads: number;
   released_at: string;
   download_url: string;
+  /** Symbol dieser Fassung, wenn das Manifest eines nennt. */
+  icon_url: string | null;
+  /** Die Bilder der Detailansicht — höchstens drei. */
+  screenshot_urls: string[];
   warnings: StoreWarnung[];
   /** Nur in der Einzelansicht: `approved` oder `withdrawn`. */
   state?: string;

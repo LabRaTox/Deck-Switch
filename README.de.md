@@ -84,9 +84,9 @@ Ein Motiv über alle Tasten und den Touchstrip, animiert oder still. Jede Seite
 kann ihr eigenes Hintergrundbild für den Touchstrip haben.
 
 **Plugins**
-Acht Plugins sind eingebaut: Audio, OBS, Discord, System, Soundboard,
-Multi-Aktion, Navigation und der Tabler-Iconset. Drei weitere gibt es zum
-Nachinstallieren: Spotify, Wetter und ein Uhr-Bildschirmschoner. Für eigene
+Sechs Plugins sind eingebaut: Audio, System, Soundboard, Multi-Aktion,
+Navigation und der Tabler-Iconset. Fünf weitere gibt es zum Nachinstallieren:
+OBS, Discord, Spotify, Wetter und ein Uhr-Bildschirmschoner. Für eigene
 gibt es eine offene API. Iconsets sind ebenfalls Plugins.
 
 Nachinstallieren geht auf vier Wegen: über den **Store** direkt in der App,

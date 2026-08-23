@@ -25,7 +25,10 @@
         "de": "Führt mehrere Aktionen nacheinander aus.",
         "en": "Runs several actions in sequence."
       },
-      "inputs": ["key", "dial"],
+      "inputs": [
+        "key",
+        "dial"
+      ],
       "default_icon": "player-track-next",
       "states": [
         {
@@ -70,7 +73,10 @@
         "de": "Zwei Ketten im Wechsel — einmal drücken hin, einmal zurück.",
         "en": "Two chains, alternating — press once for each direction."
       },
-      "inputs": ["key", "dial"],
+      "inputs": [
+        "key",
+        "dial"
+      ],
       "default_icon": "toggle-left",
       "states": [
         {
@@ -92,5 +98,6 @@
       ],
       "settings_schema": []
     }
-  ]
+  ],
+  "icon": "icon.png"
 }

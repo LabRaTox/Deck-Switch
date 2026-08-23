@@ -23,7 +23,7 @@ backend/
                          Plugin-Store
     web/netdeck.html     die Seite, die ein Netz-Gast im Browser bekommt
   plugins/               Mitgelieferte Plugins, technisch ganz normale
-    audio/ obs/ discord/ system/ streamdeck/ multi/ sound/ iconset-tabler/
+    audio/ system/ streamdeck/ multi/ sound/ iconset-tabler/
   tests/                 Prüfsuiten (siehe unten)
 gui/                     Tauri + Vite/React
 packaging/               udev-Regeln, systemd-Unit, URL-Handler

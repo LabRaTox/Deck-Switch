@@ -21,7 +21,6 @@
   "support": "https://github.com/LabRaTox/Deck-Switch",
   "icon": "icon.png",
   "screenshots": [
-    "screenshots/deck.png",
     "screenshots/aktionen.png"
   ],
   "entry": "plugin.py",

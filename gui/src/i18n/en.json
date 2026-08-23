@@ -189,6 +189,8 @@
     "connected": "Connected",
     "disconnected": "Not connected",
     "reload": "Reload plugins",
+    "reloadConfirm": "Reload all plugins?\n\nEvery plugin is torn down and read in again: connections to OBS, Discord and friends are dropped and rebuilt, and key state (toggles, caches, running animations) starts over.\n\nSettings, assignments and installed plugins are left alone.",
+    "reloadHint": "Tears every plugin down and builds it up again — connections and key state start over.",
     "actions_one": "{{count}} action",
     "actions_other": "{{count}} actions",
     "icons": "{{count}} icons",
@@ -221,6 +223,7 @@
     "noneInstalled": "None installed.",
     "categories": {
       "all": "All",
+      "installed": "Installed",
       "system": "System",
       "audio": "Audio",
       "business": "Business",
@@ -265,7 +268,11 @@
       "dials": "Dials",
       "source": "Source",
       "support": "Support",
-      "openSupport": "Open page"
+      "openSupport": "Open page",
+      "downloads": "Downloads",
+      "size": "Size",
+      "released": "Released",
+      "minApp": "Requires app version"
     },
     "checksumAnnounced": "Announced checksum: {{hash}}… — verified before unpacking.",
     "checksumMissing": "No checksum: whatever is at that address will be installed."
@@ -553,6 +560,7 @@
     },
     "dropHere": "Drop an archive here",
     "dropOrClick": "or click to choose a file",
-    "submitFormats": "ZIP, TAR or tar.gz — anything that can be opened for review is accepted. What ships is always a ZIP, because that is what the app can unpack."
+    "submitFormats": "ZIP, TAR or tar.gz — anything that can be opened for review is accepted. What ships is always a ZIP, because that is what the app can unpack.",
+    "versions": "Versions"
   }
 }

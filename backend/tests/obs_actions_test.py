@@ -5,7 +5,9 @@ import asyncio, json, pathlib, sys
 # Vom Ort dieser Datei aus, nicht von einem festen Pfad: Sonst läuft
 # die Suite nur in genau einem Arbeitsverzeichnis eines einzigen
 # Rechners.
-PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[1] / "plugins" / "obs"
+# OBS ist kein eingebautes Plugin mehr, sondern eines zum Nachinstallieren:
+# Die Quelle liegt seit 2026-08-23 unter ``plugin-sources/`` neben dem Backend.
+PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources" / "obs"
 sys.path.insert(0, str(PLUGIN_DIR))
 from deckswitch.plugins.base import Manifest, Services, SlotContext
 from deckswitch.config import Appearance, Slot, default_config

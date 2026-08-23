@@ -1039,7 +1039,13 @@ def create_app(
         media = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         # Wie beim Upload: Ein Plugin-Symbol kommt aus fremder Hand und darf
         # bei direktem Aufruf kein Skript ausführen.
-        headers = {"X-Content-Type-Options": "nosniff"}
+        #
+        # ``no-cache`` heißt nicht „nicht speichern", sondern „vorher
+        # nachfragen": Die Adresse bleibt dieselbe, der Inhalt nicht — nach
+        # einer neuen Fassung zeigte der Browser sonst tagelang das alte
+        # Symbol. Die Nachfrage beantwortet Starlette mit 304 aus ETag und
+        # Zeitstempel, es wandern also keine Bytes.
+        headers = {"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"}
         if candidate.suffix.lower() == ".svg":
             headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
         return FileResponse(candidate, media_type=media, headers=headers)
@@ -1070,8 +1076,12 @@ def create_app(
             raise HTTPException(415, f"Nicht unterstützt: {candidate.suffix}")
 
         media = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+        # Wie beim Symbol: gleiche Adresse, wechselnder Inhalt — der Browser
+        # soll nachfragen statt zu raten.
         return FileResponse(
-            candidate, media_type=media, headers={"X-Content-Type-Options": "nosniff"}
+            candidate,
+            media_type=media,
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"},
         )
 
     @app.put("/api/plugins/{plugin_id}/config")
@@ -1262,6 +1272,39 @@ def create_app(
             return await _im_hintergrund(lambda: store.plugin(slug))
         except store.StoreError as exc:
             raise HTTPException(502, str(exc)) from exc
+
+    @app.get("/api/store/plugins/{slug}/{version}/icon")
+    async def store_icon(slug: str, version: str) -> Response:
+        """Das Symbol eines Plugins, das nur im Store liegt."""
+        return await _store_bild(slug, version, "icon", 0)
+
+    @app.get("/api/store/plugins/{slug}/{version}/screenshot/{index}")
+    async def store_screenshot(slug: str, version: str, index: int) -> Response:
+        """Eines der Bilder aus der Store-Detailansicht."""
+        return await _store_bild(slug, version, "screenshot", index)
+
+    async def _store_bild(slug: str, version: str, art: str, index: int) -> Response:
+        """Holt ein Bild beim Store und reicht es an die Oberfläche weiter.
+
+        Über das Backend und nicht direkt: Dort steht, welche Adressen der
+        Katalog genannt hat, dort liegt der Zwischenspeicher, und die
+        Oberfläche muss keine fremde Herkunft laden.
+        """
+        try:
+            daten, typ = await _im_hintergrund(lambda: store.bild(slug, version, art, index))
+        except store.StoreError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return Response(
+            content=daten,
+            media_type=typ,
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                # Bytes aus fremder Hand: Bei direktem Aufruf soll die
+                # Antwort nichts laden und nichts ausführen.
+                "Content-Security-Policy": "default-src 'none'; sandbox",
+                "Cache-Control": "public, max-age=300",
+            },
+        )
 
     @app.post("/api/store/install")
     async def store_install(
