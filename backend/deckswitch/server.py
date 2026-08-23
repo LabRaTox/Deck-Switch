@@ -1400,6 +1400,28 @@ def create_app(
         except store.StoreError as exc:
             raise HTTPException(502, str(exc)) from exc
 
+    @app.get("/api/store/updates")
+    async def store_updates() -> dict[str, Any]:
+        """Was von den installierten Plugins im Store neuer vorliegt.
+
+        Verglichen wird gegen das, was wirklich auf der Platte liegt, und
+        nicht gegen eine Merkliste: Wer ein Plugin von Hand austauscht, soll
+        danach nicht zum „Aktualisieren" auf eine ältere Fassung gedrängt
+        werden.
+        """
+        installiert = {
+            geladen.id: geladen.manifest.version
+            for geladen in runtime.registry.plugins.values()
+            if not geladen.builtin
+        }
+        try:
+            gefunden = await _im_hintergrund(
+                lambda: store.verfuegbare_updates(installiert)
+            )
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {"count": len(gefunden), "updates": gefunden}
+
     @app.get("/api/store/plugins/{slug}/rating")
     async def store_bewertung(slug: str) -> dict[str, Any]:
         """Wie ein Plugin ankommt — und wie man selbst abgestimmt hat.

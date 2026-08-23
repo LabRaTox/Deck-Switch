@@ -89,7 +89,7 @@ nur das Sicherheitsnetz.
 
 ## Nachinstallierbare Plugins
 
-Diese sechs gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
+Diese acht gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
 [plugin-sources/](../../plugin-sources/).
 
 | Plugin | Aktionen |
@@ -100,6 +100,8 @@ Diese sechs gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
 | **Wetter** | Aktuelles Wetter, Mehrtagesvorhersage, Luftqualität |
 | **Uhr-Schoner** | Bildschirmschoner: Uhrzeit als je eine Ziffer pro Taste |
 | **Timer** | Countdown, Stoppuhr, Wecker |
+| **Twitch** | Titel, Kategorie, Werbung, Marker, Clip, Raid, Chat, Chatmodus, Chat leeren, Shoutout, Umfrage, Vorhersage, Streamstatus, Follower |
+| **Govee** | An/Aus, Helligkeit, Farbe, Farbtemperatur, Szene, alle Geräte auf einmal |
 
 ### Discord
 
@@ -202,6 +204,102 @@ Der Klang ist mitgeliefert; du kannst stattdessen eine eigene Datei wählen
 
 Was ein Neustart des Backends nicht überlebt: laufende Uhren und die am Dial
 gedrehten Zeiten. Danach gilt wieder, was im Formular steht.
+
+### Twitch
+
+Vierzehn Aktionen für das, was man während eines Streams tut, ohne dafür aus
+dem Spiel zu wechseln.
+
+**Anmelden.** Einzurichten gibt es nichts. Twitch will zu jedem Aufruf eine
+Client-ID sehen; die gehört zu einer registrierten App und wird mitgeliefert.
+Ein Geheimnis kommt nicht vor — was auf fremden Rechnern liegt, wäre keins
+mehr. Stattdessen der Gerätecode-Weg: Unter *Plugins → Twitch →
+Plugin-Einstellungen* auf *Mit Twitch verbinden* drücken, den angezeigten Code
+auf [twitch.tv/activate](https://www.twitch.tv/activate) eintippen, fertig.
+Das Token liegt danach in `~/.config/deckswitch/twitch-token.json` und ist nur
+für dich lesbar.
+
+**Stream steuern.** *Titel setzen* legt einen vorbereiteten Titel auf eine
+Taste, optional samt Kategorie — mehrere Tasten, mehrere Titel. *Kategorie
+setzen* hat eine Suchliste. Dazu *Werbung* (30 Sekunden bis 3 Minuten),
+*Marker setzen* für eine wiederauffindbare Stelle in der Aufzeichnung, *Clip
+erstellen* (auf Wunsch öffnet sich danach der Editor) und *Raid*, wo ein
+zweiter Druck den Countdown wieder abbricht.
+
+**Chat und Moderation.** Eine vorbereitete *Chatnachricht*, der *Chatmodus*
+für Slow, Nur-Abonnenten, Nur-Follower, Nur-Emotes und Keine-Wiederholungen —
+die Taste zeigt, was gerade gilt, und ein Druck schaltet um. Dazu *Chat
+leeren* und *Shoutout*.
+
+**Umfragen und Vorhersagen.** Frage und Antworten stehen in der Belegung,
+getrennt durch einen senkrechten Strich. Läuft schon eine Umfrage, beendet
+der Druck sie. Bei einer Vorhersage sperrt der erste Druck die Wetten, der
+nächste löst sie zur eingestellten Antwort auf.
+
+**Anzeigen.** *Streamstatus* zeigt Zuschauer, Laufzeit oder Follower — was
+groß dasteht, stellst du ein; ein farbiger Streifen unten sagt live oder
+nicht. *Follower* zeigt nur die Zahl. Beide gibt es auch auf dem Dial.
+
+**Was Twitch nicht kann: den Stream starten.** Die Helix-API hat dafür
+schlicht keinen Aufruf — an Stream-Endpunkten gibt es nur Streamschlüssel
+abfragen, Streams nachschlagen, Marker setzen und den Sendeplan pflegen.
+Das ist auch folgerichtig: Twitch *empfängt* nur; losgeschickt wird der
+Stream von deiner Software. Losgehen lässt du ihn deshalb mit der Aktion
+*Stream* aus dem OBS-Plugin. Wer beides auf einer Taste will — Titel setzen
+und live gehen —, legt eine Multi-Aktion an: erster Schritt *Twitch → Titel
+setzen*, zweiter Schritt *OBS → Stream*.
+
+Was nicht angezeigt werden kann, wird nicht behauptet: Ohne Verbindung steht
+dort „nicht verbunden" und keine Zahl. Gezählt wird alle 20 Sekunden nach —
+Twitch begrenzt die Zahl der Anfragen, und acht Kacheln sollen nicht acht
+Abfragen auslösen.
+
+### Govee
+
+**Einrichten.** Govee gibt jedem seinen eigenen Schlüssel: In der
+Govee-Home-App unter *Profil → Einstellungen → Apply for API Key* anfordern,
+er kommt per Mail. Dann unter *Plugins → Govee → Plugin-Einstellungen*
+eintragen.
+
+**Zwei Schnittstellen, ein Schalter.** Govee betreibt zwei APIs
+nebeneinander, und welche bei welchem Gerät funktioniert, lässt sich von
+außen nicht vorhersagen. An einem H615C meldete die neue die Helligkeit als
+154 und wies genau diesen Wert beim Setzen als „out of range" ab; sie hielt
+das Gerät zeitweise für offline, während die alte es einwandfrei schaltete;
+und sie quittierte Farbbefehle mit „success", ohne dass sich etwas änderte.
+Deshalb steht das zur Wahl statt zu raten:
+
+* **Alt** (Vorgabe) — `developer-api.govee.com`. Erprobt, kennt aber keine
+  Szenen.
+* **Neu** — `openapi.api.govee.com`. Kennt Szenen.
+* **Beide** — jeder Befehl geht über beide Wege. Für Geräte, bei denen die
+  neue quittiert, ohne zu handeln. Danach füllen sich die Auswahllisten von selbst — welche Geräte da
+sind und was sie können, sagt Govee, hier wird nichts geraten.
+
+**An/Aus** schaltet ein Gerät um; wahlweise nur ein oder nur aus, wenn eine
+Taste immer dasselbe tun soll. Die Kachel trägt einen farbigen Rand: gelb
+wenn an, grau wenn aus, rot wenn das Gerät nicht antwortet. Brennt eine
+Farbe, hat der Rand sie.
+
+**Helligkeit** setzt einen festen Wert; am Dial drehst du in einstellbaren
+Schritten. **Farbe** und **Farbtemperatur** funktionieren genauso — die
+Kachel zeigt die eingestellte Farbe schon, bevor du drückst, bei Weiß
+ungefähr die Lichtfarbe von warm bis tageslicht.
+
+**Szene** ruft ab, was das Gerät selbst an Szenen mitbringt. Die Liste kommt
+vom Gerät; ein Modell ohne Szenen zeigt eine leere.
+
+**Alle Geräte** ist die Taste für den Weg zur Tür. Beim Umschalten gilt:
+Brennt irgendwo Licht, geht alles aus. Jedes Gerät für sich umzuschalten
+ergäbe ein halb erleuchtetes Zimmer, und danach weiß niemand mehr, was der
+nächste Druck tut.
+
+**Govee zählt mit.** Dreißig Zustandsabfragen je Minute und Gerät — acht
+Kacheln, die jede Sekunde nachsehen, wären sofort gesperrt. Deshalb wird
+gebündelt abgefragt, alle 25 Sekunden, und nur für Geräte, die gerade auf
+einer sichtbaren Taste liegen. Was du selbst schaltest, steht sofort auf der
+Kachel, ohne auf die nächste Abfrage zu warten. Bremst Govee doch einmal,
+steht das im Klartext da statt „unbekannter Fehler".
 
 ## Nachinstallieren
 

@@ -278,6 +278,25 @@ def main() -> None:
             check("die Prüfsumme stimmt mit der des Archivs überein",
                   ergebnis["sha256"] == hashlib.sha256(archiv).hexdigest())
 
+            print("\nVersionen vergleichen")
+            faelle = [
+                ("1.0.1", "1.0.0", True), ("1.0.0", "1.0.1", False),
+                ("1.0.0", "1.0.0", False),
+                # Der Klassiker: zeichenweise wäre 1.10 kleiner als 1.9.
+                ("1.10.0", "1.9.0", True), ("1.9.0", "1.10.0", False),
+                ("1.1", "1.0.9", True), ("1.1", "1.1.0", False),
+                ("2.0", "1.99.99", True),
+                # Was keine Zahl ist, zählt als 0 — niemand soll aus Versehen
+                # von einer Fassung auf eine Vorabfassung „aktualisieren".
+                ("1.0.0-beta", "1.0.0", False),
+            ]
+            for neuer, alter, erwartet in faelle:
+                check(f"{neuer} ist {'neuer' if erwartet else 'nicht neuer'} als {alter}",
+                      store.neuer_als(neuer, alter) is erwartet,
+                      str(store.neuer_als(neuer, alter)))
+            check("1.10.2 wird zu (1, 10, 2)", store.als_zahlen("1.10.2") == (1, 10, 2),
+                  str(store.als_zahlen("1.10.2")))
+
             print("\nBewerten")
             # Angemeldet ist gerade der Moderator; der Autor kommt gleich
             # als zweite Stimme dazu.
@@ -364,6 +383,44 @@ def main() -> None:
             check("fremde Einreichungen gehen niemanden etwas an",
                   _wirft(lambda: store.zuruecknehmen(slug, "1.1.0"), store.StoreError))
             store.schreib_token(token)
+
+            print("\nEine neue Fassung finden und einspielen")
+            store.vergiss()
+            check("mit der aktuellen Fassung gibt es nichts zu tun",
+                  store.verfuegbare_updates({slug: "1.0.0"}) == [],
+                  json.dumps(store.verfuegbare_updates({slug: "1.0.0"})))
+            check("und für nicht installierte Plugins auch nicht",
+                  store.verfuegbare_updates({}) == [])
+
+            # Hochladen darf nur, wem das Plugin gehört — gerade ist die
+            # Moderation angemeldet.
+            zweite = baue_plugin(Path(tmp) / "zweite", slug, version="1.2.0")
+            store.schreib_token(token)
+            store.hochladen(store.packe(zweite), dateiname=f"{slug}.zip")
+            store.schreib_token(mod_token)
+            node("test-approve.mjs", slug, umgebung=umgebung)
+            store.vergiss()
+
+            gefunden = store.verfuegbare_updates({slug: "1.0.0"})
+            check("die neue Fassung wird gefunden", len(gefunden) == 1,
+                  json.dumps(gefunden))
+            if gefunden:
+                eintrag = gefunden[0]
+                check("mit alter und neuer Nummer",
+                      (eintrag["installed"], eintrag["available"]) == ("1.0.0", "1.2.0"),
+                      json.dumps(eintrag))
+                check("und sie lässt sich mit dieser App benutzen", eintrag["usable"])
+            check("wer schon die neue hat, bekommt nichts angeboten",
+                  store.verfuegbare_updates({slug: "1.2.0"}) == [])
+            check("und wer eine noch neuere hat, erst recht nicht",
+                  store.verfuegbare_updates({slug: "2.0.0"}) == [])
+
+            ergebnis = store.installiere(slug)
+            check("das Einspielen holt die neue Fassung",
+                  ergebnis["version"] == "1.2.0", json.dumps(ergebnis))
+            store.vergiss()
+            check("danach ist nichts mehr offen",
+                  store.verfuegbare_updates({slug: "1.2.0"}) == [])
 
             print("\nAbmelden")
             store.abmelden()

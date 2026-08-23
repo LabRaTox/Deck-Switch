@@ -1,7 +1,7 @@
 {
   "id": "spotify",
   "name": "Spotify",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "type": "action",
   "author": "LabRaTox",
   "category": "music",
@@ -11,8 +11,8 @@
     "en": "Music control without switching windows: play, pause, skip tracks, shuffle, repeat and volume — straight from the deck."
   },
   "changelog": {
-    "de": "1.1.0 — Playlists direkt starten, Lautstärke wahlweise über PipeWire, Albumbild als Hintergrund am Dial.",
-    "en": "1.1.0 — start playlists directly, volume via PipeWire if you prefer, album art as dial background."
+    "de": "1.1.2 — Nur innen drin: Das Plugin holt seine Hilfsdatei jetzt relativ. Damit können zwei Plugins Dateien gleich benennen, ohne sich gegenseitig auszubremsen.",
+    "en": "1.1.2 — Under the hood only: the plugin now imports its helper file relatively, so two plugins can name files alike without getting in each other's way."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",

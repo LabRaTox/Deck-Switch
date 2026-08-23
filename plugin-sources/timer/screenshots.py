@@ -41,7 +41,12 @@ def _plugin():
     from deckswitch.services.render import RenderService
 
     manifest_dict = json.loads((ORDNER / "manifest.json").read_text(encoding="utf-8"))
-    spec = importlib.util.spec_from_file_location("timer_bilder", ORDNER / "plugin.py")
+    # Als Paket laden, genau wie die App: Sonst greifen die relativen
+    # Importe der Nachbardateien nicht.
+    spec = importlib.util.spec_from_file_location(
+        "timer_bilder", ORDNER / "plugin.py",
+        submodule_search_locations=[str(ORDNER)],
+    )
     modul = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = modul
     spec.loader.exec_module(modul)

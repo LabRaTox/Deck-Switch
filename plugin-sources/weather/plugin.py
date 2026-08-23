@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw
 from deckswitch.plugins.base import ActionPlugin
 from deckswitch.services.backgrounds import parse_color
 
-from api import Location, OpenMeteo, WeatherData, WeatherError, aqi_band, describe, icon_for
+from .api import Location, OpenMeteo, WeatherData, WeatherError, aqi_band, describe, icon_for
 
 ACCENT = "#0ea5e9"
 

@@ -25,6 +25,7 @@ import type {
   StoreAccount,
   StoreBewertung,
   StoreLoginStart,
+  StoreUpdate,
   StoreMinePlugin,
   StorePlugin,
   StoreUser,
@@ -511,6 +512,10 @@ export const api = {
     ),
 
   storeAccount: () => request<StoreAccount>("/api/store/account"),
+
+  /** Was von den installierten Plugins im Store neuer vorliegt. */
+  storeUpdates: () =>
+    request<{ count: number; updates: StoreUpdate[] }>("/api/store/updates"),
 
   /** Wie ein Plugin ankommt — samt eigener Stimme, wenn man angemeldet ist. */
   storeBewertung: (slug: string) =>

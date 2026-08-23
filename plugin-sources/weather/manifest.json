@@ -4,7 +4,7 @@
     "de": "Wetter",
     "en": "Weather"
   },
-  "version": "1.0.0",
+  "version": "1.0.2",
   "type": "action",
   "author": "LabRaTox",
   "category": "monitoring",
@@ -14,8 +14,8 @@
     "en": "Current weather, forecast and air quality on keys and dials — no account, no API key."
   },
   "changelog": {
-    "de": "Erste Fassung: aktuelles Wetter, Vorhersage und Luftqualität — ohne Konto und ohne API-Schlüssel.",
-    "en": "First release: current weather, forecast and air quality — no account, no API key."
+    "de": "1.0.2 — Nur innen drin: Das Plugin holt seine Hilfsdatei jetzt relativ. Damit können zwei Plugins Dateien gleich benennen, ohne sich gegenseitig auszubremsen.",
+    "en": "1.0.2 — Under the hood only: the plugin now imports its helper file relatively, so two plugins can name files alike without getting in each other's way."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",

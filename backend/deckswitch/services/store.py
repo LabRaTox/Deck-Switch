@@ -312,6 +312,89 @@ def _hol_bild(adresse: str) -> tuple[bytes, str]:
 # --------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------
+# Versionen vergleichen
+# --------------------------------------------------------------------------
+
+
+def als_zahlen(version: str) -> tuple[int, ...]:
+    """``"1.10.2"`` → ``(1, 10, 2)`` — zum Vergleichen, nicht zum Anzeigen.
+
+    Zeichenweise verglichen wäre ``1.10`` kleiner als ``1.9``, und genau
+    dieser Fehler fällt erst auf, wenn die zehnte Fassung erscheint. Was
+    keine Zahl ist, zählt als 0: ``1.0.0-beta`` ist damit dasselbe wie
+    ``1.0.0``, und das ist die richtige Vorsicht — niemand soll aus Versehen
+    von einer Fassung auf eine Vorabfassung „aktualisiert" werden.
+    """
+    teile: list[int] = []
+    for stueck in str(version or "").split("."):
+        ziffern = ""
+        for zeichen in stueck:
+            if not zeichen.isdigit():
+                break
+            ziffern += zeichen
+        teile.append(int(ziffern) if ziffern else 0)
+    return tuple(teile) or (0,)
+
+
+def neuer_als(kandidat: str, vorhanden: str) -> bool:
+    """Ist ``kandidat`` eine spätere Fassung als ``vorhanden``?"""
+    a, b = als_zahlen(kandidat), als_zahlen(vorhanden)
+    # Unterschiedlich viele Stellen auffüllen: 1.1 und 1.1.0 sind dasselbe.
+    laenge = max(len(a), len(b))
+    a += (0,) * (laenge - len(a))
+    b += (0,) * (laenge - len(b))
+    return a > b
+
+
+def _passt_zur_app(mindestens: str | None) -> bool:
+    """Läuft eine Fassung mit dieser App — oder verlangt sie eine neuere?"""
+    if not mindestens:
+        return True
+    from .. import __version__
+
+    return not neuer_als(mindestens, __version__)
+
+
+def verfuegbare_updates(installiert: dict[str, str]) -> list[dict[str, Any]]:
+    """Was von den installierten Plugins im Store neuer vorliegt.
+
+    ``installiert`` ist ``{slug: version}``. Zurück kommt je Plugin ein
+    Eintrag mit alter und neuer Nummer — und was sich geändert hat, damit
+    die Oberfläche das zeigen kann, ohne noch einmal zu fragen.
+
+    Nicht angeboten wird, was diese App nicht ausführen kann: Ein Plugin,
+    das eine neuere Fassung von DECK//SWITCH verlangt, wäre nach dem
+    „Aktualisieren" kaputt statt neu.
+    """
+    if not installiert:
+        return []
+
+    eintraege = katalog().get("plugins", [])
+    updates: list[dict[str, Any]] = []
+    for eintrag in eintraege:
+        slug = str(eintrag.get("slug") or "")
+        habe = installiert.get(slug)
+        if habe is None:
+            continue
+        neueste = eintrag.get("latest") or {}
+        dort = str(neueste.get("version") or "")
+        if not dort or not neuer_als(dort, habe):
+            continue
+        updates.append({
+            "slug": slug,
+            "name": eintrag.get("name") or slug,
+            "installed": habe,
+            "available": dort,
+            "changelog": neueste.get("changelog"),
+            "size": neueste.get("size"),
+            "released_at": neueste.get("released_at"),
+            "min_app_version": neueste.get("min_app_version"),
+            "usable": _passt_zur_app(neueste.get("min_app_version")),
+        })
+    return sorted(updates, key=lambda u: str(u["slug"]))
+
+
 def _neueste(daten: dict[str, Any]) -> dict[str, Any] | None:
     """Die neueste Fassung, die noch im Katalog steht.
 

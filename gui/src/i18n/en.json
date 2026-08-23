@@ -275,7 +275,14 @@
       "minApp": "Requires app version"
     },
     "checksumAnnounced": "Announced checksum: {{hash}}… — verified before unpacking.",
-    "checksumMissing": "No checksum: whatever is at that address will be installed."
+    "checksumMissing": "No checksum: whatever is at that address will be installed.",
+    "twitchConnect": "Connect to Twitch",
+    "twitchConnecting": "Connecting …",
+    "twitchConnected": "Connected as {{user}}",
+    "twitchForget": "Sign out",
+    "twitchEnterCode": "Enter this code at Twitch:",
+    "twitchOpenPage": "Open twitch.tv/activate",
+    "twitchWaiting": "Waiting for confirmation at Twitch …"
   },
   "settings": {
     "title": "Settings",
@@ -531,7 +538,7 @@
     "pendingBadge": "Something in the store is awaiting review",
     "tag": "Store",
     "source": "Source",
-    "update": "To {{version}}",
+    "update": "{{version}}",
     "newVersion": "Version {{version}} is in the store",
     "submitTitle": "Submit a plugin",
     "submitNeedsLogin": "You need to be signed in to the store to submit.",
@@ -570,7 +577,14 @@
     "ratingAddComment": "Write something about it",
     "ratingEditComment": "Edit your text",
     "ratingCommentPlaceholder": "What did you notice? 500 characters at most.",
-    "ratingYours": "your rating"
+    "ratingYours": "your rating",
+    "updatesAvailable": "{{count}} update available",
+    "updatesAvailable_other": "{{count}} updates available",
+    "updateAll": "Update all",
+    "updatedAll": "{{count}} plugin updated",
+    "updatedAll_other": "{{count}} plugins updated",
+    "updateNeedsNewerApp": "Some of these need a newer version of DECK//SWITCH.",
+    "updateNeedsApp": "Needs DECK//SWITCH {{version}} or newer"
   },
   "profiles": {
     "title": "Profile",

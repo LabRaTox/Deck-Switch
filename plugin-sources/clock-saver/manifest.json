@@ -1,7 +1,7 @@
 {
   "id": "clock-saver",
   "name": "Uhr-Schoner",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "screensaver",
   "author": "LabRaTox",
   "category": "screensaver",
@@ -11,8 +11,8 @@
     "en": "Time and date as one digit per key."
   },
   "changelog": {
-    "de": "Erste Fassung: Uhrzeit als je eine Ziffer pro Taste, Datum im Touchstrip, Farbe frei wählbar.",
-    "en": "First release: time as one digit per key, date on the touch strip, colour of your choosing."
+    "de": "1.0.1 — Das Bild in der Detailansicht zeichnet der Schoner jetzt selbst, statt es nachzubauen.",
+    "en": "1.0.1 — The image in the detail view is now drawn by the screensaver itself instead of being recreated."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
