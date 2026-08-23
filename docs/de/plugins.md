@@ -184,8 +184,13 @@ weil sie kein Ziel hat. Drehen am Dial setzt sie zurück, solange sie steht.
 
 **Wecker** klingelt zu einer festen Uhrzeit, wahlweise täglich, montags bis
 freitags, am Wochenende oder einmalig. Ein Druck schaltet ihn scharf oder
-aus, am Dial geht die Weckzeit in Fünf-Minuten-Schritten. Unter der Uhrzeit
-steht, wie lange es noch dauert.
+aus, am Dial geht die Weckzeit in Fünf-Minuten-Schritten.
+
+Unter der Uhrzeit steht die Zeit bis zum nächsten Klingeln, und die zählt
+die Tage mit: Wer am Samstagabend auf einen Wecker für Montag bis Freitag
+schaut, liest „in 1 Tag 11 h" und nicht „in 11 h". Ein einmaliger Wecker, der
+geklingelt hat, ist vorbei — dann steht dort nichts mehr, statt den nächsten
+Tag zu versprechen. Ein Druck macht ihn wieder scharf.
 
 Er klingelt in Schleife, bis du auf die Taste drückst — ein Wecker, der einmal
 piept und dann schweigt, weckt niemanden. Über *Ton wiederholen* lässt sich

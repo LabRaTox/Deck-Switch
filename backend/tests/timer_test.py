@@ -258,6 +258,72 @@ async def laufzeit() -> int:
               plugin._anzeige("alarm", ctx.settings, lauf) == gleich,
               plugin._anzeige("alarm", ctx.settings, lauf))
 
+        print("\n== Wann der Wecker das nächste Mal klingelt ==")
+        # Feste Zeitpunkte statt „jetzt": Sonst hinge das Ergebnis davon ab,
+        # an welchem Wochentag die Suite läuft — und genau die Wochentage
+        # sind hier der Punkt.
+        SAMSTAG = datetime(2026, 8, 22, 20, 0)   # Samstagabend
+        DIENSTAG = datetime(2026, 8, 18, 6, 0)   # Dienstagmorgen
+
+        wecker_ctx = ctx_for("alarm", {"time": "07:00"}, index=10)
+        lauf = plugin._hole("alarm", wecker_ctx.settings, wecker_ctx)
+
+        def termin(tage, jetzt, zeit="07:00"):
+            return plugin._naechster_termin(lauf, {"time": zeit, "days": tage,
+                                                   "armed": True}, jetzt)
+
+        check("täglich: heute Abend heißt morgen früh",
+              termin("daily", SAMSTAG) == datetime(2026, 8, 23, 7, 0),
+              str(termin("daily", SAMSTAG)))
+        check("täglich: morgens vor der Zeit heißt noch heute",
+              termin("daily", DIENSTAG) == datetime(2026, 8, 18, 7, 0),
+              str(termin("daily", DIENSTAG)))
+        check("Mo–Fr: am Samstagabend erst am Montag",
+              termin("weekdays", SAMSTAG) == datetime(2026, 8, 24, 7, 0),
+              str(termin("weekdays", SAMSTAG)))
+        check("Wochenende: am Dienstagmorgen erst am Samstag",
+              termin("weekend", DIENSTAG) == datetime(2026, 8, 22, 7, 0),
+              str(termin("weekend", DIENSTAG)))
+
+        check("und die Anzeige nennt die Tage dazwischen",
+              plugin._restzeit(datetime(2026, 8, 24, 7, 0) - SAMSTAG) == "in 1 Tag 11 h",
+              plugin._restzeit(datetime(2026, 8, 24, 7, 0) - SAMSTAG))
+        check("Mehrzahl, wenn es mehrere sind",
+              plugin._restzeit(datetime(2026, 8, 22, 7, 0) - DIENSTAG) == "in 4 Tagen 1 h",
+              plugin._restzeit(datetime(2026, 8, 22, 7, 0) - DIENSTAG))
+        check("unter einem Tag stehen Stunden und Minuten",
+              plugin._restzeit(timedelta(hours=3, minutes=5)) == "in 3 h 05 min",
+              plugin._restzeit(timedelta(hours=3, minutes=5)))
+        check("unter einer Stunde nur Minuten",
+              plugin._restzeit(timedelta(minutes=42)) == "in 42 min",
+              plugin._restzeit(timedelta(minutes=42)))
+        check("und in der letzten Minute steht „jetzt“",
+              plugin._restzeit(timedelta(seconds=20)) == "jetzt",
+              plugin._restzeit(timedelta(seconds=20)))
+
+        print("\n== Ein einmaliger Wecker ist danach vorbei ==")
+        einmal = ctx_for("alarm", {"time": datetime.now().strftime("%H:%M"),
+                                   "days": "once", "armed": True, "sound": "none"},
+                         index=11)
+        lauf_einmal = plugin._hole("alarm", einmal.settings, einmal)
+        plugin._runde()
+        check("er klingelt einmal", lauf_einmal.fertig)
+        plugin.on_key_down("alarm", einmal.settings, einmal)
+        check("der Druck stellt ihn ab", not lauf_einmal.fertig)
+        check("und er bleibt aufgebraucht", lauf_einmal.verbraucht,
+              str(lauf_einmal.verbraucht))
+        check("dann steht keine Restzeit mehr da",
+              plugin._zusatz("alarm", einmal.settings, lauf_einmal) == "",
+              plugin._zusatz("alarm", einmal.settings, lauf_einmal))
+        check("und es gibt keinen Termin mehr",
+              plugin._naechster_termin(lauf_einmal, einmal.settings) is None)
+        check("auch der Balken bleibt weg",
+              plugin._fortschritt("alarm", einmal.settings, lauf_einmal) is None)
+        plugin.on_key_down("alarm", einmal.settings, einmal)
+        check("ein Druck macht ihn wieder scharf",
+              not lauf_einmal.verbraucht
+              and plugin._naechster_termin(lauf_einmal, einmal.settings) is not None)
+
         print("\n== Der Wecker klingelt, bis jemand drückt ==")
         wecker = ctx_for("alarm", {"time": datetime.now().strftime("%H:%M"),
                                    "days": "daily", "armed": True, "volume": 60},

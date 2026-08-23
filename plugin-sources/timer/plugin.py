@@ -24,7 +24,7 @@ import contextlib
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +45,18 @@ FARBE_LAEUFT = "#f59e0b"
 FARBE_PAUSE = "#9ca3af"
 FARBE_FERTIG = "#ef4444"
 FARBE_BEREIT = "#6b7280"
+
+#: Die wenigen Wörter, die auf einer Kachel stehen. Ein Plugin bekommt vom
+#: Rahmenwerk keine Übersetzung mitgeliefert; für sechs Begriffe lohnt kein
+#: Apparat, aber deutsche Wörter in einer englischen Oberfläche fallen auf.
+WOERTER = {
+    "de": {"paused": "pausiert", "done": "fertig", "off": "aus",
+           "ringing": "klingelt", "now": "jetzt", "in": "in",
+           "day": "Tag", "days": "Tagen", "min": "min"},
+    "en": {"paused": "paused", "done": "done", "off": "off",
+           "ringing": "ringing", "now": "now", "in": "in",
+           "day": "day", "days": "days", "min": "min"},
+}
 
 #: Der Rahmen um die Stoppuhr. Sie hat kein Ziel und deshalb auch keinen
 #: Balken, an dem man ihren Zustand ablesen könnte — zwei Farben am Rand
@@ -141,6 +153,10 @@ class Lauf:
     #: er in derselben Minute nicht zweimal losgeht.
     scharf: bool | None = None
     zuletzt_geklingelt: str = ""
+    #: Ein einmaliger Wecker, der geklingelt hat, ist aufgebraucht. Das ist
+    #: etwas anderes als „von Hand ausgeschaltet": Er zeigt dann gar nichts
+    #: mehr an, statt eine Restzeit zu behaupten, die es nicht gibt.
+    verbraucht: bool = False
 
     def verstrichen(self) -> float:
         if self.laeuft:
@@ -223,7 +239,7 @@ class TimerPlugin(ActionPlugin):
                     lauf.fertig = True
                     lauf.zuletzt_geklingelt = datetime.now().strftime("%Y-%m-%d %H:%M")
                     if str(einstellungen.get("days") or "daily") == "once":
-                        lauf.scharf = False
+                        lauf.verbraucht = True
                     self._klingle(schluessel, einstellungen,
                                   standard_wiederholung=True)
                     etwas_passiert = True
@@ -277,7 +293,13 @@ class TimerPlugin(ActionPlugin):
             return
 
         if action_id == "alarm":
-            lauf.scharf = not self._scharf(lauf, settings)
+            if lauf.verbraucht:
+                # Ein aufgebrauchter Einmal-Wecker wird durch den Druck
+                # wieder scharf — sonst wäre die Taste danach tot.
+                lauf.verbraucht = False
+                lauf.scharf = True
+            else:
+                lauf.scharf = not self._scharf(lauf, settings)
             ctx.request_redraw()
             return
 
@@ -369,8 +391,45 @@ class TimerPlugin(ActionPlugin):
             return lauf.scharf
         return bool(settings.get("armed", True))
 
+    @staticmethod
+    def _tag_passt(tage: str, wochentag: int) -> bool:
+        """``wochentag`` nach Python-Zählung: 0 ist Montag, 6 ist Sonntag."""
+        if tage == "weekdays":
+            return wochentag < 5
+        if tage == "weekend":
+            return wochentag >= 5
+        return True
+
+    def _naechster_termin(
+        self, lauf: Lauf, settings: dict[str, Any], jetzt: datetime | None = None
+    ) -> datetime | None:
+        """Wann es das nächste Mal klingelt — ``None``, wenn gar nicht mehr.
+
+        Vorher rechnete die Anzeige nur die Differenz innerhalb eines Tages
+        aus. Bei „Montag bis Freitag" stand deshalb am Samstag „in 8 h",
+        obwohl bis zum nächsten Klingeln zwei Tage vergehen. Hier wird der
+        Termin gesucht, statt die Uhrzeit zu verrechnen.
+        """
+        if lauf.verbraucht or not self._scharf(lauf, settings):
+            return None
+
+        jetzt = jetzt or datetime.now()
+        minuten = self._weckzeit(lauf, settings)
+        heute = jetzt.replace(hour=minuten // 60, minute=minuten % 60,
+                              second=0, microsecond=0)
+        tage = str(settings.get("days") or "daily")
+        # Acht Tage reichen: Bei „Wochenende" liegen höchstens sieben
+        # zwischen zwei Terminen.
+        for versatz in range(8):
+            kandidat = heute + timedelta(days=versatz)
+            if kandidat <= jetzt:
+                continue
+            if self._tag_passt(tage, kandidat.weekday()):
+                return kandidat
+        return None
+
     def _wecker_faellig(self, lauf: Lauf, settings: dict[str, Any]) -> bool:
-        if lauf.fertig or not self._scharf(lauf, settings):
+        if lauf.fertig or lauf.verbraucht or not self._scharf(lauf, settings):
             return False
         jetzt = datetime.now()
         stempel = jetzt.strftime("%Y-%m-%d %H:%M")
@@ -378,13 +437,7 @@ class TimerPlugin(ActionPlugin):
             return False
         if jetzt.hour * 60 + jetzt.minute != self._weckzeit(lauf, settings):
             return False
-        tage = str(settings.get("days") or "daily")
-        wochentag = jetzt.weekday()  # 0 = Montag
-        if tage == "weekdays" and wochentag > 4:
-            return False
-        if tage == "weekend" and wochentag < 5:
-            return False
-        return True
+        return self._tag_passt(str(settings.get("days") or "daily"), jetzt.weekday())
 
     # -- Darstellung -------------------------------------------------------
 
@@ -406,6 +459,29 @@ class TimerPlugin(ActionPlugin):
         if lauf.verstrichen() > 0:
             return "pausiert"
         return "bereit"
+
+    def _wort(self, name: str) -> str:
+        try:
+            sprache = self.services.config.app.language
+        except AttributeError:
+            sprache = "de"
+        return WOERTER.get(sprache, WOERTER["de"]).get(name, name)
+
+    def _restzeit(self, offen: timedelta) -> str:
+        """„in 12 min", „in 3 h 05 min", „in 2 Tagen 4 h"."""
+        sekunden = max(0, int(offen.total_seconds()))
+        if sekunden < 60:
+            return self._wort("now")
+        minuten = sekunden // 60
+        tage, rest = divmod(minuten, 24 * 60)
+        stunden, minuten_rest = divmod(rest, 60)
+        wort = self._wort("in")
+        if tage:
+            einheit = self._wort("day") if tage == 1 else self._wort("days")
+            return f"{wort} {tage} {einheit} {stunden} h"
+        if stunden:
+            return f"{wort} {stunden} h {minuten_rest:02d} {self._wort('min')}"
+        return f"{wort} {minuten_rest} {self._wort('min')}"
 
     def _anzeige(self, action_id, settings, lauf: Lauf) -> str:
         """Der große Text auf der Kachel."""
@@ -430,6 +506,11 @@ class TimerPlugin(ActionPlugin):
             return FARBE_PAUSE
         return FARBE_BEREIT
 
+    #: Fenster, über das der Balken eines Weckers läuft. Ein Balken über eine
+    #: ganze Woche stünde tagelang fast leer und sagte nichts; über den
+    #: letzten Tag zeigt er, dass es gleich so weit ist.
+    WECKER_FENSTER = timedelta(hours=24)
+
     def _fortschritt(self, action_id, settings, lauf: Lauf) -> float | None:
         """0…1 für den Balken, ``None`` wo er nichts zu sagen hätte."""
         if action_id == "countdown":
@@ -438,37 +519,39 @@ class TimerPlugin(ActionPlugin):
                 return 1.0
             return min(1.0, lauf.verstrichen() / soll)
         if action_id == "alarm":
-            # Wie weit ist der Tag bis zur Weckzeit fortgeschritten? Damit
-            # sieht man auf einen Blick, ob es gleich so weit ist.
-            if not self._scharf(lauf, settings):
+            if lauf.fertig:
+                return 1.0
+            termin = self._naechster_termin(lauf, settings)
+            if termin is None:
                 return None
-            jetzt = datetime.now()
-            ziel = self._weckzeit(lauf, settings)
-            minuten_jetzt = jetzt.hour * 60 + jetzt.minute
-            offen = (ziel - minuten_jetzt) % (24 * 60)
-            return 1.0 - offen / (24 * 60)
+            offen = termin - datetime.now()
+            if offen > self.WECKER_FENSTER:
+                return 0.0
+            return 1.0 - offen / self.WECKER_FENSTER
         return None
 
     def _zusatz(self, action_id, settings, lauf: Lauf) -> str:
         """Die kleine Zeile unter der Zeit."""
         if action_id == "alarm":
             if lauf.fertig:
-                return "klingelt"
+                return self._wort("ringing")
+            # Ein einmaliger Wecker, der geklingelt hat, ist vorbei. Dort
+            # noch „in 23 h" zu schreiben, hieße den nächsten Tag zu
+            # versprechen — und den gibt es bei „einmalig" nicht.
+            if lauf.verbraucht:
+                return ""
             if not self._scharf(lauf, settings):
-                return "aus"
-            ziel = self._weckzeit(lauf, settings)
-            jetzt = datetime.now()
-            offen = (ziel - (jetzt.hour * 60 + jetzt.minute)) % (24 * 60)
-            if offen == 0:
-                return "jetzt"
-            stunden, minuten = divmod(offen, 60)
-            return f"in {stunden} h {minuten:02d} min" if stunden else f"in {minuten} min"
+                return self._wort("off")
+            termin = self._naechster_termin(lauf, settings)
+            if termin is None:
+                return ""
+            return self._restzeit(termin - datetime.now())
         if lauf.fertig:
-            return "fertig"
+            return self._wort("done")
         if lauf.laeuft:
             return ""
         if lauf.verstrichen() > 0:
-            return "pausiert"
+            return self._wort("paused")
         return ""
 
     def render(self, action_id, settings, ctx):

@@ -177,7 +177,12 @@ it stands still.
 
 **Alarm clock** rings at a fixed time of day: every day, Monday to Friday, at
 the weekend, or once. A press arms or disarms it; on a dial the time moves in
-five-minute steps. Below the time it says how long is left.
+five-minute steps.
+
+Below the time is how long until it rings, days included: looking at a
+Monday-to-Friday alarm on a Saturday evening reads “in 1 day 11 h”, not “in
+11 h”. A one-off alarm that has rung is over — nothing is shown there any
+more, rather than promising a next day. A press arms it again.
 
 It keeps ringing until you press the key — an alarm that beeps once and then
 goes quiet wakes nobody. *Repeat the sound* turns that off. The countdown is
