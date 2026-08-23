@@ -1,0 +1,18 @@
+{
+  "SDKVersion": 2,
+  "Name": "Prüfseite",
+  "Version": "1.0.0",
+  "Author": "LabRaTox",
+  "Description": "Ein Plugin, das im Browser läuft. Nur zum Prüfen.",
+  "Icon": "imgs/plugin",
+  "CodePath": "index.html",
+  "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
+  "Actions": [
+    {
+      "Name": "Seite",
+      "UUID": "de.labratox.pruefseite.action",
+      "Icon": "imgs/plugin",
+      "States": [{ "Image": "imgs/plugin" }]
+    }
+  ]
+}

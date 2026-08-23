@@ -163,6 +163,52 @@ der Trefferliste. Die Daten frischt das Plugin alle zehn Minuten auf.
 Jede Belegung kann über *Abweichender Ort* eine eigene Stadt bekommen. So
 liegen Heimatort und Urlaubsziel nebeneinander auf dem Deck.
 
+## Plugins vom Elgato-Marketplace
+
+Eine `.streamDeckPlugin`-Datei lässt sich hier genauso installieren wie ein
+eigenes Plugin: unter *Plugins → Plugins installieren* ablegen. DECK//SWITCH
+übersetzt das fremde Manifest und startet das Plugin so, wie die
+Stream-Deck-Software es täte.
+
+Elgato-Plugins sind eigene Programme. Sie bekommen von uns einen WebSocket,
+melden sich daran an und reden danach in JSON: Wir schicken Tastendrücke und
+Drehungen, sie schicken Bilder, Beschriftungen und Zustände zurück. Ihre
+Einstellungsseite erscheint in der Belegung rechts, in einem abgeschotteten
+Rahmen — sie gehört dem Plugin, wir reichen sie nur durch.
+
+Jedes Plugin läuft in einem eigenen Prozess. Hängt eines, hängt es für sich.
+
+Drei Sorten gibt es, und sie brauchen Unterschiedliches:
+
+| Sorte | Woran man sie erkennt | Gebraucht wird |
+| --- | --- | --- |
+| Node | `CodePath` endet auf `.js` | `node` |
+| Browser | `CodePath` endet auf `.html` | Chromium |
+| Windows | `CodePath` endet auf `.exe` | `wine`, dazu die Laufzeit des Plugins |
+
+Ein Windows-Plugin läuft in einer Windows-Umgebung unter
+`~/.local/share/deckswitch/wine`. Die meisten sind in .NET geschrieben und
+bringen die Laufzeit **nicht** mit; sie muss einmalig in diese Umgebung:
+
+```sh
+./scripts/setup-wine-dotnet.py            # holt Runtime und Desktop Runtime
+./scripts/setup-wine-dotnet.py --pruefen  # nur nachsehen, was da ist
+```
+
+Das Skript lädt rund 80 MB bei Microsoft. Es ist bewusst kein Knopf in der
+App: Eine Anwendung sollte so etwas nicht ungefragt tun, und es ist einmalige
+Einrichtung. Fehlt die Laufzeit, sagt die Plugin-Karte genau das.
+
+**Anzeigen über den Dials.** Ein Plugin schickt Titel, Wert und Pegel und
+beschreibt in einer Layoutdatei, wo das steht — die wird Pixel für Pixel
+befolgt. Verlangt es stattdessen eine von Elgatos sechs Anordnungen
+(`$X1` … `$C1`), bauen wir sie nach deren Beschreibung: was worin steht,
+stimmt, die genauen Maße sind unsere. Elgato veröffentlicht sie nicht.
+
+**Was noch nicht geht:** Profile, die ein Plugin selbst mitbringt (`Profiles`
+im Manifest) — auf ein Profil *dieser* App kann es aber wechseln. Dazu alles,
+was Elgatos Software über das Protokoll hinaus anbietet.
+
 ## Nachinstallieren
 
 Unter *Plugins* stehen die Kacheln aus dem **Store** gleich neben deinen

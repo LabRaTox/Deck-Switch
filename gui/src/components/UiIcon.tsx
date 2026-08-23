@@ -47,6 +47,19 @@ const PATHS = {
     "M9 4v16",
     "M15 10l-2 2l2 2",
   ],
+  // Regler — aus dem mitgelieferten Tabler-Satz übernommen
+  // (adjustments-horizontal), damit die Oberfläche eine Handschrift hat.
+  adjustments: [
+    "M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    "M4 6l8 0",
+    "M16 6l4 0",
+    "M6 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    "M4 12l2 0",
+    "M10 12l10 0",
+    "M15 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    "M4 18l11 0",
+    "M19 18l1 0",
+  ],
   "sidebar-expand": [
     "M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12",
     "M9 4v16",

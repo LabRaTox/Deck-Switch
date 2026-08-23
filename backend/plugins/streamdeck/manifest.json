@@ -180,6 +180,62 @@
       ]
     },
     {
+      "id": "profile",
+      "name": {
+        "de": "Profil wechseln",
+        "en": "Switch profile"
+      },
+      "description": {
+        "de": "Schaltet dieses Deck auf ein anderes Profil um.",
+        "en": "Switches this deck to a different profile."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "layout-grid",
+      "states": [
+        {
+          "id": "active",
+          "name": {
+            "de": "Aktiv",
+            "en": "Active"
+          }
+        },
+        {
+          "id": "inactive",
+          "name": {
+            "de": "Inaktiv",
+            "en": "Inactive"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "profile_id",
+          "type": "select",
+          "label": {
+            "de": "Profil",
+            "en": "Profile"
+          },
+          "options_source": "profiles",
+          "help": {
+            "de": "Leer lassen für „zurück zum vorigen Profil“.",
+            "en": "Leave empty for “back to the previous profile”."
+          }
+        },
+        {
+          "key": "active_badge",
+          "type": "color",
+          "label": {
+            "de": "Rahmen wenn aktiv",
+            "en": "Border when active"
+          },
+          "default": "#22c55e"
+        }
+      ]
+    },
+    {
       "id": "next_page",
       "name": {
         "de": "Nächste Seite",

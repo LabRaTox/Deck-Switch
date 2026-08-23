@@ -149,6 +149,12 @@ class Step(BaseModel):
     #: Abgeschaltete Schritte bleiben in der Kette stehen, laufen aber nicht
     #: mit — praktisch beim Suchen, welcher Schritt hakt.
     enabled: bool = True
+    #: Welchen Zustand dieser Schritt herstellen soll — ``None`` heißt
+    #: „umschalten wie ein gewöhnlicher Druck". Gedacht für Aktionen mit
+    #: mehreren Zuständen: In einer Kette will man meist „stumm **an**" und
+    #: nicht „stumm umschalten", sonst hängt das Ergebnis davon ab, wie es
+    #: vorher stand. Elgato nennt das ``userDesiredState``.
+    desired_state: int | None = None
 
 
 class Slot(BaseModel):
@@ -262,6 +268,10 @@ class Profile(BaseModel):
     name: str = "Standard"
     root_page_id: str = ""
     pages: dict[str, Page] = Field(default_factory=dict)
+    #: Programme, bei denen dieses Profil von selbst nach vorn kommt —
+    #: Teilstücke der Fensterklasse oder des Titels, z. B. ``obs`` oder
+    #: ``code``. Leer heißt: nur von Hand oder über eine Taste.
+    auto_apps: list[str] = Field(default_factory=list)
 
     def root_page(self) -> Page:
         page = self.pages.get(self.root_page_id)

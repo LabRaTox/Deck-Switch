@@ -38,7 +38,7 @@ from pydantic import BaseModel, ValidationError
 from . import __version__
 from . import events as ev
 from . import paths
-from .config import Config, DeviceSettings, Page, Slot, TouchWallpaper
+from .config import Config, DeviceSettings, Page, Profile, Slot, TouchWallpaper
 from .plugins import installer
 from .runtime import Runtime
 from .virtualdeck import VirtualDevice
@@ -133,6 +133,20 @@ class DeckInput(BaseModel):
     #: nacheinander, ``rotate`` für das Mausrad auf einem Dial.
     action: str = "click"
     delta: int = 0
+
+
+class ProfileCreate(BaseModel):
+    """Ein neues Profil — leer oder als Kopie eines vorhandenen."""
+
+    name: str = ""
+    #: Kennung des Profils, das kopiert werden soll. Leer = leeres Profil.
+    copy_from: str = ""
+
+
+class ProfileUpdate(BaseModel):
+    name: str | None = None
+    #: Programme, bei denen dieses Profil von selbst nach vorn kommt.
+    auto_apps: list[str] | None = None
 
 
 class DeckUpdate(BaseModel):
@@ -566,6 +580,119 @@ def create_app(
     # ======================================================================
     # Config
     # ======================================================================
+
+    # ======================================================================
+    # Profile
+    #
+    # Ein Profil ist ein eigener Satz Seiten. Jedes Deck zeigt genau eines;
+    # gewechselt wird über ``PATCH /api/decks/{key}``. Gelöscht werden kann
+    # nur, was nicht das letzte ist — ohne Profil hätte ein Deck nichts
+    # anzuzeigen.
+    # ======================================================================
+
+    def _profil_liste() -> list[dict[str, Any]]:
+        benutzt: dict[str, list[str]] = {}
+        for binding in runtime.config.decks.values():
+            # Die Bindung ohne Namen ist der Platzhalter für „das erste
+            # Gerät". In der Liste stünde sonst „in Benutzung von " und
+            # dahinter nichts.
+            benutzt.setdefault(binding.profile_id, []).append(
+                binding.name or binding.serial or "Deck"
+            )
+        return [
+            {
+                "id": profil.id,
+                "name": profil.name,
+                "pages": len(profil.pages),
+                # Wer es gerade anzeigt — die GUI warnt damit vorm Löschen.
+                "decks": benutzt.get(profil.id, []),
+                "active": profil.id == runtime.config.active_profile_id,
+                "auto_apps": list(profil.auto_apps),
+            }
+            for profil in runtime.config.profiles.values()
+        ]
+
+    @app.get("/api/profiles")
+    async def list_profiles() -> dict[str, Any]:
+        return {"profiles": _profil_liste()}
+
+    @app.post("/api/profiles")
+    async def create_profile(payload: ProfileCreate) -> dict[str, Any]:
+        """Legt ein Profil an — leer oder als Kopie.
+
+        Die Kopie ist der übliche Fall: Wer ein zweites Profil anlegt, will
+        meist dasselbe noch einmal und dann etwas ändern. Kopiert werden
+        Seiten samt Belegungen, mit **neuen** Kennungen — sonst zeigten
+        beide Profile auf dieselben Seiten.
+        """
+        name = payload.name.strip() or "Neues Profil"
+        if payload.copy_from:
+            vorlage = runtime.config.profiles.get(payload.copy_from)
+            if vorlage is None:
+                raise HTTPException(404, "Vorlage nicht gefunden")
+            profil = _kopiere_profil(vorlage, name)
+        else:
+            wurzel = Page(name="Start")
+            profil = Profile(name=name, root_page_id=wurzel.id, pages={wurzel.id: wurzel})
+
+        runtime.config.profiles[profil.id] = profil
+        runtime.save_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="profile_created")
+        return {"profile": {"id": profil.id, "name": profil.name}}
+
+    @app.patch("/api/profiles/{profile_id}")
+    async def update_profile(profile_id: str, payload: ProfileUpdate) -> dict[str, Any]:
+        profil = runtime.config.profiles.get(profile_id)
+        if profil is None:
+            raise HTTPException(404, "Profil nicht gefunden")
+
+        if payload.name is not None:
+            name = payload.name.strip()
+            if not name:
+                raise HTTPException(422, "Ein Profil braucht einen Namen")
+            profil.name = name
+
+        if payload.auto_apps is not None:
+            profil.auto_apps = [m.strip() for m in payload.auto_apps if m.strip()]
+
+        runtime.save_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="profile_changed")
+        # Die erste Regel startet den Dienst, die letzte beendet ihn.
+        await runtime.smartprofile.neu_bewerten()
+        return {"ok": True}
+
+    @app.get("/api/profiles/automatik")
+    async def smartprofile_status() -> dict[str, Any]:
+        """Ob die Automatik läuft — und welches Fenster sie zuletzt sah."""
+        return runtime.smartprofile.status()
+
+    @app.delete("/api/profiles/{profile_id}")
+    async def delete_profile(profile_id: str) -> dict[str, Any]:
+        """Löscht ein Profil und setzt Decks, die daran hingen, um.
+
+        Das letzte bleibt stehen: Ein Deck ohne Profil hätte keine Seite und
+        damit nichts zu zeigen.
+        """
+        if profile_id not in runtime.config.profiles:
+            raise HTTPException(404, "Profil nicht gefunden")
+        if len(runtime.config.profiles) <= 1:
+            raise HTTPException(409, "Das letzte Profil kann nicht gelöscht werden")
+
+        del runtime.config.profiles[profile_id]
+        ersatz = next(iter(runtime.config.profiles))
+        if runtime.config.active_profile_id == profile_id:
+            runtime.config.active_profile_id = ersatz
+
+        umgezogen = []
+        for binding in runtime.config.decks.values():
+            if binding.profile_id == profile_id:
+                binding.profile_id = ersatz
+                umgezogen.append(binding.name or binding.serial or "Deck")
+        runtime.save_config()
+        for deck in runtime.decks.values():
+            deck.apply_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="profile_deleted")
+        return {"ok": True, "moved": umgezogen}
 
     @app.get("/api/config")
     async def get_config() -> dict[str, Any]:
@@ -1049,6 +1176,45 @@ def create_app(
         if candidate.suffix.lower() == ".svg":
             headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
         return FileResponse(candidate, media_type=media, headers=headers)
+
+    @app.get("/api/plugins/{plugin_id}/pi/{pfad:path}")
+    async def plugin_property_inspector(
+        plugin_id: str, pfad: str, context: str = "", action: str = ""
+    ) -> Response:
+        """Die Einstellungsseite eines Elgato-Plugins und alles, was sie lädt.
+
+        Elgato-Plugins beschreiben ihre Einstellungen nicht in Feldern, die
+        wir nachbauen könnten, sondern bringen eine eigene HTML-Seite mit.
+        Die liegt im Plugin-Ordner und wird hier ausgeliefert — samt ihrer
+        Skripte und Stile, sonst lädt sie halb.
+
+        Beim Aufruf mit ``context`` hängt diese Route der Seite den Anschluss
+        an: Elgato sieht dafür eine Funktion vor, die die Software mit Port,
+        Kennung und Zustand aufruft. Die GUI kann das nicht selbst tun — sie
+        zeigt die Seite in einem abgeschotteten Rahmen und kommt an deren
+        Inhalt bewusst nicht heran.
+        """
+        from .plugins.elgato import UNTERORDNER, ElgatoPlugin
+
+        plugin = runtime.registry.instance(plugin_id)
+        if not isinstance(plugin, ElgatoPlugin):
+            raise HTTPException(404, "Dieses Plugin hat keine eigene Einstellungsseite")
+
+        wurzel = (runtime.registry.get(plugin_id).directory / UNTERORDNER).resolve()
+        ziel = (wurzel / pfad).resolve()
+        # Der Pfad kommt aus einem fremden Manifest bzw. aus der Seite selbst.
+        if wurzel not in ziel.parents or not ziel.is_file():
+            raise HTTPException(404, "Datei nicht gefunden")
+
+        typ = mimetypes.guess_type(ziel.name)[0] or "application/octet-stream"
+        kopf = {"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"}
+
+        if not (context and ziel.suffix.lower() in (".html", ".htm")):
+            return FileResponse(ziel, media_type=typ, headers=kopf)
+
+        anschluss = plugin.anschluss(context, action)
+        seite = ziel.read_text(encoding="utf-8", errors="replace") + anschluss
+        return Response(content=seite, media_type="text/html; charset=utf-8", headers=kopf)
 
     @app.get("/api/plugins/{plugin_id}/screenshot/{index}")
     async def plugin_screenshot(plugin_id: str, index: int) -> Response:
@@ -1778,6 +1944,57 @@ def _check_move_target(profile, page_id: str, parent_id: str | None) -> None:
         raise HTTPException(404, "Übergeordnete Seite existiert nicht")
     if parent_id in profile.subtree_ids(page_id):
         raise HTTPException(400, "Eine Seite kann nicht unter sich selbst liegen")
+
+
+def _kopiere_profil(vorlage: Profile, name: str) -> Profile:
+    """Ein Profil samt Seiten kopieren — mit neuen Kennungen.
+
+    Die Seiten bekommen neue IDs, und alles, was auf eine Seite zeigt
+    (Unterseiten, Ordnertasten, „Gehe zu Seite"), wird mitgezogen. Ohne das
+    führte die Kopie zurück ins Original, und wer dort etwas ändert, ändert
+    es an zwei Stellen.
+    """
+    neue_ids = {alt_id: _neue_seiten_id() for alt_id in vorlage.pages}
+    seiten: dict[str, Page] = {}
+
+    for alt_id, seite in vorlage.pages.items():
+        kopie = seite.model_copy(deep=True)
+        kopie.id = neue_ids[alt_id]
+        if kopie.parent_id:
+            kopie.parent_id = neue_ids.get(kopie.parent_id, "")
+        for mapping in (kopie.keys, kopie.dials):
+            for slot in mapping.values():
+                _biege_seitenbezug(slot, neue_ids)
+        seiten[kopie.id] = kopie
+
+    return Profile(
+        name=name,
+        root_page_id=neue_ids.get(vorlage.root_page_id, next(iter(seiten), "")),
+        pages=seiten,
+    )
+
+
+def _neue_seiten_id() -> str:
+    from .config import _new_id
+
+    return _new_id()
+
+
+def _biege_seitenbezug(slot: Slot, neue_ids: dict[str, str]) -> None:
+    """Zieht Verweise auf Seiten in einer Belegung auf die Kopien um."""
+    for schluessel in ("page_id", "target_page_id"):
+        alt = slot.settings.get(schluessel)
+        if isinstance(alt, str) and alt in neue_ids:
+            slot.settings[schluessel] = neue_ids[alt]
+    for zweig in ("long_press", "double_press", "turn_left", "turn_right"):
+        verschachtelt = getattr(slot, zweig, None)
+        if verschachtelt is not None:
+            _biege_seitenbezug(verschachtelt, neue_ids)
+    for schritt in getattr(slot, "steps", None) or []:
+        for schluessel in ("page_id", "target_page_id"):
+            alt = schritt.settings.get(schluessel)
+            if isinstance(alt, str) and alt in neue_ids:
+                schritt.settings[schluessel] = neue_ids[alt]
 
 
 def _drop_plugin_slots(runtime: Runtime, plugin_id: str) -> int:

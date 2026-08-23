@@ -132,7 +132,8 @@
     "turnEveryHint": "A brisk turn is easily a dozen detents. 1 triggers on every one.",
     "remove_left": "Remove turn left",
     "remove_right": "Remove turn right",
-    "unavailable": "Has no effect in this session: {{reason}}"
+    "unavailable": "Has no effect in this session: {{reason}}",
+    "pluginOwnSettings": "This page belongs to the plugin. DECK//SWITCH only passes it through."
   },
   "icons": {
     "title": "Choose icon",
@@ -208,7 +209,7 @@
     "installAction": "Install",
     "installing": "Installing …",
     "installed": "Installed",
-    "dropArchive": "Drop a plugin archive (.zip) here or click",
+    "dropArchive": "Drop a plugin archive (.zip or .streamDeckPlugin) here, or click",
     "uninstall": "Remove",
     "uninstallConfirm": "Remove “{{name}}”? Assignments using this plugin will be deleted.",
     "fromUrl": "Install from a URL",
@@ -562,5 +563,24 @@
     "dropOrClick": "or click to choose a file",
     "submitFormats": "ZIP, TAR or tar.gz — anything that can be opened for review is accepted. What ships is always a ZIP, because that is what the app can unpack.",
     "versions": "Versions"
+  },
+  "profiles": {
+    "title": "Profile",
+    "manage": "Manage profiles",
+    "add": "Create",
+    "empty": "Empty profile",
+    "copyOf": "Copy of {{name}}",
+    "newName": "Profile name",
+    "duplicate": "Duplicate",
+    "delete": "Delete",
+    "pages_one": "1 page",
+    "pages_other": "{{count}} pages",
+    "inUse": "in use by {{decks}}",
+    "deleteConfirm": "Delete “{{name}}”? Its {{count}} pages go with it.",
+    "deleteInUse": "“{{name}}” is currently shown by {{decks}}. Deleting it moves that deck to another profile, and this profile's pages are gone. Delete anyway?",
+    "autoPlaceholder": "Programs, e.g. obs, code",
+    "autoHelp": "List programs here and the deck switches to this profile by itself as soon as one of them is in front. When none matches any more, it goes back.",
+    "autoOff": "Automation off: {{reason}}",
+    "autoSeen": "last in front: {{app}}"
   }
 }

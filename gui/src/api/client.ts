@@ -18,6 +18,7 @@ import type {
   InputStatus,
   Page,
   PluginInfo,
+  ProfileInfo,
   ScreensaverEntry,
   SessionCapabilities,
   Slot,
@@ -174,6 +175,45 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+
+  // -- Profile ---------------------------------------------------------
+  //
+  // Ein Profil ist ein eigener Satz Seiten. Welches ein Deck zeigt, steht
+  // an der Deck-Bindung; gewechselt wird deshalb über ``updateDeck``.
+
+  profiles: () =>
+    request<{ profiles: ProfileInfo[] }>("/api/profiles").then((a) => a.profiles),
+
+  createProfile: (name: string, copyFrom = "") =>
+    request<{ profile: { id: string; name: string } }>("/api/profiles", {
+      method: "POST",
+      body: JSON.stringify({ name, copy_from: copyFrom }),
+    }),
+
+  renameProfile: (id: string, name: string) =>
+    request<{ ok: boolean }>(`/api/profiles/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+
+  /** Bei welchen Programmen dieses Profil von selbst nach vorn kommt. */
+  setProfileApps: (id: string, apps: string[]) =>
+    request<{ ok: boolean }>(`/api/profiles/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ auto_apps: apps }),
+    }),
+
+  /** Läuft die Automatik, und welches Fenster hat sie zuletzt gesehen? */
+  smartProfileStatus: () =>
+    request<{ available: boolean; reason: string; window: { app: string; title: string } }>(
+      "/api/profiles/automatik",
+    ),
+
+  deleteProfile: (id: string) =>
+    request<{ ok: boolean; moved: string[] }>(
+      `/api/profiles/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
 
   /** Legt ein virtuelles Deck an — ein Overlay statt Hardware. */
   createVirtualDeck: (payload: {
@@ -337,6 +377,23 @@ export const api = {
 
   /** Symbol eines Plugins — nur aufrufen, wenn `has_icon` gesetzt ist. */
   pluginIconUrl: (pluginId: string) => `${API_BASE}/api/plugins/${pluginId}/icon`,
+
+  /**
+   * Die Einstellungsseite eines Elgato-Plugins.
+   *
+   * ``context`` ist die Belegung, zu der sie gehört — dieselbe Kennung, die
+   * das Backend für seine Kontexte benutzt (Seite, Eingabeart, Index).
+   */
+  pluginPropertyInspectorUrl: (
+    pluginId: string,
+    pfad: string,
+    context: string,
+    actionId: string,
+  ) =>
+    `${API_BASE}/api/plugins/${encodeURIComponent(pluginId)}/pi/${pfad
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/")}?context=${encodeURIComponent(context)}&action=${encodeURIComponent(actionId)}`,
 
   /** Bild aus der Detailansicht — angesprochen über die Position. */
   pluginScreenshotUrl: (pluginId: string, index: number) =>

@@ -14,6 +14,39 @@ all three.
 | **Virtual deck** | overlay on your own screen | when the device is out of reach |
 | **Network deck** | browser on another machine | when someone else should help out |
 
+## Profiles
+
+A profile is a set of pages of its own. Each deck shows exactly one — with
+two devices, each can show a different one.
+
+You pick it above the page tree. The button next to it opens the management:
+create, rename, duplicate, delete. A duplicate gets its own pages with their
+own ids; folder keys and "go to page" then point inside the copy instead of
+back into the original.
+
+The last profile cannot be deleted — a deck without a profile would have no
+page and nothing to show. Deleting a profile that a deck is showing moves
+that deck to another one.
+
+**Automatically per program.** List programs in the profile management
+(`obs`, `code`, …) and the deck switches to that profile by itself as soon as
+one of them is in front. When none matches any more, whatever was there
+before comes back. Picking a profile by hand wins — it ends the automatic
+switch until a pattern matches again.
+
+Matching looks at the window class *and* the title, case-insensitively, as a
+substring: `obs` matches `obs` as well as `obs-studio`.
+
+This works on **KDE Plasma** only. Under Wayland no protocol tells an
+ordinary application which window has focus; KDE does let scripts into the
+compositor, and one of those reports the changes to us. On other desktops the
+management says the automation is off, and why.
+
+**Switching from the deck.** The *switch profile* action puts a switch on a
+key. With no profile set it goes back to the previous one, so one key per
+profile plus one for the way back is enough. While the chosen profile is the
+current one, the key gets a border.
+
 ## Several decks at once
 
 You can have several Stream Decks connected at the same time. Each device

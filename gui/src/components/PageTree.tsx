@@ -17,6 +17,7 @@ import {
   type PageNode,
 } from "../lib/pages";
 import { useStore } from "../store";
+import { ProfileBar } from "./ProfileBar";
 import { UiIcon } from "./UiIcon";
 
 /**
@@ -255,6 +256,7 @@ export function PageTree() {
 
   return (
     <div className="pagetree">
+      <ProfileBar />
       <header className="pagetree-head">
         <span className="pagetree-title">{t("pages.title")}</span>
         <button

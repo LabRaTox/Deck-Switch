@@ -132,7 +132,8 @@
     "turnEveryHint": "Ein zügiger Dreh sind schnell ein Dutzend Rasten. 1 löst bei jeder aus.",
     "remove_left": "Linksdrehung entfernen",
     "remove_right": "Rechtsdrehung entfernen",
-    "unavailable": "Wirkungslos in dieser Sitzung: {{reason}}"
+    "unavailable": "Wirkungslos in dieser Sitzung: {{reason}}",
+    "pluginOwnSettings": "Diese Seite gehört dem Plugin. DECK//SWITCH reicht sie nur durch."
   },
   "icons": {
     "title": "Icon auswählen",
@@ -208,7 +209,7 @@
     "installAction": "Installieren",
     "installing": "Wird installiert …",
     "installed": "Nachinstalliert",
-    "dropArchive": "Plugin-Archiv (.zip) hierher ziehen oder klicken",
+    "dropArchive": "Plugin-Archiv (.zip oder .streamDeckPlugin) hierher ziehen oder klicken",
     "uninstall": "Entfernen",
     "uninstallConfirm": "„{{name}}“ entfernen? Belegungen dieses Plugins werden gelöscht.",
     "fromUrl": "Von einer Adresse installieren",
@@ -562,5 +563,24 @@
     "dropOrClick": "oder klicken, um eine Datei zu wählen",
     "submitFormats": "ZIP, TAR oder tar.gz — angenommen wird, was sich zum Prüfen öffnen lässt. Ausgeliefert wird immer ein ZIP, denn nur das kann die App auspacken.",
     "versions": "Fassungen"
+  },
+  "profiles": {
+    "title": "Profil",
+    "manage": "Profile verwalten",
+    "add": "Anlegen",
+    "empty": "Leeres Profil",
+    "copyOf": "Kopie von {{name}}",
+    "newName": "Name des Profils",
+    "duplicate": "Kopieren",
+    "delete": "Löschen",
+    "pages_one": "1 Seite",
+    "pages_other": "{{count}} Seiten",
+    "inUse": "in Benutzung von {{decks}}",
+    "deleteConfirm": "„{{name}}“ löschen? Damit sind auch seine {{count}} Seiten weg.",
+    "deleteInUse": "„{{name}}“ wird gerade von {{decks}} angezeigt. Beim Löschen wechselt das Deck auf ein anderes Profil, und die Seiten dieses Profils sind weg. Trotzdem löschen?",
+    "autoPlaceholder": "Programme, z. B. obs, code",
+    "autoHelp": "Trägst du hier Programme ein, wechselt das Deck von selbst auf dieses Profil, sobald eines davon vorn ist. Passt keines mehr, geht es zurück.",
+    "autoOff": "Automatik aus: {{reason}}",
+    "autoSeen": "zuletzt vorn: {{app}}"
   }
 }

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head><meta charset="utf-8"><title>Prüfseite</title></head>
+  <body>
+    <script>
+      // Ein HTML-Plugin nach Elgato-Bauart: Die Software ruft diese Funktion
+      // auf, die Seite verbindet sich zurück.
+      let ws;
+      function connectElgatoStreamDeckSocket(port, uuid, ereignis, info) {
+        ws = new WebSocket("ws://127.0.0.1:" + port);
+        ws.addEventListener("open", () => ws.send(JSON.stringify({ event: ereignis, uuid })));
+        ws.addEventListener("message", (e) => {
+          const n = JSON.parse(e.data);
+          if (n.event === "willAppear") {
+            ws.send(JSON.stringify({ event: "setTitle", context: n.context,
+                                     payload: { title: "aus dem Browser" } }));
+          }
+          if (n.event === "keyDown") {
+            // Ein im Browser gezeichnetes Bild — genau wofür diese Sorte da ist.
+            const c = document.createElement("canvas");
+            c.width = c.height = 72;
+            const g = c.getContext("2d");
+            g.fillStyle = "#1d4ed8"; g.fillRect(0, 0, 72, 72);
+            g.fillStyle = "#ffffff"; g.fillRect(20, 20, 32, 32);
+            ws.send(JSON.stringify({ event: "setImage", context: n.context,
+                                     payload: { image: c.toDataURL("image/png") } }));
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

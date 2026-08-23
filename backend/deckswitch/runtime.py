@@ -39,11 +39,12 @@ from .netserver import NetzService
 from .virtualdeck import DECK_TYPE as VIRTUAL_DECK_TYPE
 from .virtualdeck import NETWORK_DECK_TYPE
 from .virtualdeck import VirtualDevice
-from .deck import Deck
+from .deck import Deck, bindungs_key
 from .events import EventBus
 from .plugins.base import Services, SlotContext
 from .plugins.loader import PluginRegistry
 from .services.audio import AudioService
+from .services.smartprofile import SmartProfileService
 from .services.desktop import DesktopService
 from .services.icons import IconService
 from .services.input import InputService
@@ -94,6 +95,8 @@ class Runtime:
         self.overlay = OverlayService(self)
         #: Holt dieselben Overlays per globalem Kurzbefehl.
         self.shortcuts = ShortcutService(self)
+        #: Wechselt das Profil, wenn ein anderes Programm nach vorn kommt.
+        self.smartprofile = SmartProfileService(self)
         self.netz = NetzService(self)
 
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -140,6 +143,7 @@ class Runtime:
 
         self.audio.add_listener(self._on_audio_event)
         self.audio.start_watcher()
+        await self.smartprofile.start()
 
         await self._setup_plugins()
 
@@ -188,6 +192,10 @@ class Runtime:
         # mehr steht, bliebe sonst in den Systemeinstellungen stehen.
         with contextlib.suppress(Exception):
             await self.shortcuts.stop()
+        # Dasselbe für das KWin-Skript: Es liefe sonst bis zum Abmelden
+        # weiter und riefe ins Leere.
+        with contextlib.suppress(Exception):
+            await self.smartprofile.stop()
 
         self.audio.stop_watcher()
         self.sound.close()
@@ -220,15 +228,23 @@ class Runtime:
         Virtuelle Decks bekommen ihr „Gerät" gleich mit: Ein Overlay muss
         auf nichts warten, es ist da, sobald es in der Config steht.
         """
-        for key, binding in self.config.decks.items():
-            if key not in self.decks:
-                if not binding.profile_id or binding.profile_id not in self.config.profiles:
-                    binding.profile_id = self.config.active_profile().id
-                deck = Deck(self, binding)
-                self.decks[key] = deck
-                if binding.is_virtual:
-                    self._attach_virtual(deck)
-        for key in [k for k in self.decks if k not in self.config.decks]:
+        # Geführt wird über ``bindungs_key`` und nicht über den Schlüssel im
+        # Config-Dict: Die Bindung ohne Seriennummer steht dort unter ``""``,
+        # ansprechbar ist sie aber unter einem Namen. Beides gleichzusetzen
+        # hieße, sie im nächsten Schritt gleich wieder wegzuräumen.
+        vorhanden = set()
+        for binding in self.config.decks.values():
+            key = bindungs_key(binding)
+            vorhanden.add(key)
+            if key in self.decks:
+                continue
+            if not binding.profile_id or binding.profile_id not in self.config.profiles:
+                binding.profile_id = self.config.active_profile().id
+            deck = Deck(self, binding)
+            self.decks[key] = deck
+            if binding.is_virtual:
+                self._attach_virtual(deck)
+        for key in [k for k in self.decks if k not in vorhanden]:
             deck = self.decks.pop(key)
             deck.detach()
 
@@ -474,7 +490,7 @@ class Runtime:
             )
             if deck is not None:
                 self.config.decks.pop(deck.binding.serial, None)
-                self.decks.pop(deck.binding.serial, None)
+                self.decks.pop(deck.key, None)
             else:
                 deck = self._new_deck(serial, deck_type)
 
@@ -484,8 +500,11 @@ class Runtime:
         # Die Bindung wird über die Seriennummer geführt — nach dem
         # Übernehmen des Platzhalters muss sie unter dem neuen Schlüssel
         # stehen.
+        # Die Konfiguration führt Bindungen über die Seriennummer, die
+        # Runtime über ``deck.key`` — für den Platzhalter sind das
+        # verschiedene Werte, und genau so ist es gemeint.
         self.config.decks[deck.binding.serial] = deck.binding
-        self.decks[deck.binding.serial] = deck
+        self.decks[deck.key] = deck
         return deck
 
     def _new_deck(self, serial: str, deck_type: str) -> Deck:
