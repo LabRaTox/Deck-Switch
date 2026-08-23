@@ -1551,7 +1551,16 @@ input[type="checkbox"] {
 .plugin-detail {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
+  /* Begrenzt, statt die Fensterbreite zu füllen. Der Wert ist kein Gefühl,
+     sondern die Summe der Teile: ein Bildschirmfoto in Deckbreite (rund
+     700), die Angabenspalte (290) und die Lücke dazwischen. Ohne die
+     Grenze stünden auf einem breiten Bildschirm Bild und Angaben an den
+     entgegengesetzten Rändern, mit einem Loch dazwischen. */
+  max-width: 1020px;
+  /* Und mittig statt am linken Rand: Auf einem breiten Bildschirm säße die
+     Seite sonst in der linken Hälfte, während rechts daneben nichts steht. */
+  margin: 0 auto;
 }
 
 .zurueck {
@@ -1570,13 +1579,13 @@ input[type="checkbox"] {
 .detail-kopf {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .detail-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
   object-fit: contain;
   flex: none;
 }
@@ -1584,10 +1593,23 @@ input[type="checkbox"] {
 .detail-icon.platzhalter {
   display: grid;
   place-items: center;
+  /* Ohne Akzentfarbe — ein Store-Plugin bringt keine mit — stünde der
+     Buchstabe sonst auf dem Seitengrund und wäre kaum zu sehen. */
+  background: var(--bg-sunken);
   font-size: 30px;
   font-weight: 600;
   color: #fff;
   text-transform: uppercase;
+}
+
+/* Installieren und Quelltext stehen rechts im Kopf: Bei einem Plugin aus
+   dem Store ist das die eine Handlung, wegen der man die Seite geöffnet hat
+   — sie soll nicht erst unter den Bildern auftauchen. */
+.detail-kopf-knoepfe {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .detail-kategorie {
@@ -1609,7 +1631,7 @@ input[type="checkbox"] {
   /* Die Angaben rechts brauchen wenig Platz, aber festen: Eine mitwandernde
      Spalte ließe die Werte je Plugin an anderer Stelle stehen. */
   grid-template-columns: minmax(0, 1fr) 290px;
-  gap: 24px;
+  gap: 20px;
   align-items: start;
 }
 
@@ -1622,7 +1644,7 @@ input[type="checkbox"] {
 .detail-text {
   color: var(--text-dim);
   line-height: 1.55;
-  margin: 0 0 20px;
+  margin: 0 0 16px;
 }
 
 .detail-bild-gross {
@@ -1642,7 +1664,7 @@ input[type="checkbox"] {
 .detail-bild-reihe {
   display: flex;
   gap: 8px;
-  margin: 8px 0 20px;
+  margin: 8px 0 16px;
 }
 
 .detail-bild-klein {
@@ -2793,6 +2815,22 @@ input[type="checkbox"] {
 
 /* Zugeklappt, aber da: Was die Durchsicht gefunden hat, soll niemanden
    erschlagen — und wer es wissen will, klickt einmal. */
+/* Die Fassungen eines Store-Plugins — eine je Zeile, Nummer voran. */
+.store-fassungen {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.store-fassungen li {
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
 .store-warnungen {
   border: 1px solid var(--warn, #f59e0b);
   border-radius: var(--radius);

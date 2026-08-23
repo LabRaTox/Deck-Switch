@@ -21,6 +21,7 @@ Aufruf (mit eigener Config, damit die echte unangetastet bleibt):
 import _wache  # bricht ab, statt in die echte Config zu schreiben
 _wache.sichere_umgebung()
 
+import base64
 import hashlib
 import json
 import os
@@ -93,6 +94,12 @@ def node(skript: str, *argumente: str, umgebung: dict[str, str]) -> str:
     return lauf.stdout.strip()
 
 
+#: Ein gültiges 1×1-PNG — klein genug, um es hier stehen zu lassen.
+PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
 def baue_plugin(wurzel: Path, slug: str, version: str = "1.0.0") -> Path:
     ordner = wurzel / slug
     ordner.mkdir(parents=True, exist_ok=True)
@@ -105,7 +112,18 @@ def baue_plugin(wurzel: Path, slug: str, version: str = "1.0.0") -> Path:
             "entry": "plugin.py",
             "class": "TestPlugin",
             "description": "Nur zum Prüfen",
+            "icon": "icon.png",
+            # Zwei Einträge, von denen einer keiner ist: Der Katalog soll
+            # das SVG aussortieren, nicht die App damit umgehen müssen.
+            "screenshots": ["screenshots/deck.png", "boese.svg"],
         }),
+        encoding="utf-8",
+    )
+    (ordner / "icon.png").write_bytes(PNG)
+    (ordner / "screenshots").mkdir(exist_ok=True)
+    (ordner / "screenshots" / "deck.png").write_bytes(PNG)
+    (ordner / "boese.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
         encoding="utf-8",
     )
     (ordner / "plugin.py").write_text(
@@ -223,6 +241,27 @@ def main() -> None:
             katalog = store.katalog(q=slug)
             check("das Plugin steht im Katalog", katalog["count"] == 1,
                   str(katalog["count"]))
+
+            eintrag = katalog["plugins"][0]
+            check("und nennt die Adresse seines Symbols",
+                  bool(eintrag["latest"].get("icon_url")),
+                  str(eintrag["latest"].get("icon_url")))
+            check("nur echte Bilder stehen als Screenshot dabei",
+                  eintrag["latest"].get("screenshot_urls") == [
+                      f"http://127.0.0.1:{port}/api/assets/{slug}/1.0.0/screenshots/deck.png"
+                  ],
+                  str(eintrag["latest"].get("screenshot_urls")))
+
+            daten, typ = store.bild(slug, "1.0.0", "icon")
+            check("das Symbol kommt als PNG herein", typ == "image/png", typ)
+            check("und unverändert", daten == PNG)
+            check("ein Screenshot ebenso",
+                  store.bild(slug, "1.0.0", "screenshot", 0)[0] == PNG)
+            check("nach einer Stelle, die es nicht gibt, wird nicht gefragt",
+                  _wirft(lambda: store.bild(slug, "1.0.0", "screenshot", 7), store.StoreError))
+            check("und keine Adresse außerhalb des Stores",
+                  _wirft(lambda: store._hol_bild("http://fremde.example/icon.png"),
+                         store.StoreError))
 
             ergebnis = store.installiere(slug)
             check("installiert", ergebnis["plugin_id"] == slug, json.dumps(ergebnis))

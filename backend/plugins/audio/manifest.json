@@ -109,6 +109,142 @@
       ]
     },
     {
+      "id": "volume_set",
+      "name": {
+        "de": "Lautstärke setzen",
+        "en": "Set volume"
+      },
+      "description": {
+        "de": "Setzt die Lautstärke mit einem Druck auf einen festen Prozentwert.",
+        "en": "Sets the volume to a fixed percentage with one press."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "volume-2",
+      "default_label": {
+        "de": "Lautstärke",
+        "en": "Volume"
+      },
+      "states": [
+        {
+          "id": "active",
+          "name": {
+            "de": "Eingestellt",
+            "en": "Set"
+          }
+        },
+        {
+          "id": "inactive",
+          "name": {
+            "de": "Abweichend",
+            "en": "Different"
+          }
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "target",
+          "type": "select",
+          "label": {
+            "de": "Gerät",
+            "en": "Device"
+          },
+          "default": "@DEFAULT_AUDIO_SINK@",
+          "options_source": "sinks_with_default",
+          "help": {
+            "de": "Standardgerät folgt der Systemeinstellung.",
+            "en": "Default device follows the system setting."
+          }
+        },
+        {
+          "key": "value",
+          "type": "number",
+          "label": {
+            "de": "Wert (%)",
+            "en": "Value (%)"
+          },
+          "default": 50,
+          "min": 0,
+          "max": 150,
+          "step": 1,
+          "help": {
+            "de": "Über 100 % wird das Signal verstärkt und kann übersteuern.",
+            "en": "Above 100% the signal is amplified and may clip."
+          }
+        },
+        {
+          "key": "unmute",
+          "type": "bool",
+          "label": {
+            "de": "Stummschaltung aufheben",
+            "en": "Unmute when set"
+          },
+          "default": true,
+          "help": {
+            "de": "Ohne das bliebe ein stummes Gerät nach dem Druck weiter still.",
+            "en": "Without this a muted device would stay silent after the press."
+          }
+        },
+        {
+          "key": "step",
+          "type": "number",
+          "label": {
+            "de": "Schrittweite beim Drehen (%)",
+            "en": "Step size when rotating (%)"
+          },
+          "default": 2,
+          "min": 1,
+          "max": 25,
+          "step": 1,
+          "help": {
+            "de": "Nur auf einem Dial: Drehen ändert die Lautstärke wie gewohnt.",
+            "en": "Dials only: rotating changes the volume as usual."
+          }
+        },
+        {
+          "key": "show_bar",
+          "type": "bool",
+          "label": {
+            "de": "Balken anzeigen",
+            "en": "Show bar"
+          },
+          "default": true
+        },
+        {
+          "key": "show_percent",
+          "type": "bool",
+          "label": {
+            "de": "Prozentwert anzeigen",
+            "en": "Show percentage"
+          },
+          "default": true
+        },
+        {
+          "key": "bar_color",
+          "type": "color",
+          "label": {
+            "de": "Balkenfarbe",
+            "en": "Bar colour"
+          },
+          "default": "#3b82f6"
+        },
+        {
+          "key": "active_badge",
+          "type": "color",
+          "label": {
+            "de": "Rahmen wenn eingestellt",
+            "en": "Border when set"
+          },
+          "default": "#22c55e"
+        }
+      ],
+      "requires": [
+        "audio"
+      ]
+    },
+    {
       "id": "mic_mute",
       "name": {
         "de": "Mikrofon stumm",

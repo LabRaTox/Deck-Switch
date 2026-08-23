@@ -3,14 +3,22 @@
   "name": "OBS",
   "version": "2.0.0",
   "type": "action",
-  "entry": "plugin.py",
-  "class": "ObsPlugin",
-  "accent": "#ef4444",
+  "author": "LabRaTox",
   "category": "streaming",
+  "accent": "#ef4444",
   "description": {
     "de": "Steuert OBS Studio über obs-websocket: Szenen, Stream, Aufnahme, Quellen, Filter und mehr.",
     "en": "Controls OBS Studio via obs-websocket: scenes, stream, recording, sources, filters and more."
   },
+  "changelog": {
+    "de": "2.0.0 — Nicht mehr fest eingebaut, sondern als Plugin nachinstallierbar. Inhaltlich unverändert: 17 Aktionen von Aufnahme bis virtuelle Kamera.",
+    "en": "2.0.0 — No longer built in; installed as a plugin instead. Unchanged otherwise: 17 actions from recording to virtual camera."
+  },
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/Deck-Switch",
+  "icon": "icon.png",
+  "entry": "plugin.py",
+  "class": "ObsPlugin",
   "config_schema": [
     {
       "key": "host",
@@ -1120,5 +1128,8 @@
       "settings_schema": []
     }
   ],
-  "icon": "icon.png"
+  "screenshots": [
+    "screenshots/aktionen.png",
+    "screenshots/zustaende.png"
+  ]
 }

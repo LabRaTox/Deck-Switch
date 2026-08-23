@@ -11,6 +11,7 @@ import { PfadText } from "./PfadText";
 import { PluginDetail } from "./PluginDetail";
 import { PluginInstaller } from "./PluginInstaller";
 import { SettingsForm } from "./SettingsForm";
+import { StoreDetail } from "./StoreDetail";
 import { StoreEinreichen } from "./StoreEinreichen";
 import { StoreAnmeldung, StoreKarte, StoreHinweis } from "./StoreView";
 
@@ -43,10 +44,23 @@ export function PluginsView() {
   const [storeFehler, setStoreFehler] = useState("");
   const [laeuft, setLaeuft] = useState("");
   const [meldung, setMeldung] = useState("");
-  /** Welches Plugin gerade im Ganzen zu sehen ist — ``null`` = die Liste. */
-  const [detail, setDetail] = useState<string | null>(null);
-  /** ``null`` heißt „alle Kategorien". */
-  const [kategorie, setKategorie] = useState<PluginCategory | null>(null);
+  /**
+   * Welches Plugin gerade im Ganzen zu sehen ist — ``null`` = die Liste.
+   *
+   * Mit Herkunft, weil dieselbe Kennung an zwei Orten stehen kann: Ein
+   * installiertes Plugin zeigt sein Manifest von der Platte, eines aus dem
+   * Store seinen Katalogeintrag.
+   */
+  const [detail, setDetail] = useState<{ art: Eintrag["art"]; id: string } | null>(null);
+  /**
+   * Die Schublade im Menü links.
+   *
+   * „installiert" ist keine Kategorie, sondern eine Eigenschaft — steht aber
+   * an derselben Stelle, weil es dieselbe Frage beantwortet: Was will ich
+   * gerade sehen? Wer ein Plugin einstellen oder entfernen will, sucht genau
+   * diese Liste und nicht sein Thema.
+   */
+  const [filter, setFilter] = useState<"alle" | "installiert" | PluginCategory>("alle");
 
   useEffect(() => {
     void (async () => {
@@ -68,6 +82,12 @@ export function PluginsView() {
       const ergebnis = await api.storeInstall(eintrag.slug);
       await reloadPlugins();
       setMeldung(t("store.installed", { name: eintrag.name, version: ergebnis.version }));
+      // Aus der Store-Detailansicht heraus zurück in die Liste: Das Plugin
+      // liegt jetzt auf dem Rechner, die Seite zeigte aber weiter den
+      // Katalogeintrag samt Knopf „Installieren" — als wäre nichts geschehen.
+      setDetail((jetzt) =>
+        jetzt?.art === "store" && jetzt.id === eintrag.slug ? null : jetzt,
+      );
     } catch (exc) {
       setStoreFehler(exc instanceof Error ? exc.message : String(exc));
     } finally {
@@ -112,13 +132,35 @@ export function PluginsView() {
     anzahl.set(k, (anzahl.get(k) ?? 0) + 1);
   }
 
-  const sichtbar = kategorie ? vomTyp.filter((e) => kategorieVon(e) === kategorie) : vomTyp;
+  const installierte = vomTyp.filter((e) => e.art === "installiert").length;
 
-  const gezeigt = detail ? plugins.find((p) => p.id === detail) : null;
+  const sichtbar =
+    filter === "alle"
+      ? vomTyp
+      : filter === "installiert"
+        ? vomTyp.filter((e) => e.art === "installiert")
+        : vomTyp.filter((e) => kategorieVon(e) === filter);
+
+  const gezeigt =
+    detail?.art === "installiert" ? plugins.find((p) => p.id === detail.id) : null;
   if (gezeigt) {
     return (
       <div className="page-view">
         <PluginDetail plugin={gezeigt} onBack={() => setDetail(null)} />
+      </div>
+    );
+  }
+
+  if (detail?.art === "store") {
+    return (
+      <div className="page-view">
+        <StoreDetail
+          slug={detail.id}
+          bekannt={katalog?.find((s) => s.slug === detail.id) ?? null}
+          laeuft={laeuft === detail.id}
+          onInstallieren={(eintrag) => void installiere(eintrag)}
+          onBack={() => setDetail(null)}
+        />
       </div>
     );
   }
@@ -132,7 +174,17 @@ export function PluginsView() {
           <button type="button" className="btn" onClick={() => setEinreichenOpen(true)}>
             {t("store.submitTitle")}
           </button>
-          <button type="button" className="btn" onClick={() => void reloadPlugins()}>
+          <button
+            type="button"
+            className="btn"
+            title={t("plugins.reloadHint")}
+            onClick={() => {
+              // Neu laden heißt: jedes Plugin abbauen und neu aufbauen.
+              // Verbindungen fallen dabei, und der Zustand der Tasten
+              // beginnt von vorn — das gehört gefragt, nicht getan.
+              if (window.confirm(t("plugins.reloadConfirm"))) void reloadPlugins();
+            }}
+          >
             {t("plugins.reload")}
           </button>
           <button
@@ -167,7 +219,7 @@ export function PluginsView() {
                 // Beim Wechsel der Art alle Themen zeigen: Die vorher
                 // gewählte Kategorie ist hier womöglich gar nicht belegt,
                 // und eine leere Liste ohne erkennbaren Grund verwirrt.
-                setKategorie(null);
+                setFilter("alle");
               }}
             >
               {t(`plugins.types.${eintrag}`)}
@@ -181,11 +233,26 @@ export function PluginsView() {
         <nav className="plugin-kategorien" aria-label={t("plugins.title")}>
           <button
             type="button"
-            className={kategorie === null ? "kategorie aktiv" : "kategorie"}
-            onClick={() => setKategorie(null)}
+            className={filter === "alle" ? "kategorie aktiv" : "kategorie"}
+            onClick={() => setFilter("alle")}
           >
             {t("plugins.categories.all")}
             <span className="kategorie-zahl">{vomTyp.length}</span>
+          </button>
+          <button
+            type="button"
+            disabled={installierte === 0}
+            className={
+              filter === "installiert"
+                ? "kategorie aktiv"
+                : installierte === 0
+                  ? "kategorie leer"
+                  : "kategorie"
+            }
+            onClick={() => setFilter("installiert")}
+          >
+            {t("plugins.categories.installed")}
+            <span className="kategorie-zahl">{installierte}</span>
           </button>
           {/* Bewusst *alle* Kategorien, auch die leeren: Die Liste ist
               dieselbe wie im Elgato-Marketplace, und wer dort sucht, soll
@@ -200,13 +267,13 @@ export function PluginsView() {
                 type="button"
                 disabled={zahl === 0}
                 className={
-                  kategorie === k
+                  filter === k
                     ? "kategorie aktiv"
                     : zahl === 0
                       ? "kategorie leer"
                       : "kategorie"
                 }
-                onClick={() => setKategorie(k)}
+                onClick={() => setFilter(k)}
               >
                 {t(`plugins.categories.${k}`)}
                 <span className="kategorie-zahl">{zahl}</span>
@@ -240,7 +307,7 @@ export function PluginsView() {
                     imStore={katalog?.find((s) => s.slug === eintrag.plugin.id) ?? null}
                     laeuft={laeuft === eintrag.plugin.id}
                     onAktualisieren={(s) => void installiere(s)}
-                    onOeffnen={() => setDetail(eintrag.plugin.id)}
+                    onOeffnen={() => setDetail({ art: "installiert", id: eintrag.plugin.id })}
                   />
                 ) : (
                   <StoreKarte
@@ -248,6 +315,7 @@ export function PluginsView() {
                     plugin={eintrag.plugin}
                     laeuft={laeuft === eintrag.plugin.slug}
                     onInstallieren={() => void installiere(eintrag.plugin)}
+                    onOeffnen={() => setDetail({ art: "store", id: eintrag.plugin.slug })}
                   />
                 ),
               )}

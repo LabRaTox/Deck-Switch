@@ -343,6 +343,22 @@ export const api = {
     `${API_BASE}/api/plugins/${pluginId}/screenshot/${index}`,
 
   /**
+   * Symbol eines Plugins, das nur im Store liegt.
+   *
+   * Über das eigene Backend und nicht direkt zum Store: Dort steht, welche
+   * Adressen der Katalog genannt hat, und die Oberfläche lädt nichts aus
+   * fremder Herkunft.
+   */
+  storeIconUrl: (slug: string, version: string) =>
+    `${API_BASE}/api/store/plugins/${encodeURIComponent(slug)}/${encodeURIComponent(version)}/icon`,
+
+  /** Bild aus der Store-Detailansicht — angesprochen über die Position. */
+  storeScreenshotUrl: (slug: string, version: string, index: number) =>
+    `${API_BASE}/api/store/plugins/${encodeURIComponent(slug)}/${encodeURIComponent(
+      version,
+    )}/screenshot/${index}`,
+
+  /**
    * Auswahlliste eines Feldes. ``context`` sind die übrigen Einstellungen
    * derselben Belegung — damit kann ein Plugin abhängige Listen liefern
    * (die Filter *dieser* Quelle, die Quellen *dieser* Szene).

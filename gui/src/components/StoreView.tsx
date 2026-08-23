@@ -22,18 +22,26 @@ export function StoreKarte({
   plugin,
   laeuft,
   onInstallieren,
+  onOeffnen,
 }: {
   plugin: StorePlugin;
   laeuft: boolean;
   onInstallieren: () => void;
+  onOeffnen: () => void;
 }) {
   const { t } = useTranslation();
 
   return (
     <div className="plugin-card store">
       <div className="plugin-head">
+        <StoreIcon plugin={plugin} />
         <div className="plugin-title">
-          <span className="plugin-name">{plugin.name}</span>
+          {/* Wie bei einem installierten Plugin öffnet der Name die
+              Detailansicht — und nicht die ganze Karte, in der ein Knopf
+              zum Installieren steckt. */}
+          <button type="button" className="plugin-name" onClick={onOeffnen}>
+            {plugin.name}
+          </button>
           <span className="plugin-meta">
             {plugin.latest.version} · {t("store.byAuthor", { author: plugin.author })}
           </span>
@@ -67,6 +75,33 @@ export function StoreKarte({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Das Symbol eines Store-Plugins.
+ *
+ * Es liegt im Archiv der Fassung und kommt über das eigene Backend herein.
+ * Nennt das Manifest keines — oder erreicht der Store gerade nicht —, steht
+ * dort der Anfangsbuchstabe: Ein leerer Fleck sähe nach einem Fehler aus.
+ */
+function StoreIcon({ plugin }: { plugin: StorePlugin }) {
+  const [fehlt, setFehlt] = useState(false);
+
+  if (!plugin.latest.icon_url || fehlt) {
+    return (
+      <span className="plugin-icon placeholder" aria-hidden="true">
+        {plugin.name.slice(0, 1).toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <img
+      className="plugin-icon"
+      src={api.storeIconUrl(plugin.slug, plugin.latest.version)}
+      alt=""
+      onError={() => setFehlt(true)}
+    />
   );
 }
 

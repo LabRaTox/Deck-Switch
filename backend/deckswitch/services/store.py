@@ -173,6 +173,87 @@ def beliebt(*, kind: str = "") -> dict[str, Any]:
 def vergiss() -> None:
     """Den Zwischenspeicher leeren — nach einer Installation etwa."""
     _cache.leere()
+    _bilder.clear()
+
+
+# --------------------------------------------------------------------------
+# Bilder
+# --------------------------------------------------------------------------
+
+#: Wie groß ein Symbol oder Screenshot höchstens sein darf. Dieselbe Grenze
+#: wie im Store — was er nicht ausliefert, muss hier auch nicht ankommen.
+MAX_BILD_BYTES = 4 * 1024 * 1024
+
+#: Bildtypen, die die Oberfläche anzeigt. SVG steht bewusst nicht dabei: Es
+#: ist ein Dokument, darf Skript enthalten, und das liefe im Ursprung der GUI.
+BILDTYPEN = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+
+#: Schon geholte Bilder, nach Adresse. Ein Symbol wandert bei jedem Blick in
+#: die Liste über den Bildschirm; jedes Mal ins Netz zu greifen wäre eine
+#: Runde zu viel. Der Speicher ist klein und lebt nur, solange die App läuft.
+_bilder: dict[str, tuple[bytes, str]] = {}
+
+#: Mehr als so viele Bilder behält der Speicher nicht.
+_BILDER_MAX = 200
+
+
+def bild(slug: str, version: str, art: str, index: int = 0) -> tuple[bytes, str]:
+    """Symbol oder Screenshot einer Fassung — Bytes und Inhaltstyp.
+
+    Die Adresse kommt aus dem Katalog und wird nicht hier zusammengesetzt.
+    Das ist keine Bequemlichkeit, sondern die Schranke: Geholt wird nur, was
+    der Store selbst als Bild dieser Fassung genannt hat, und nur von *ihm*
+    — eine Adresse anderswohin lehnt diese Funktion ab, auch wenn sie im
+    Katalog stünde.
+    """
+    daten = plugin(slug)
+    fassungen = [*daten.get("versions", []), daten.get("latest")]
+    passend = next((v for v in fassungen if v and v.get("version") == version), None)
+    if passend is None:
+        raise StoreError(f"Fassung {version} steht nicht im Katalog")
+
+    if art == "icon":
+        adresse = passend.get("icon_url")
+    else:
+        bilder = passend.get("screenshot_urls") or []
+        adresse = bilder[index] if 0 <= index < len(bilder) else None
+    if not adresse:
+        raise StoreError("Dafür nennt der Katalog kein Bild")
+
+    return _hol_bild(adresse)
+
+
+def _hol_bild(adresse: str) -> tuple[bytes, str]:
+    zwischen = _bilder.get(adresse)
+    if zwischen is not None:
+        return zwischen
+
+    if not adresse.startswith(STORE_URL.rstrip("/") + "/"):
+        raise StoreError("Diese Bildadresse zeigt nicht auf den Store")
+
+    anfrage = urllib.request.Request(
+        adresse, headers={"Accept": "image/*", "User-Agent": "DeckSwitch/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(anfrage, timeout=ZEITLIMIT_S) as antwort:
+            typ = (antwort.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            roh = antwort.read(MAX_BILD_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        raise StoreError(_fehlertext(exc)) from exc
+    except urllib.error.URLError as exc:
+        raise StoreError(f"Der Store ist nicht erreichbar: {exc.reason}") from exc
+    except (TimeoutError, OSError) as exc:
+        raise StoreError(f"Verbindung abgebrochen: {exc}") from exc
+
+    if typ not in BILDTYPEN:
+        raise StoreError(f"Der Store hat kein Bild geschickt, sondern {typ or 'nichts Erkennbares'}")
+    if len(roh) > MAX_BILD_BYTES:
+        raise StoreError("Das Bild ist zu groß")
+
+    if len(_bilder) >= _BILDER_MAX:
+        _bilder.clear()
+    _bilder[adresse] = (roh, typ)
+    return roh, typ
 
 
 # --------------------------------------------------------------------------

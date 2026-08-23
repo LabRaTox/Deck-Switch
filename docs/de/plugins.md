@@ -6,11 +6,9 @@
 
 | Plugin | Aktionen |
 | --- | --- |
-| **Audio** | Lautstärke (Dial mit Balken), Mikrofon stumm (auch Push-to-Talk), Ausgabegerät wechseln, App-Lautstärke |
+| **Audio** | Lautstärke (Dial mit Balken), Lautstärke auf Festwert setzen, Mikrofon stumm (auch Push-to-Talk), Ausgabegerät wechseln, App-Lautstärke |
 | **Multi-Aktion** | Multi-Aktion, Multi-Aktion (Umschalter) |
 | **Soundboard** | Klang abspielen (mit eigenem Ausgabegerät), alles anhalten |
-| **OBS** | Aufnahme (inkl. Pause und Kapitelmarken), Stream, Wiedergabepuffer und Replay speichern, Szenensammlung, Szene, Quelle, Ton stumm, Medienwiedergabe, Studio-Modus, Vorschau live schalten, Filter, Screenshot, Übergang, virtuelle Kamera |
-| **Discord** | Mute (auch Push-to-Talk und Push-to-Mute), Deafen, Sprachkanal wechseln, Kanal verlassen, Textkanal öffnen, Mikrofonpegel |
 | **System** | Programm starten und beenden, Ordner/Datei/Link öffnen, Shell-Befehl, Tastenkombination (auch als Umschalter und als Push-to-Talk), Text tippen, Multimedia, Fenster & Arbeitsfläche, Bildschirmfoto, Sitzung (sperren, abmelden, ruhen, neu starten, ausschalten), Systemwerte (CPU, RAM, GPU, Temperaturen, Netz), Monitorhelligkeit über DDC/CI |
 | **Streamdeck** | Ordner, Home, Zurück, Seitenanzeige, Gehe zu Seite, Blättern, Helligkeit, Leer (Platzhalter), Virtuelles Deck |
 | **Tabler-Icons** | kein Aktions-Plugin, sondern der mitgelieferte Symbolsatz |
@@ -76,11 +74,41 @@ Schleife, und ein zweiter Druck startet neu oder hält an.
 auch alle laufenden Streams mit. Sonst bliebe die schon laufende Musik auf
 dem alten Gerät.
 
+**Lautstärke setzen** springt mit einem Druck auf einen festen Prozentwert
+— eine Taste für 20 %, eine für 50 %, eine für 100 %. Ein stummes Gerät wird
+dabei standardmäßig wieder freigeschaltet, sonst zeigte der Balken den Wert
+und zu hören wäre nichts. Liegt der Wert gerade an, bekommt die Taste einen
+Rahmen. Auf einem Dial gilt beides: Drehen ändert wie gewohnt schrittweise,
+Druck springt auf den Festwert.
+
 **Zustände von außen.** Ändert jemand die Lautstärke in den
 Systemeinstellungen, wechselt OBS die Szene oder mutet Discord sich selbst,
 zeichnet die betroffene Taste sofort neu. Dafür laufen `pactl subscribe` und
 die Event-Kanäle von obs-websocket und Discord-RPC mit. Der Sekundentakt ist
 nur das Sicherheitsnetz.
+
+## Nachinstallierbare Plugins
+
+Diese fünf gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
+[plugin-sources/](../../plugin-sources/).
+
+| Plugin | Aktionen |
+| --- | --- |
+| **Discord** | Mute (auch Push-to-Talk und Push-to-Mute), Deafen, Sprachkanal wechseln, Kanal verlassen, Textkanal öffnen, Mikrofonpegel |
+| **OBS** | Aufnahme (inkl. Pause und Kapitelmarken), Stream, Wiedergabepuffer und Replay speichern, Szenensammlung, Szene, Quelle, Ton stumm, Medienwiedergabe, Studio-Modus, Vorschau live schalten, Filter, Screenshot, Übergang, virtuelle Kamera |
+| **Spotify** | Wiedergabe, nächster/vorheriger Titel, Playlist starten, Shuffle, Wiederholung, Lautstärke, Multimedia-Dial |
+| **Wetter** | Aktuelles Wetter, Mehrtagesvorhersage, Luftqualität |
+| **Uhr-Schoner** | Bildschirmschoner: Uhrzeit als je eine Ziffer pro Taste |
+
+### Discord
+
+Braucht eine einmalige Einrichtung, siehe
+[discord-setup.md](discord-setup.md).
+
+**Kanaltasten** zeigen von sich aus das Logo des Servers, zu dem der Kanal
+gehört. Das kannst du je Taste abschalten, und ein selbst gewähltes Icon hat
+immer Vorrang. Die Logos liegen unter
+`~/.local/share/deckswitch/cache/discord-guilds/`.
 
 ### OBS
 
@@ -102,27 +130,6 @@ Besonderheiten:
   absichern („zweimal drücken"). Beim Stream ist das voreingestellt.
 * **Kapitelmarken** brauchen OBS 30.2 oder neuer und Hybrid-MP4 als
   Aufnahmeformat. Sonst erscheint ein Hinweis.
-
-### Discord
-
-Braucht eine einmalige Einrichtung, siehe
-[discord-setup.md](discord-setup.md).
-
-**Kanaltasten** zeigen von sich aus das Logo des Servers, zu dem der Kanal
-gehört. Das kannst du je Taste abschalten, und ein selbst gewähltes Icon hat
-immer Vorrang. Die Logos liegen unter
-`~/.local/share/deckswitch/cache/discord-guilds/`.
-
-## Nachinstallierbare Plugins
-
-Diese drei gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
-[plugin-sources/](../../plugin-sources/).
-
-| Plugin | Aktionen |
-| --- | --- |
-| **Spotify** | Wiedergabe, nächster/vorheriger Titel, Playlist starten, Shuffle, Wiederholung, Lautstärke, Multimedia-Dial |
-| **Wetter** | Aktuelles Wetter, Mehrtagesvorhersage, Luftqualität |
-| **Uhr-Schoner** | Bildschirmschoner: Uhrzeit als je eine Ziffer pro Taste |
 
 **Spotify** braucht gar keine Einrichtung. Die Steuerung läuft über MPRIS,
 den D-Bus-Standard für Medienspieler unter Linux: kein Konto, keine

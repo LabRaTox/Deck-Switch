@@ -6,11 +6,9 @@
 
 | Plugin | Actions |
 | --- | --- |
-| **Audio** | volume (dial with bar), microphone mute (push-to-talk too), switch output device, per-app volume |
+| **Audio** | volume (dial with bar), set volume to a fixed percentage, microphone mute (push-to-talk too), switch output device, per-app volume |
 | **Multi action** | multi action, multi action (toggle) |
 | **Soundboard** | play sound (with its own output device), stop everything |
-| **OBS** | recording (incl. pause and chapter markers), stream, replay buffer and save replay, scene collection, scene, source, mute, media playback, studio mode, push preview live, filter, screenshot, transition, virtual camera |
-| **Discord** | mute (push-to-talk and push-to-mute too), deafen, switch voice channel, leave channel, open text channel, microphone level |
 | **System** | start and stop programs, open folder/file/link, shell command, hotkey (as a toggle and as push-to-talk too), type text, multimedia, windows and desktops, screenshot, session (lock, log out, suspend, restart, shut down), system values (CPU, RAM, GPU, temperatures, network), monitor brightness over DDC/CI |
 | **Streamdeck** | folder, home, back, page indicator, go to page, page through, brightness, empty (placeholder), virtual deck |
 | **Tabler icons** | not an action plugin, but the icon set that ships with the app |
@@ -73,11 +71,40 @@ headphones. Looping optional, and a second press restarts or stops.
 running streams along. Otherwise the music already playing would stay on the
 old device.
 
+**Set volume** jumps to a fixed percentage with one press — one key for
+20%, one for 50%, one for 100%. A muted device is unmuted by default;
+otherwise the bar would show the value while nothing could be heard. While
+that value is the current one, the key gets a border. On a dial both apply:
+rotating steps through the volume as usual, pressing jumps to the fixed
+value.
+
 **State from outside.** If somebody changes the volume in the system
 settings, OBS switches the scene or Discord mutes itself, the affected key
 redraws immediately. For that, `pactl subscribe` and the event channels of
 obs-websocket and Discord RPC are running. The one-second tick is only the
 safety net.
+
+## Plugins to install afterwards
+
+These five do not ship with the app. Their sources are in
+[plugin-sources/](../../plugin-sources/) though.
+
+| Plugin | Actions |
+| --- | --- |
+| **Discord** | mute (push-to-talk and push-to-mute too), deafen, switch voice channel, leave channel, open text channel, microphone level |
+| **OBS** | recording (incl. pause and chapter markers), stream, replay buffer and save replay, scene collection, scene, source, mute, media playback, studio mode, push preview live, filter, screenshot, transition, virtual camera |
+| **Spotify** | playback, next/previous track, start playlist, shuffle, repeat, volume, multimedia dial |
+| **Weather** | current weather, multi-day forecast, air quality |
+| **Clock screensaver** | screen saver: the time as one digit per key |
+
+### Discord
+
+Needs a one-time setup, see [discord-setup.md](discord-setup.md).
+
+**Channel keys** show the logo of the server the channel belongs to by
+themselves. You can switch that off per key, and an icon you chose yourself
+always wins. The logos live in
+`~/.local/share/deckswitch/cache/discord-guilds/`.
 
 ### OBS
 
@@ -96,26 +123,6 @@ The feature set matches the official Elgato OBS plugin. A few specifics:
   ("press twice"). For the stream that is the default.
 * **Chapter markers** need OBS 30.2 or newer and hybrid MP4 as the recording
   format. Otherwise you get a note.
-
-### Discord
-
-Needs a one-time setup, see [discord-setup.md](discord-setup.md).
-
-**Channel keys** show the logo of the server the channel belongs to by
-themselves. You can switch that off per key, and an icon you chose yourself
-always wins. The logos live in
-`~/.local/share/deckswitch/cache/discord-guilds/`.
-
-## Plugins to install afterwards
-
-These three do not ship with the app. Their sources are in
-[plugin-sources/](../../plugin-sources/) though.
-
-| Plugin | Actions |
-| --- | --- |
-| **Spotify** | playback, next/previous track, start playlist, shuffle, repeat, volume, multimedia dial |
-| **Weather** | current weather, multi-day forecast, air quality |
-| **Clock screensaver** | screen saver: the time as one digit per key |
 
 **Spotify** needs no setup at all. Control runs over MPRIS, the D-Bus
 standard for media players on Linux: no account, no credentials, no OAuth.

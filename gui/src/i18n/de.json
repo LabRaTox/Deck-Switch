@@ -189,6 +189,8 @@
     "connected": "Verbunden",
     "disconnected": "Nicht verbunden",
     "reload": "Plugins neu laden",
+    "reloadConfirm": "Alle Plugins neu laden?\n\nJedes Plugin wird abgebaut und neu eingelesen: Verbindungen zu OBS, Discord und Co. werden getrennt und neu aufgebaut, und der Zustand der Tasten (Umschalter, Zwischenspeicher, laufende Animationen) beginnt von vorn.\n\nEinstellungen, Belegungen und installierte Plugins bleiben unberührt.",
+    "reloadHint": "Baut alle Plugins ab und neu auf — Verbindungen und Tastenzustände beginnen von vorn.",
     "actions_one": "{{count}} Aktion",
     "actions_other": "{{count}} Aktionen",
     "icons": "{{count}} Icons",
@@ -221,6 +223,7 @@
     "noneInstalled": "Keins installiert.",
     "categories": {
       "all": "Alle",
+      "installed": "Installiert",
       "system": "System",
       "audio": "Audio",
       "business": "Büro",
@@ -265,7 +268,11 @@
       "dials": "Dials",
       "source": "Herkunft",
       "support": "Hilfe",
-      "openSupport": "Seite öffnen"
+      "openSupport": "Seite öffnen",
+      "downloads": "Downloads",
+      "size": "Größe",
+      "released": "Veröffentlicht",
+      "minApp": "Braucht App-Version"
     },
     "checksumAnnounced": "Angekündigte Prüfsumme: {{hash}}… — sie wird vor dem Auspacken geprüft.",
     "checksumMissing": "Ohne Prüfsumme: Es wird installiert, was gerade unter der Adresse liegt."
@@ -553,6 +560,7 @@
     },
     "dropHere": "Archiv hierher ziehen",
     "dropOrClick": "oder klicken, um eine Datei zu wählen",
-    "submitFormats": "ZIP, TAR oder tar.gz — angenommen wird, was sich zum Prüfen öffnen lässt. Ausgeliefert wird immer ein ZIP, denn nur das kann die App auspacken."
+    "submitFormats": "ZIP, TAR oder tar.gz — angenommen wird, was sich zum Prüfen öffnen lässt. Ausgeliefert wird immer ein ZIP, denn nur das kann die App auspacken.",
+    "versions": "Fassungen"
   }
 }

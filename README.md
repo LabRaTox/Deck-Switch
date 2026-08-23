@@ -80,9 +80,9 @@ One image across all keys and the touch strip, animated or still. Every page
 can have its own touch strip wallpaper.
 
 **Plugins**
-Eight plugins are built in: audio, OBS, Discord, system, soundboard,
-multi-action, navigation and the Tabler icon set. Three more can be installed
-afterwards: Spotify, weather and a clock screensaver. For your own there is
+Six plugins are built in: audio, system, soundboard, multi-action,
+navigation and the Tabler icon set. Five more can be installed afterwards:
+OBS, Discord, Spotify, weather and a clock screensaver. For your own there is
 an open API. Icon sets are plugins too.
 
 There are four ways to install one: through the **store** inside the app,

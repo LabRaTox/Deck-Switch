@@ -69,12 +69,11 @@ export function PluginDetail({
 
       <header className="detail-kopf">
         {plugin.has_icon ? (
-          <img
-            className="detail-icon"
-            src={api.pluginIconUrl(plugin.id)}
-            alt=""
-            style={{ background: manifest.accent }}
-          />
+          // Ohne Akzentfarbe dahinter: Ein Plugin bringt sein eigenes Logo
+          // mit, und das steht für sich. Ein farbiges Quadrat darunter machte
+          // aus dem OBS-Zeichen eine rote Kachel und schluckte die weißen
+          // Flächen im Spotify-Zeichen.
+          <img className="detail-icon" src={api.pluginIconUrl(plugin.id)} alt="" />
         ) : (
           <span className="detail-icon platzhalter" style={{ background: manifest.accent }}>
             {localized(manifest.name, i18n.language).slice(0, 1)}
