@@ -100,6 +100,18 @@ export interface Page {
   touch_wallpaper: TouchWallpaper;
 }
 
+/** Ein Profil, wie es die Verwaltung auflistet. */
+export interface ProfileInfo {
+  id: string;
+  name: string;
+  pages: number;
+  /** Namen der Decks, die es gerade zeigen — Warnung vor dem Löschen. */
+  decks: string[];
+  active: boolean;
+  /** Programme, bei denen dieses Profil von selbst nach vorn kommt. */
+  auto_apps: string[];
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -271,6 +283,11 @@ export interface ActionDescriptor {
   default_label: LocalizedText;
   states: ActionState[];
   settings_schema: SettingsField[];
+  /**
+   * Eigene Einstellungsseite (HTML) statt eines Formulars aus dem Schema.
+   * Nur Elgato-Plugins bringen so etwas mit.
+   */
+  property_inspector?: string | null;
   accent?: string | null;
   /** Was die Sitzung können muss, damit die Aktion etwas bewirkt. */
   requires?: string[];

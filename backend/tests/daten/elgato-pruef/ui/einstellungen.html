@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head><meta charset="utf-8"><title>Prüfzähler</title></head>
+  <body>
+    <label>Ton <input id="ton" type="number" value="0"></label>
+    <script>
+      // Nach Elgato-Bauart: Die Software ruft diese Funktion auf.
+      let ws, kontext;
+      function connectElgatoStreamDeckSocket(port, uuid, ereignis, info, aktionsinfo) {
+        kontext = uuid;
+        ws = new WebSocket("ws://127.0.0.1:" + port);
+        ws.addEventListener("open", () => ws.send(JSON.stringify({ event: ereignis, uuid })));
+        ws.addEventListener("message", (e) => {
+          const n = JSON.parse(e.data);
+          if (n.event === "didReceiveSettings") {
+            document.getElementById("ton").value = n.payload.settings.ton ?? 0;
+          }
+        });
+        document.getElementById("ton").addEventListener("change", (e) => {
+          ws.send(JSON.stringify({ event: "setSettings", context: kontext,
+                                   payload: { ton: Number(e.target.value) } }));
+        });
+      }
+    </script>
+  </body>
+</html>

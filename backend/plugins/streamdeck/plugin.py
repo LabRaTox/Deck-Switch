@@ -50,6 +50,27 @@ class StreamdeckPlugin(ActionPlugin):
             self._toggle_brightness(ctx)
         elif action_id == "overlay":
             self._overlay(settings, ctx)
+        elif action_id == "profile":
+            self._profil(settings, ctx)
+
+    def _profil(self, settings, ctx) -> None:
+        """Schaltet das Deck auf ein anderes Profil.
+
+        Ohne Angabe geht es zurück zum vorigen — damit reicht eine Taste je
+        Profil, und der Weg zurück braucht keine eigene.
+        """
+        gewaehlt = (settings.get("profile_id") or "").strip()
+        name = ""
+        if gewaehlt:
+            profil = self.services.config.profiles.get(gewaehlt)
+            if profil is None:
+                self.notify_error("Das eingestellte Profil gibt es nicht mehr")
+                return
+            name = profil.name
+        if not ctx.services.runtime.switch_profile(name):
+            # Kein Fehler: Wer auf dem Profil steht, das die Taste meint,
+            # hat nichts falsch gemacht.
+            self.services.runtime.request_redraw()
 
     def _overlay(self, settings, ctx) -> None:
         """Zeigt oder versteckt ein virtuelles Deck.
@@ -82,6 +103,9 @@ class StreamdeckPlugin(ActionPlugin):
         self.run_async(schalten())
 
     def get_state(self, action_id, settings, ctx):
+        if action_id == "profile":
+            gewaehlt = (settings.get("profile_id") or "").strip()
+            return "active" if gewaehlt and gewaehlt == ctx.profile_id else "inactive"
         if action_id != "overlay":
             return None
         ziel = (settings.get("deck") or "").strip()
@@ -92,6 +116,10 @@ class StreamdeckPlugin(ActionPlugin):
 
     def get_label(self, action_id, settings, ctx):
         runtime = ctx.services.runtime
+        if action_id == "profile" and not ctx.appearance.label_text:
+            gewaehlt = (settings.get("profile_id") or "").strip()
+            profil = self.services.config.profiles.get(gewaehlt)
+            return profil.name if profil is not None else "Zurück"
         pages = self.services.config.profile(ctx.profile_id).pages
         if action_id == "page_number":
             mode = ctx.setting("format", "number_of_total")
@@ -123,12 +151,16 @@ class StreamdeckPlugin(ActionPlugin):
             return self._render_page_number(settings, ctx)
         if action_id == "brightness" and ctx.input_type == "dial":
             return self._render_brightness(ctx)
-        return self.services.render.render_slot(
+        zustand = self.get_state(action_id, settings, ctx)
+        bild = self.services.render.render_slot(
             ctx,
-            state=None,
+            state=zustand,
             label_override=self.get_label(action_id, settings, ctx),
             accent=ACCENT,
         )
+        if action_id == "profile" and zustand == "active":
+            self.services.render.draw_badge(bild, ctx.setting("active_badge", "#22c55e"))
+        return bild
 
     def _render_page_number(self, settings, ctx):
         """Große Zahl statt Icon — die Seitenanzeige ist der Text."""
@@ -205,6 +237,13 @@ class StreamdeckPlugin(ActionPlugin):
                 {"value": deck.key, "label": deck.label}
                 for deck in self.services.runtime.decks_in_order()
                 if deck.binding.is_overlay
+            ]
+        if source == "profiles":
+            # Leer als erste Wahl: Das ist der Weg zurück, und er ist die
+            # häufigste zweite Taste neben einem Profilwechsel.
+            return [{"value": "", "label": "Zurück zum vorigen"}] + [
+                {"value": profil.id, "label": profil.name}
+                for profil in self.services.config.profiles.values()
             ]
         if source != "pages":
             return []

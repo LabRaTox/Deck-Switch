@@ -24,6 +24,10 @@ dependencies = [
     "evdev>=1.7",
     # … und die Zuordnung Zeichen → Taste aus der aktiven Belegung.
     "xkbcommon>=1.0",
+    # Die Brücke zu Elgato-Plugins ist ein WebSocket-Server. Kommt zwar über
+    # uvicorn[standard] mit, wird hier aber selbst benutzt und gehört deshalb
+    # eigenständig erklärt.
+    "websockets>=12.0",
 ]
 
 [project.scripts]
