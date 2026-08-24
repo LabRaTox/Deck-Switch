@@ -89,7 +89,7 @@ nur das Sicherheitsnetz.
 
 ## Nachinstallierbare Plugins
 
-Diese acht gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
+Diese neun gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
 [plugin-sources/](../../plugin-sources/).
 
 | Plugin | Aktionen |
@@ -102,6 +102,7 @@ Diese acht gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
 | **Timer** | Countdown, Stoppuhr, Wecker |
 | **Twitch** | Titel, Kategorie, Werbung, Marker, Clip, Raid, Chat, Chatmodus, Chat leeren, Shoutout, Umfrage, Vorhersage, Streamstatus, Follower |
 | **Govee** | An/Aus, Helligkeit, Farbe, Farbtemperatur, Szene, alle Geräte auf einmal |
+| **YouTube** | Zuschauer, Chatnachricht, Werbung, Dashboard öffnen, Stream starten und beenden |
 
 ### Discord
 
@@ -300,6 +301,64 @@ gebündelt abgefragt, alle 25 Sekunden, und nur für Geräte, die gerade auf
 einer sichtbaren Taste liegen. Was du selbst schaltest, steht sofort auf der
 Kachel, ohne auf die nächste Abfrage zu warten. Bremst Govee doch einmal,
 steht das im Klartext da statt „unbekannter Fehler".
+
+### YouTube
+
+Fünf Aktionen für den laufenden Livestream: **Zuschauer** zeigt, wie viele
+gerade zusehen. **Chatnachricht** schickt einen vorbereiteten Text in den
+Live-Chat. **Werbung** schiebt einen Block ein. **Dashboard öffnen** springt
+in YouTube Studio, bei laufender Sendung direkt auf deren Seite. **Stream
+starten/beenden** wechselt den Zustand der Sendung — die Taste zeigt, was
+gerade gilt.
+
+**Einrichten braucht ein eigenes Google-Projekt**, und das ist keine
+Schikane, sondern rechnerisch nötig: YouTubes Kontingent gilt je Projekt und
+nicht je Benutzer — zehntausend Einheiten am Tag, geteilt von allen, die
+dieselbe Kennung benutzen. Eine mitgelieferte Client-ID wäre nach ein paar
+Dutzend Installationen erschöpft, und dann funktioniert das Plugin für
+niemanden mehr. Bei Twitch zählt das Limit je Benutzer, dort reicht eine App
+für alle; hier nicht.
+
+So kommst du an die Zugangsdaten:
+
+1. In der [Google Cloud Console](https://console.cloud.google.com) ein
+   Projekt anlegen
+2. Unter *APIs & Dienste* die **YouTube Data API v3** aktivieren
+3. Unter *Anmeldedaten* einen **OAuth-Client** anlegen, Typ *Fernseher und
+   Geräte mit begrenzter Eingabe*
+4. Unter *OAuth-Zustimmungsbildschirm → Zielgruppe* dich selbst als
+   **Testnutzer** eintragen
+5. Client-ID und Client-Secret in die Plugin-Einstellungen eintragen
+6. *Mit YouTube verbinden* drücken, den Code auf
+   [google.com/device](https://www.google.com/device) eintippen
+
+Schritt 4 wird gern übersehen und ist der Punkt, an dem es zuerst hakt:
+Solange die App die Überprüfung durch Google nicht durchlaufen hat, lässt
+Google nur eingetragene Testnutzer hinein — auch dich selbst nicht, obwohl du
+sie angelegt hast. Die Anmeldung endet dann mit „Zugriff blockiert" und
+`Fehler 403: access_denied`.
+
+Im Testmodus laufen die Anmeldungen nach sieben Tagen ab; danach einmal neu
+verbinden. Wer das nicht will, schickt die App durch Googles Überprüfung —
+für den Eigengebrauch ist das mehr Aufwand als Nutzen.
+
+Das Secret liegt danach auf deinem Rechner. Google nennt es bei installierten
+Anwendungen ausdrücklich nicht geheim — es benennt die Anwendung, es erlaubt
+nichts. Das Token liegt in `~/.config/deckswitch/youtube-token.json` und ist
+nur für dich lesbar.
+
+**Mit dem Kontingent wird gerechnet.** Lesen kostet eine Einheit, Schreiben
+fünfzig. Die Zuschauerzahl frischt sich standardmäßig alle 30 Sekunden auf —
+das sind knapp 3 000 Einheiten am Tag und lässt Luft für Chat und Werbung.
+Auf 5 Sekunden gestellt wären es 17 000, und danach ginge bis Mitternacht
+nichts mehr, auch kein Beenden des Streams. Das Feld lässt sich deshalb nicht
+unter 10 Sekunden stellen. Gezeichnet wird nur aus gespiegelten Werten; die
+Kacheln selbst fragen nie.
+
+**Was YouTube nicht verspricht:** dass jeder Zuschauer die Werbung sieht.
+Ausgespielt wird sie denen, denen gerade Werbung zusteht — die übrigen sehen
+weiter zu. Und eine Sendung muss in YouTube Studio angelegt sein, bevor sie
+sich von hier starten lässt.
 
 ## Nachinstallieren
 

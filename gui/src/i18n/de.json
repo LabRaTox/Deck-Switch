@@ -282,7 +282,15 @@
     "twitchForget": "Abmelden",
     "twitchEnterCode": "Diesen Code bei Twitch eingeben:",
     "twitchOpenPage": "twitch.tv/activate öffnen",
-    "twitchWaiting": "Warte auf die Bestätigung bei Twitch …"
+    "twitchWaiting": "Warte auf die Bestätigung bei Twitch …",
+    "youtubeConnect": "Mit YouTube verbinden",
+    "youtubeConnecting": "Verbinde …",
+    "youtubeConnected": "Verbunden als {{user}}",
+    "youtubeForget": "Abmelden",
+    "youtubeEnterCode": "Diesen Code bei Google eingeben:",
+    "youtubeOpenPage": "google.com/device öffnen",
+    "youtubeWaiting": "Warte auf die Bestätigung bei Google …",
+    "saveOnClose": "Die Änderungen an diesen Einstellungen übernehmen?"
   },
   "settings": {
     "title": "Einstellungen",

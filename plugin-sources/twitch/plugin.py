@@ -129,6 +129,10 @@ class TwitchPlugin(ActionPlugin):
     def __init__(self, manifest, services) -> None:
         super().__init__(manifest, services)
         self.api = TwitchApi()
+        # Erneuert die API das Token, muss es auf die Platte — sonst steht
+        # dort nach einem Neustart eine Anmeldung, die Twitch längst
+        # verworfen hat.
+        self.api.beim_aendern = lambda anmeldung: _schreib_token(anmeldung.als_dict())
         self.fehler = ""
 
         # Gespiegelter Zustand — nur daraus zeichnet render().

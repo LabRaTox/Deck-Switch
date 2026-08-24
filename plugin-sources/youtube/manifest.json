@@ -1,0 +1,275 @@
+{
+  "id": "youtube",
+  "name": {
+    "de": "YouTube",
+    "en": "YouTube"
+  },
+  "version": "1.0.0",
+  "type": "action",
+  "author": "LabRaTox",
+  "category": "streaming",
+  "accent": "#ff0033",
+  "icon_symbol": "brand-youtube",
+  "description": {
+    "de": "Livestream vom Deck aus: Zuschauerzahl im Blick, Chatnachricht abschicken, Werbung einschieben, Stream starten und beenden.",
+    "en": "Run your livestream from the deck: watch the viewer count, post a chat message, insert an ad, start and end the stream."
+  },
+  "changelog": {
+    "de": "Erste Fassung: Zuschauer, Chatnachricht, Werbung, Dashboard öffnen, Stream starten und beenden.",
+    "en": "First release: viewers, chat message, ad, open dashboard, start and stop the stream."
+  },
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/Deck-Switch",
+  "icon": "icon.png",
+  "entry": "plugin.py",
+  "class": "YouTubePlugin",
+  "config_schema": [
+    {
+      "key": "client_id",
+      "type": "text",
+      "label": {
+        "de": "Client-ID",
+        "en": "Client ID"
+      },
+      "help": {
+        "de": "Die brauchst du aus einem eigenen Google-Projekt: dort die YouTube Data API v3 einschalten und unter „Anmeldedaten“ einen OAuth-Client anlegen, Typ „Fernseher und Geräte mit begrenzter Eingabe“. Das macht man einmal. https://console.cloud.google.com/apis/credentials",
+        "en": "You need this from your own Google project: enable the YouTube Data API v3 there and create an OAuth client under “Credentials”, type “TV and limited input device”. A one-time job. https://console.cloud.google.com/apis/credentials"
+      }
+    },
+    {
+      "key": "client_secret",
+      "type": "password",
+      "label": {
+        "de": "Client-Secret",
+        "en": "Client secret"
+      },
+      "help": {
+        "de": "Steht im selben OAuth-Client direkt neben der Client-ID.",
+        "en": "Sits right next to the client ID in the same OAuth client."
+      }
+    },
+    {
+      "key": "poll_s",
+      "type": "number",
+      "label": {
+        "de": "Zuschauerzahl auffrischen (Sekunden)",
+        "en": "Refresh viewers (seconds)"
+      },
+      "default": 30,
+      "min": 10,
+      "max": 300,
+      "help": {
+        "de": "Wie oft nach der Zuschauerzahl gefragt wird. Google zählt jede Abfrage aufs Tageslimit: Bei 30 Sekunden bleibt reichlich davon für Chat und Werbung übrig, bei 10 wird es knapp.",
+        "en": "How often the viewer count is fetched. Google counts every query against the daily limit: at 30 seconds there is plenty left for chat and ads, at 10 it gets tight."
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "viewers",
+      "name": {
+        "de": "Zuschauer",
+        "en": "Viewers"
+      },
+      "description": {
+        "de": "Zeigt, wie viele gerade zusehen. Die Zahl frischt sich selbst auf; ein Druck holt sie sofort.",
+        "en": "Shows how many are watching right now. The number refreshes itself; a press fetches it at once."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "users",
+      "default_label": {
+        "de": "Zuschauer",
+        "en": "Viewers"
+      },
+      "states": [
+        {
+          "id": "aus",
+          "name": {
+            "de": "Nicht live",
+            "en": "Not live"
+          },
+          "default_icon": "video-off"
+        },
+        {
+          "id": "live",
+          "name": {
+            "de": "Live",
+            "en": "Live"
+          },
+          "default_icon": "users"
+        }
+      ],
+      "settings_schema": []
+    },
+    {
+      "id": "chat",
+      "name": {
+        "de": "Chatnachricht",
+        "en": "Chat message"
+      },
+      "description": {
+        "de": "Schickt einen vorbereiteten Text in den Live-Chat — für Links, Sponsoren, Hinweise.",
+        "en": "Posts a prepared text to the live chat — for links, sponsors, notices."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "message-2",
+      "default_label": {
+        "de": "Chat",
+        "en": "Chat"
+      },
+      "settings_schema": [
+        {
+          "key": "message",
+          "type": "text",
+          "label": {
+            "de": "Nachricht",
+            "en": "Message"
+          },
+          "placeholder": {
+            "de": "Was gesendet werden soll",
+            "en": "What to send"
+          },
+          "help": {
+            "de": "Höchstens 200 Zeichen — mehr nimmt YouTube nicht an.",
+            "en": "At most 200 characters — YouTube does not accept more."
+          }
+        }
+      ]
+    },
+    {
+      "id": "ad",
+      "name": {
+        "de": "Werbung",
+        "en": "Play ad"
+      },
+      "description": {
+        "de": "Schiebt einen Werbeblock ein. YouTube spielt ihn denen aus, denen gerade Werbung zusteht; die übrigen sehen weiter zu.",
+        "en": "Inserts an ad break. YouTube serves it to those currently eligible; the rest keep watching."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "ad-2",
+      "default_label": {
+        "de": "Werbung",
+        "en": "Ad"
+      },
+      "settings_schema": [
+        {
+          "key": "duration",
+          "type": "number",
+          "label": {
+            "de": "Dauer (Sekunden)",
+            "en": "Duration (seconds)"
+          },
+          "default": 30,
+          "min": 5,
+          "max": 180
+        },
+        {
+          "key": "confirm",
+          "type": "bool",
+          "label": {
+            "de": "Rückfrage",
+            "en": "Ask first"
+          },
+          "default": true,
+          "help": {
+            "de": "Zwei Drücke statt einem. Ein Werbeblock lässt sich nicht zurücknehmen.",
+            "en": "Two presses instead of one. An ad break cannot be undone."
+          }
+        }
+      ]
+    },
+    {
+      "id": "dashboard",
+      "name": {
+        "de": "Dashboard öffnen",
+        "en": "Open dashboard"
+      },
+      "description": {
+        "de": "Öffnet die Streamübersicht in YouTube Studio — bei laufender Sendung direkt deren Seite.",
+        "en": "Opens the live dashboard in YouTube Studio — the running broadcast's own page if there is one."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "dashboard",
+      "default_label": {
+        "de": "Studio",
+        "en": "Studio"
+      },
+      "settings_schema": []
+    },
+    {
+      "id": "stream",
+      "name": {
+        "de": "Stream starten/beenden",
+        "en": "Start/stop stream"
+      },
+      "description": {
+        "de": "Startet die vorbereitete Sendung oder beendet die laufende. Die Taste zeigt, was gerade gilt.",
+        "en": "Starts the prepared broadcast or ends the running one. The key shows which applies."
+      },
+      "inputs": [
+        "key"
+      ],
+      "default_icon": "player-play",
+      "default_label": {
+        "de": "Stream",
+        "en": "Stream"
+      },
+      "states": [
+        {
+          "id": "bereit",
+          "name": {
+            "de": "Bereit",
+            "en": "Ready"
+          },
+          "default_icon": "player-play"
+        },
+        {
+          "id": "live",
+          "name": {
+            "de": "Läuft",
+            "en": "Running"
+          },
+          "default_icon": "player-stop"
+        },
+        {
+          "id": "keine",
+          "name": {
+            "de": "Keine Sendung",
+            "en": "No broadcast"
+          },
+          "default_icon": "video-off"
+        }
+      ],
+      "settings_schema": [
+        {
+          "key": "confirm",
+          "type": "bool",
+          "label": {
+            "de": "Rückfrage vor dem Beenden",
+            "en": "Ask before stopping"
+          },
+          "default": true,
+          "help": {
+            "de": "Eine beendete Sendung lässt sich nicht wieder starten.",
+            "en": "A finished broadcast cannot be restarted."
+          }
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    "screenshots/aktionen.png",
+    "screenshots/zustaende.png",
+    "screenshots/dials.png"
+  ]
+}
