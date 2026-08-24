@@ -228,16 +228,16 @@ export function PluginsView() {
           <button type="button" className="btn" onClick={() => setEinreichenOpen(true)}>
             {t("store.submitTitle")}
           </button>
+          {/* Ohne Rückfrage: Der Knopf sieht nur nach, was sich auf der
+              Platte getan hat, und fasst nur Geändertes an. Laufende
+              Plugins behalten ihre Verbindungen. Früher riss er alles ab —
+              dafür brauchte es die Warnung, und niemand wollte ihn mehr
+              anfassen. */}
           <button
             type="button"
             className="btn"
             title={t("plugins.reloadHint")}
-            onClick={() => {
-              // Neu laden heißt: jedes Plugin abbauen und neu aufbauen.
-              // Verbindungen fallen dabei, und der Zustand der Tasten
-              // beginnt von vorn — das gehört gefragt, nicht getan.
-              if (window.confirm(t("plugins.reloadConfirm"))) void reloadPlugins();
-            }}
+            onClick={() => void reloadPlugins()}
           >
             {t("plugins.reload")}
           </button>

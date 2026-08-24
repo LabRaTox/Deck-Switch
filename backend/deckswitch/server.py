@@ -1265,6 +1265,24 @@ def create_app(
 
     @app.post("/api/plugins/reload")
     async def reload_plugins() -> dict[str, Any]:
+        """Nachsehen, was sich getan hat — ohne laufende Plugins abzuwürgen.
+
+        Hieß einmal „neu laden" und tat auch das: jedes Plugin abreißen und
+        neu aufbauen. Wer den Knopf drückt, will aber nachsehen, ob es
+        etwas Neues gibt — und dabei nicht seine Verbindungen verlieren.
+        Angefasst wird jetzt nur, was sich auf der Platte geändert hat.
+        """
+        geaendert = await runtime.sync_plugins()
+        return {"ok": True, **geaendert}
+
+    @app.post("/api/plugins/reload-all")
+    async def reload_all_plugins() -> dict[str, Any]:
+        """Der harte Weg: alles abreißen und neu aufbauen.
+
+        Bleibt erreichbar, weil es Fälle gibt, in denen genau das gewollt
+        ist — ein Plugin, das sich verhakt hat. Es hängt aber nicht mehr an
+        einem Knopf, den man aus Neugier drückt.
+        """
         await runtime.reload_plugins()
         return {"plugins": _plugins_payload(runtime)}
 
