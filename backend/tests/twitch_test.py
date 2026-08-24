@@ -61,15 +61,17 @@ def check(name, bedingung, detail=""):
 ANTWORTEN: dict[str, dict] = {}
 #: Jede Anfrage, die hereinkam.
 PROTOKOLL: list[dict] = []
+#: Pfade, die mit diesem HTTP-Code antworten sollen statt mit 200.
+FEHLERCODE: dict[str, int] = {}
 
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # noqa: D102 — sonst rauscht die Ausgabe zu
         pass
 
-    def _antworte(self, daten):
+    def _antworte(self, daten, code=200):
         roh = json.dumps(daten).encode()
-        self.send_response(200)
+        self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(roh)))
         self.end_headers()
@@ -102,7 +104,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         eintrag = self._merke("POST")
-        self._antworte(ANTWORTEN.get(eintrag["pfad"], {"data": []}))
+        code = FEHLERCODE.get(eintrag["pfad"])
+        self._antworte(ANTWORTEN.get(eintrag["pfad"], {"data": []}), code or 200)
 
     def do_PATCH(self):  # noqa: N802
         eintrag = self._merke("PATCH")
@@ -201,6 +204,29 @@ async def main() -> int:
         check("ein Secret wird nirgends mitgeschickt",
               "client_secret" not in (gefragt["rumpf"] or {}))
 
+        # Twitch drückt „noch nicht bestätigt" als 400 mit der Kennung
+        # authorization_pending aus. Vorher galt hier *jede* 400 als Warten
+        # — eine falsche Client-ID hätte den Dialog bis zum Ablauf des Codes
+        # wartend stehen lassen, ohne zu sagen, was los ist.
+        ANTWORTEN["/token"] = {"status": 400, "message": "authorization_pending"}
+        FEHLERCODE["/token"] = 400
+        wartet = await plugin.gui_command("nachfragen", {})
+        check("noch nicht bestätigt heißt warten",
+              wartet == {"angemeldet": False, "wartet": True}, json.dumps(wartet))
+
+        ANTWORTEN["/token"] = {"status": 400, "message": "invalid client"}
+        try:
+            await plugin.gui_command("nachfragen", {})
+            check("eine echte Ablehnung wird gemeldet", False, "kam ohne Fehler durch")
+        except twitchmod.TwitchError as exc:
+            check("eine echte Ablehnung wird gemeldet", "invalid client" in str(exc),
+                  str(exc)[:70])
+        FEHLERCODE.clear()
+        ANTWORTEN["/token"] = {
+            "access_token": "zugriff-1", "refresh_token": "erneuern-1",
+            "expires_in": 14000,
+        }
+
         fertig = await plugin.gui_command("nachfragen", {})
         check("nach dem Eintippen ist man angemeldet", fertig["angemeldet"], str(fertig))
         check("und das Konto steht fest", fertig["konto"] == "LabRaTox", str(fertig))
@@ -211,6 +237,26 @@ async def main() -> int:
               letzte("GET", "/users")["client_id"] == "pruef-client")
         check("und das Token",
               letzte("GET", "/users")["auth"] == "Bearer zugriff-1")
+
+        print("\n== Ein erneuertes Token landet sofort auf der Platte ==")
+        # Twitch tauscht beim Erneuern auch das Refresh-Token aus und macht
+        # das alte ungültig. Wer das neue nur im Speicher hält, hat auf der
+        # Platte eine verbrannte Anmeldung — im Betrieb merkt man nichts,
+        # beim nächsten Start kommt „Invalid refresh token". Genau so
+        # passiert am 2026-08-24.
+        ANTWORTEN["/token"] = {
+            "access_token": "zugriff-2", "refresh_token": "erneuern-2",
+            "expires_in": 14000,
+        }
+        plugin.api.erneuere()
+        auf_platte = json.loads(twitchmod.TOKEN_DATEI.read_text())
+        check("das neue Zugriffstoken steht in der Datei",
+              auf_platte["access_token"] == "zugriff-2", auf_platte["access_token"])
+        check("und das neue Refresh-Token auch",
+              auf_platte["refresh_token"] == "erneuern-2", auf_platte["refresh_token"])
+        check("im Speicher steht dasselbe",
+              plugin.api.anmeldung.refresh_token == "erneuern-2",
+              plugin.api.anmeldung.refresh_token)
 
         print("\n== Was jede Aktion wirklich schickt ==")
         ANTWORTEN["/search/categories"] = {"data": [{"id": "509658", "name": "Just Chatting"}]}

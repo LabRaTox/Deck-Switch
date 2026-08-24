@@ -1223,6 +1223,18 @@ input[type="checkbox"] {
   line-height: 1.4;
 }
 
+/* Adressen in Hinweistexten: erkennbar, aber nicht laut. Sie stehen dort,
+   damit man sie anklicken kann statt abzuschreiben. */
+.help a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.help a:hover {
+  text-decoration-thickness: 2px;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -2206,7 +2218,8 @@ input[type="checkbox"] {
    Code steht groß und mit weiten Zeichenabständen — er wird von einem
    Bildschirm auf ein Handy übertragen, und dabei verwechselt man sonst
    0 und O. */
-.twitch-verbinden {
+.twitch-verbinden,
+.youtube-verbinden {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2214,7 +2227,8 @@ input[type="checkbox"] {
   margin-top: 12px;
 }
 
-.twitch-code {
+.twitch-code,
+.youtube-code {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2224,17 +2238,24 @@ input[type="checkbox"] {
   background: var(--bg-sunken);
 }
 
-.twitch-code p {
+.twitch-code p,
+.youtube-code p {
   margin: 0;
   color: var(--text-dim);
   font-size: 13px;
 }
 
-.twitch-code strong {
+.twitch-code strong,
+.youtube-code strong {
   font-size: 30px;
   letter-spacing: 0.18em;
   font-variant-numeric: tabular-nums;
   color: #9146ff;
+}
+
+/* Der Code trägt die Farbe des Dienstes, bei dem er eingetippt wird. */
+.youtube-code strong {
+  color: #ff0033;
 }
 
 /* Bewertung in der Detailspalte: zwei Daumen, darunter was Leute dazu

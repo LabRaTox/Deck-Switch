@@ -86,7 +86,7 @@ safety net.
 
 ## Plugins to install afterwards
 
-These eight do not ship with the app. Their sources are in
+These nine do not ship with the app. Their sources are in
 [plugin-sources/](../../plugin-sources/) though.
 
 | Plugin | Actions |
@@ -99,6 +99,7 @@ These eight do not ship with the app. Their sources are in
 | **Timer** | countdown, stopwatch, alarm clock |
 | **Twitch** | title, category, commercial, marker, clip, raid, chat, chat mode, clear chat, shoutout, poll, prediction, stream status, followers |
 | **Govee** | on/off, brightness, colour, colour temperature, scene, every device at once |
+| **YouTube** | viewers, chat message, ad, open dashboard, start and stop the stream |
 
 ### Discord
 
@@ -285,6 +286,57 @@ every 25 seconds, and only for devices currently on a visible key. What you
 switch yourself shows on the key immediately, without waiting for the next
 query. If Govee does throttle, it says so plainly instead of “unknown
 error”.
+
+### YouTube
+
+Five actions for a running livestream: **viewers** shows how many are
+watching. **Chat message** posts a prepared text to the live chat. **Ad**
+inserts a break. **Open dashboard** jumps into YouTube Studio, straight to
+the running broadcast's page if there is one. **Start/stop stream** switches
+the broadcast's state — the key shows which applies.
+
+**Setting up needs your own Google project**, and that is arithmetic rather
+than red tape: YouTube's quota is per project, not per user — ten thousand
+units a day, shared by everyone using the same credentials. A bundled client
+ID would be exhausted after a few dozen installs, and then the plugin works
+for nobody. Twitch counts per user, so one app serves everyone there; not
+here.
+
+How to get the credentials:
+
+1. Create a project in the [Google Cloud Console](https://console.cloud.google.com)
+2. Under *APIs & Services*, enable the **YouTube Data API v3**
+3. Under *Credentials*, create an **OAuth client** of type *TV and limited
+   input device*
+4. Under *OAuth consent screen → Audience*, add yourself as a **test user**
+5. Enter client ID and client secret in the plugin settings
+6. Press *connect to YouTube* and type the code at
+   [google.com/device](https://www.google.com/device)
+
+Step 4 is easily missed and is where things first go wrong: until the app has
+passed Google's verification, only registered test users may sign in — not
+even you, although you created it. Signing in then ends with “Access blocked”
+and `Error 403: access_denied`.
+
+In testing mode sign-ins expire after seven days; just connect again after
+that. Avoiding it means putting the app through Google's verification, which
+for personal use is more effort than it is worth.
+
+The secret then sits on your machine. Google explicitly does not treat it as
+secret for installed applications — it names the application, it grants
+nothing. The token lives in `~/.config/deckswitch/youtube-token.json`,
+readable only by you.
+
+**The quota is budgeted for.** A read costs one unit, a write fifty. The
+viewer count refreshes every 30 seconds by default — about 3,000 units a day,
+leaving room for chat and ads. Set to 5 seconds it would be 17,000, and
+after that nothing would work until midnight, not even stopping the stream.
+That is why the field will not go below 10 seconds. Drawing uses mirrored
+values only; the keys themselves never query.
+
+**What YouTube does not promise:** that every viewer sees the ad. It is
+served to those currently eligible; the rest keep watching. And a broadcast
+has to exist in YouTube Studio before it can be started from here.
 
 ## Installing plugins
 

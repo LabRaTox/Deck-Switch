@@ -73,6 +73,17 @@ class NichtAngemeldet(TwitchError):
     pass
 
 
+class NochNichtBestaetigt(TwitchError):
+    """Der Benutzer hat den Code noch nicht eingegeben.
+
+    Der Normalzustand zwischen „Code anzeigen" und „Code bestätigt".
+    Erkannt wird er an Twitchs Kennung ``authorization_pending`` — und
+    nicht daran, dass irgendwo eine 400 im Text steht: So galt jede
+    Ablehnung als Warten, und eine falsche Client-ID hätte den Dialog bis
+    zum Ablauf des Codes „wartend" stehen lassen.
+    """
+
+
 @dataclass
 class Anmeldung:
     """Was nach der Anmeldung übrig bleibt."""
@@ -141,7 +152,19 @@ def _lies(antwort) -> Any:
         raise TwitchError("Twitch hat etwas Unlesbares geschickt") from exc
 
 
+#: Womit Twitch „noch nicht, frag später" ausdrückt.
+WARTEN = ("authorization_pending", "slow_down")
+
+
 def _fehlertext(exc: urllib.error.HTTPError) -> str:
+    """Wie :func:`_fehlertext_aus`, liest den Rumpf aber selbst."""
+    try:
+        return _fehlertext_aus(exc, exc.read())
+    except Exception:  # noqa: BLE001
+        return f"Twitch antwortet mit {exc.code}"
+
+
+def _fehlertext_aus(exc: urllib.error.HTTPError, roh: bytes) -> str:
     """Die Begründung von Twitch, wenn eine mitkommt.
 
     Twitch schickt bei Fehlern JSON mit ``message`` — das ist fast immer
@@ -149,13 +172,21 @@ def _fehlertext(exc: urllib.error.HTTPError) -> str:
     match the user ID found in the request's OAuth token.").
     """
     try:
-        daten = json.loads(exc.read().decode("utf-8"))
+        daten = json.loads(roh.decode("utf-8"))
         text = str(daten.get("message") or "").strip()
         if text:
             return f"{text} ({exc.code})"
     except Exception:  # noqa: BLE001 — dann eben ohne Begründung
         pass
     return f"Twitch antwortet mit {exc.code}"
+
+
+def _kennung(roh: bytes) -> str:
+    """Twitchs kurze, maschinenlesbare Angabe — sie steht in ``message``."""
+    try:
+        return str(json.loads(roh.decode("utf-8")).get("message") or "")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 class TwitchApi:
@@ -165,6 +196,10 @@ class TwitchApi:
         self.client_id = client_id
         self.anmeldung = Anmeldung()
         self._cache = Zwischenspeicher()
+        #: Wird gerufen, sobald sich die Anmeldung geändert hat. Muss gesetzt
+        #: werden, sonst geht ein erneuertes Token beim nächsten Start
+        #: verloren — siehe :meth:`erneuere`.
+        self.beim_aendern = None
 
     # -- Anmeldung ---------------------------------------------------------
 
@@ -193,14 +228,21 @@ class TwitchApi:
                 "device_code": device_code,
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
             })
-        except TwitchError as exc:
-            if "authorization_pending" in str(exc) or "400" in str(exc):
-                return Anmeldung()
-            raise
+        except NochNichtBestaetigt:
+            # Noch nicht bestätigt — der Normalfall, solange der Code auf
+            # dem Bildschirm steht.
+            return Anmeldung()
         return self._uebernimm(daten)
 
     def erneuere(self) -> None:
-        """Holt ein frisches Zugriffstoken, solange das Refresh-Token gilt."""
+        """Holt ein frisches Zugriffstoken, solange das Refresh-Token gilt.
+
+        **Und speichert es sofort.** Twitch tauscht dabei auch das
+        Refresh-Token aus und macht das alte ungültig. Wer das neue nicht
+        ablegt, hat auf der Platte eine verbrannte Anmeldung: Solange das
+        Backend läuft, merkt man nichts — beim nächsten Start kommt
+        „Invalid refresh token". Genau so passiert am 2026-08-24.
+        """
         if not self.anmeldung.refresh_token:
             raise NichtAngemeldet("Keine Anmeldung, die sich erneuern ließe")
         daten = self._id_aufruf("/token", {
@@ -209,6 +251,15 @@ class TwitchApi:
             "grant_type": "refresh_token",
         })
         self._uebernimm(daten)
+        self._melde_aenderung()
+
+    def _melde_aenderung(self) -> None:
+        if self.beim_aendern is None:
+            return
+        try:
+            self.beim_aendern(self.anmeldung)
+        except Exception:  # noqa: BLE001 — ein Token gilt auch unnotiert
+            log.exception("Twitch: Anmeldung konnte nicht gespeichert werden")
 
     def abmelden(self) -> None:
         """Zieht das Token bei Twitch zurück und wirft es weg."""
@@ -320,7 +371,12 @@ class TwitchApi:
             with urllib.request.urlopen(anfrage, timeout=ZEITLIMIT_S) as antwort:
                 return _lies(antwort) or {}
         except urllib.error.HTTPError as exc:
-            raise TwitchError(_fehlertext(exc)) from exc
+            # Der Rumpf lässt sich nur einmal lesen: einmal lesen, daraus die
+            # Kennung fürs Verhalten und den Text für den Menschen.
+            roh = exc.read()
+            if _kennung(roh) in WARTEN:
+                raise NochNichtBestaetigt(_kennung(roh)) from exc
+            raise TwitchError(_fehlertext_aus(exc, roh)) from exc
         except urllib.error.URLError as exc:
             raise TwitchError(f"Twitch ist nicht erreichbar: {exc.reason}") from exc
 

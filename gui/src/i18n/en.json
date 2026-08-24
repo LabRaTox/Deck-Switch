@@ -282,7 +282,15 @@
     "twitchForget": "Sign out",
     "twitchEnterCode": "Enter this code at Twitch:",
     "twitchOpenPage": "Open twitch.tv/activate",
-    "twitchWaiting": "Waiting for confirmation at Twitch …"
+    "twitchWaiting": "Waiting for confirmation at Twitch …",
+    "youtubeConnect": "Connect to YouTube",
+    "youtubeConnecting": "Connecting …",
+    "youtubeConnected": "Connected as {{user}}",
+    "youtubeForget": "Sign out",
+    "youtubeEnterCode": "Enter this code at Google:",
+    "youtubeOpenPage": "Open google.com/device",
+    "youtubeWaiting": "Waiting for confirmation at Google …",
+    "saveOnClose": "Apply the changes to these settings?"
   },
   "settings": {
     "title": "Settings",

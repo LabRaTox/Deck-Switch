@@ -14,6 +14,7 @@ import { PluginInstaller } from "./PluginInstaller";
 import { SettingsForm } from "./SettingsForm";
 import { StoreDetail } from "./StoreDetail";
 import { TwitchVerbinden } from "./TwitchVerbinden";
+import { YouTubeVerbinden } from "./YouTubeVerbinden";
 import { UiIcon } from "./UiIcon";
 import { StoreEinreichen } from "./StoreEinreichen";
 import { StoreAnmeldung, StoreKarte, StoreHinweis } from "./StoreView";
@@ -415,7 +416,7 @@ export function PluginsView() {
 }
 
 /** Plugins, deren Einrichtung an einem Knopf hängt und nicht an Feldern. */
-const EIGENER_EINRICHTUNGSWEG = new Set(["discord", "twitch"]);
+const EIGENER_EINRICHTUNGSWEG = new Set(["discord", "twitch", "youtube"]);
 
 
 function PluginIcon({ plugin }: { plugin: PluginInfo }) {
@@ -481,6 +482,19 @@ function PluginCard({
 
   const [draft, setDraft] = useState<Record<string, unknown>>(plugin.config);
   const [saved, setSaved] = useState(false);
+
+  /**
+   * Was im Formular steht in die Konfiguration übernehmen.
+   *
+   * Gebraucht von den Plugins, deren Einrichtung an einem Knopf hängt:
+   * Sie lesen ihre Zugangsdaten aus der Konfiguration, und die kennt das
+   * Eingabefeld nicht.
+   */
+  async function uebernimm() {
+    await setPluginConfig(plugin.id, draft);
+    setDirty(false);
+    setSaved(true);
+  }
   const [dirty, setDirty] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -600,10 +614,17 @@ function PluginCard({
         <Modal
           title={`${localized(plugin.manifest.name, i18n.language)} — ${t("plugins.config")}`}
           width={560}
-          onClose={() => {
-            // Ungespeichertes verwerfen wäre unhöflich — lieber nachfragen.
-            if (dirty && !window.confirm(t("plugins.discardChanges"))) return;
-            setDraft(plugin.config);
+          onClose={async () => {
+            // Ungespeichertes still wegzuwerfen wäre unhöflich. Gefragt wird
+            // aber nach dem, was man meistens will: „Übernehmen?" — nicht
+            // „Verwerfen?", wo ein Wegklicken die Arbeit vernichtet.
+            if (dirty) {
+              if (window.confirm(t("plugins.saveOnClose"))) {
+                await setPluginConfig(plugin.id, draft);
+              } else {
+                setDraft(plugin.config);
+              }
+            }
             setDirty(false);
             setOpen(false);
           }}
@@ -613,10 +634,16 @@ function PluginCard({
             plugin.manifest.config_schema.length > 0 ? (
               <>
                 {saved && <span className="saved-hint">{t("plugins.saved")}</span>}
+                {/* Nicht ausgegraut, wenn nichts „geändert" ist. Ob eine
+                    Eingabe als Änderung durchkommt, hängt daran, ob das Feld
+                    ein Ereignis geschickt hat — beim Einfügen aus einem
+                    Passwortspeicher oder per Autofill passiert das nicht
+                    immer. Dann steht der Wert im Feld, der Knopf ist tot,
+                    und es sieht aus, als nähme das Formular nichts an.
+                    Nochmal zu speichern, was schon gilt, schadet nichts. */}
                 <button
                   type="button"
                   className="btn primary"
-                  disabled={!dirty}
                   onClick={async () => {
                     await setPluginConfig(plugin.id, draft);
                     setDirty(false);
@@ -640,8 +667,13 @@ function PluginCard({
             }}
           />
 
+          {/* „Verbinden" braucht die Zugangsdaten in der Konfiguration,
+              nicht bloß im Feld. Also wird vorher gespeichert, was offen
+              ist — sonst scheitert das Anmelden an Werten, die auf dem
+              Bildschirm stehen. */}
           {plugin.id === "discord" && <DiscordConnect />}
-          {plugin.id === "twitch" && <TwitchVerbinden />}
+          {plugin.id === "twitch" && <TwitchVerbinden vorher={uebernimm} />}
+          {plugin.id === "youtube" && <YouTubeVerbinden vorher={uebernimm} />}
         </Modal>
       )}
     </div>

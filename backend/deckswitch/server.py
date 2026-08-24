@@ -1239,7 +1239,14 @@ def create_app(
         except asyncio.TimeoutError as exc:
             raise HTTPException(504, "Zeitüberschreitung") from exc
         except Exception as exc:
-            raise HTTPException(500, f"{type(exc).__name__}: {exc}") from exc
+            # Nur die Meldung, nicht die Klasse. Ein Plugin, das „Es fehlt der
+            # Schlüssel" sagt, hat damit alles gesagt; „KeineZugangsdaten:"
+            # davor ist der Name einer Python-Klasse und steht auf dem
+            # Bildschirm eines Benutzers am falschen Ort. Fehlt eine
+            # Meldung, tritt der Klassenname ein — dann ist er das Einzige,
+            # was noch etwas verrät.
+            log.exception("Kommando '%s' an '%s' fehlgeschlagen", command, plugin_id)
+            raise HTTPException(500, str(exc) or type(exc).__name__) from exc
         return result if isinstance(result, dict) else {"result": result}
 
     @app.post("/api/plugins/{plugin_id}/enabled")
