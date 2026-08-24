@@ -70,7 +70,7 @@ optdepends=(
 install="$pkgname.install"
 
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('a7a290ac860f79d0159446d0a334d6a21cd82c56bec19bdbb44ddfd4676963e4')
+sha256sums=('250edf95f42eae187210339d7fbc0ae2be1dc847737bb33b619d81db4861a56c')
 
 _srcdir="Deck-Switch-$pkgver"
 
