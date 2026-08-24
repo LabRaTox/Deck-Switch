@@ -584,10 +584,11 @@ class Runtime:
     # Plugins
     # ======================================================================
 
-    def load_plugins(self) -> None:
+    def load_plugins(self, *, behalte: dict | None = None) -> None:
         self.registry.discover(
             self._services_for,
             disabled=self.config.disabled_plugins,
+            behalte=behalte,
         )
         self.icons.bind_registry(self.registry)
         for error in self.registry.errors:
@@ -610,8 +611,11 @@ class Runtime:
             overlay=self.overlay,
         )
 
-    async def _setup_plugins(self) -> None:
+    async def _setup_plugins(self, nur: set[str] | None = None) -> None:
+        """Plugins hochfahren. Mit ``nur`` beschränkt auf genannte Kennungen."""
         for loaded in self.registry.code_plugins:
+            if nur is not None and loaded.id not in nur:
+                continue
             if loaded.instance is None or not loaded.enabled:
                 continue
             try:
@@ -622,8 +626,76 @@ class Runtime:
                     loaded.id, loaded.error, source="plugin", traceback=traceback.format_exc()
                 )
 
+    async def sync_plugins(self) -> dict[str, list[str]]:
+        """Nachsehen, was sich auf der Platte getan hat — schonend.
+
+        Angefasst wird nur, was sich wirklich geändert hat: neu
+        dazugekommene Plugins werden geladen, verschwundene abgeräumt, und
+        eine andere Fassung wird ausgetauscht. Alles andere läuft weiter.
+
+        **Warum das nicht dasselbe ist wie neu laden.** ``reload_plugins``
+        reißt jedes Plugin ab und baut es neu auf: Verbindungen fallen,
+        Timer stehen wieder auf Anfang, gemerkte Zustände sind weg. Das ist
+        richtig, wenn man selbst gerade etwas installiert hat — und falsch
+        für einen Knopf, den man drückt, um nachzusehen, ob es etwas Neues
+        gibt. Wer nachschauen will, will nichts kaputt machen.
+        """
+        from .services import store
+
+        # Der Katalog wird fünf Minuten festgehalten. Wer hier drückt,
+        # erwartet den aktuellen Stand — sonst sieht er eine gerade
+        # freigegebene Fassung minutenlang nicht.
+        store.vergiss()
+
+        laufend = {
+            geladen.id: str(geladen.manifest.version)
+            for geladen in self.registry.plugins.values()
+        }
+        auf_platte = self.registry.bestand()
+
+        neu = [k for k in auf_platte if k not in laufend]
+        weg = [k for k in laufend if k not in auf_platte]
+        anders = [
+            k for k, (_ordner, fassung) in auf_platte.items()
+            if k in laufend and fassung and fassung != laufend[k]
+        ]
+
+        if not (neu or weg or anders):
+            return {"neu": [], "weg": [], "geaendert": []}
+
+        # Nur die betroffenen Plugins abbauen — die übrigen bleiben, wie sie
+        # sind, samt Verbindungen und allem, was sie sich gemerkt haben.
+        for kennung in weg + anders:
+            geladen = self.registry.get(kennung)
+            if geladen is not None and geladen.instance is not None:
+                with contextlib.suppress(Exception):
+                    await geladen.instance.teardown()
+
+        # Die unveränderten Instanzen werden übernommen; nur die
+        # betroffenen entstehen neu.
+        unveraendert = {
+            kennung: geladen
+            for kennung, geladen in self.registry.plugins.items()
+            if kennung not in weg and kennung not in anders
+        }
+        self.errors = [e for e in self.errors if e.get("source") != "plugin"]
+        self.load_plugins(behalte=unveraendert)
+        await self._setup_plugins(nur=set(neu + anders))
+        self.request_redraw()
+        self.bus.publish(ev.EVT_CONFIG_CHANGED, reason="plugins_synced")
+        return {"neu": neu, "weg": weg, "geaendert": anders}
+
     async def reload_plugins(self) -> None:
-        """Plugins neu einlesen — nach Installation oder Aktivierungswechsel."""
+        """Plugins vollständig neu einlesen — nach einer Installation.
+
+        Reißt jedes Plugin ab und baut es neu auf. Für den Knopf in der
+        Oberfläche ist :meth:`sync_plugins` gedacht; hier ist der harte Weg
+        gewollt, weil sich eine gerade installierte Fassung sonst mit der
+        laufenden mischt.
+        """
+        from .services import store
+
+        store.vergiss()
         for loaded in self.registry.code_plugins:
             if loaded.instance is not None:
                 with contextlib.suppress(Exception):

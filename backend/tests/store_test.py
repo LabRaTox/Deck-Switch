@@ -278,6 +278,16 @@ def main() -> None:
             check("die Prüfsumme stimmt mit der des Archivs überein",
                   ergebnis["sha256"] == hashlib.sha256(archiv).hexdigest())
 
+            print("\nNeu laden macht den Katalog wieder frisch")
+            # Der Katalog wird fünf Minuten festgehalten. Wer gerade etwas
+            # freigegeben hat, sah es sonst minutenlang nicht — und drückt
+            # dann „Plugins neu laden", weil er genau das erwartet.
+            store.katalog()
+            check("beim zweiten Mal kommt er aus dem Zwischenspeicher",
+                  store._cache.hol(f"katalog::") is not None)
+            store.vergiss()
+            check("und danach ist er leer", store._cache.hol("katalog::") is None)
+
             print("\nVersionen vergleichen")
             faelle = [
                 ("1.0.1", "1.0.0", True), ("1.0.0", "1.0.1", False),
