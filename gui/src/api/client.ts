@@ -18,11 +18,14 @@ import type {
   InputStatus,
   Page,
   PluginInfo,
+  ProfileInfo,
   ScreensaverEntry,
   SessionCapabilities,
   Slot,
   StoreAccount,
+  StoreBewertung,
   StoreLoginStart,
+  StoreUpdate,
   StoreMinePlugin,
   StorePlugin,
   StoreUser,
@@ -174,6 +177,45 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+
+  // -- Profile ---------------------------------------------------------
+  //
+  // Ein Profil ist ein eigener Satz Seiten. Welches ein Deck zeigt, steht
+  // an der Deck-Bindung; gewechselt wird deshalb über ``updateDeck``.
+
+  profiles: () =>
+    request<{ profiles: ProfileInfo[] }>("/api/profiles").then((a) => a.profiles),
+
+  createProfile: (name: string, copyFrom = "") =>
+    request<{ profile: { id: string; name: string } }>("/api/profiles", {
+      method: "POST",
+      body: JSON.stringify({ name, copy_from: copyFrom }),
+    }),
+
+  renameProfile: (id: string, name: string) =>
+    request<{ ok: boolean }>(`/api/profiles/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+
+  /** Bei welchen Programmen dieses Profil von selbst nach vorn kommt. */
+  setProfileApps: (id: string, apps: string[]) =>
+    request<{ ok: boolean }>(`/api/profiles/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ auto_apps: apps }),
+    }),
+
+  /** Läuft die Automatik, und welches Fenster hat sie zuletzt gesehen? */
+  smartProfileStatus: () =>
+    request<{ available: boolean; reason: string; window: { app: string; title: string } }>(
+      "/api/profiles/automatik",
+    ),
+
+  deleteProfile: (id: string) =>
+    request<{ ok: boolean; moved: string[] }>(
+      `/api/profiles/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
 
   /** Legt ein virtuelles Deck an — ein Overlay statt Hardware. */
   createVirtualDeck: (payload: {
@@ -336,11 +378,36 @@ export const api = {
   plugins: () => request<PluginInfo[]>("/api/plugins"),
 
   /** Symbol eines Plugins — nur aufrufen, wenn `has_icon` gesetzt ist. */
-  pluginIconUrl: (pluginId: string) => `${API_BASE}/api/plugins/${pluginId}/icon`,
+  /*
+   * ``version`` steht nur in der Adresse, das Backend liest sie gar nicht.
+   * Sie hängt dort, damit eine neue Fassung auch eine neue Adresse bekommt:
+   * Ein Bild, das der Browser schon geladen hat, tauscht er von sich aus
+   * nicht mehr aus — auch nicht bei ``no-cache``, solange die Seite steht.
+   * Genau so blieb nach dem Wechsel auf das echte OBS-Logo tagelang das
+   * alte, selbst gezeichnete Symbol im Fenster stehen.
+   */
+  pluginIconUrl: (pluginId: string, version = "") =>
+    `${API_BASE}/api/plugins/${pluginId}/icon?v=${encodeURIComponent(version)}`,
 
   /** Bild aus der Detailansicht — angesprochen über die Position. */
-  pluginScreenshotUrl: (pluginId: string, index: number) =>
-    `${API_BASE}/api/plugins/${pluginId}/screenshot/${index}`,
+  pluginScreenshotUrl: (pluginId: string, index: number, version = "") =>
+    `${API_BASE}/api/plugins/${pluginId}/screenshot/${index}?v=${encodeURIComponent(version)}`,
+
+  /**
+   * Symbol eines Plugins, das nur im Store liegt.
+   *
+   * Über das eigene Backend und nicht direkt zum Store: Dort steht, welche
+   * Adressen der Katalog genannt hat, und die Oberfläche lädt nichts aus
+   * fremder Herkunft.
+   */
+  storeIconUrl: (slug: string, version: string) =>
+    `${API_BASE}/api/store/plugins/${encodeURIComponent(slug)}/${encodeURIComponent(version)}/icon`,
+
+  /** Bild aus der Store-Detailansicht — angesprochen über die Position. */
+  storeScreenshotUrl: (slug: string, version: string, index: number) =>
+    `${API_BASE}/api/store/plugins/${encodeURIComponent(slug)}/${encodeURIComponent(
+      version,
+    )}/screenshot/${index}`,
 
   /**
    * Auswahlliste eines Feldes. ``context`` sind die übrigen Einstellungen
@@ -445,6 +512,27 @@ export const api = {
     ),
 
   storeAccount: () => request<StoreAccount>("/api/store/account"),
+
+  /** Was von den installierten Plugins im Store neuer vorliegt. */
+  storeUpdates: () =>
+    request<{ count: number; updates: StoreUpdate[] }>("/api/store/updates"),
+
+  /** Wie ein Plugin ankommt — samt eigener Stimme, wenn man angemeldet ist. */
+  storeBewertung: (slug: string) =>
+    request<StoreBewertung>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`),
+
+  /** Daumen hoch (`1`) oder runter (`-1`), auf Wunsch mit einem Satz dazu. */
+  storeBewerten: (slug: string, value: 1 | -1, comment = "") =>
+    request<StoreBewertung>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`, {
+      method: "PUT",
+      body: JSON.stringify({ value, comment }),
+    }),
+
+  /** Die eigene Stimme zurückziehen. */
+  storeBewertungLoeschen: (slug: string) =>
+    request<StoreBewertung>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`, {
+      method: "DELETE",
+    }),
 
   storeLogin: () => request<StoreLoginStart>("/api/store/login", { method: "POST" }),
 

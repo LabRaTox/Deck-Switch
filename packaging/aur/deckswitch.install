@@ -28,7 +28,8 @@ post_install() {
   Danach steht die Oberfläche unter http://127.0.0.1:8770 oder als eigenes
   Fenster über den Eintrag "DECK//SWITCH" im Anwendungsmenü.
 
-  OBS-Aktionen brauchen 'simpleobsws', das es als Arch-Paket nicht gibt:
+  Das OBS-Plugin gibt es unter "Plugins" zum Nachinstallieren. Es braucht
+  'simpleobsws', das es als Arch-Paket nicht gibt:
 
        pip install --user simpleobsws
 

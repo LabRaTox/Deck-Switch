@@ -35,6 +35,13 @@ const PATHS = {
     "M12 3v6",
   ],
   "corner-down-right": ["M6 6v6a3 3 0 0 0 3 3h10l-4 -4m0 8l4 -4"],
+  // Die beiden Daumen der Bewertung.
+  "thumb-up": [
+    "M7 11v8a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1h3a4 4 0 0 0 4 -4v-1a2 2 0 0 1 4 0v5h3a2 2 0 0 1 2 2l-1 5a2 3 0 0 1 -2 2h-7a3 3 0 0 1 -3 -3",
+  ],
+  "thumb-down": [
+    "M7 13v-8a1 1 0 0 0 -1 -1h-2a1 1 0 0 0 -1 1v7a1 1 0 0 0 1 1h3a4 4 0 0 1 4 4v1a2 2 0 0 0 4 0v-5h3a2 2 0 0 0 2 -2l-1 -5a2 3 0 0 0 -2 -2h-7a3 3 0 0 0 -3 3",
+  ],
   trash: [
     "M4 7l16 0",
     "M10 11l0 6",
@@ -46,6 +53,19 @@ const PATHS = {
     "M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12",
     "M9 4v16",
     "M15 10l-2 2l2 2",
+  ],
+  // Regler — aus dem mitgelieferten Tabler-Satz übernommen
+  // (adjustments-horizontal), damit die Oberfläche eine Handschrift hat.
+  adjustments: [
+    "M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    "M4 6l8 0",
+    "M16 6l4 0",
+    "M6 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    "M4 12l2 0",
+    "M10 12l10 0",
+    "M15 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+    "M4 18l11 0",
+    "M19 18l1 0",
   ],
   "sidebar-expand": [
     "M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12",

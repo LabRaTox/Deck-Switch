@@ -88,9 +88,16 @@ def _anfrage(
     rumpf: bytes | None = None,
     typ: str = "",
     mit_token: bool = False,
+    token_falls_da: bool = False,
     **abfrage: Any,
 ) -> Any:
-    """Eine Anfrage an den Store — Antwort als JSON."""
+    """Eine Anfrage an den Store — Antwort als JSON.
+
+    ``mit_token`` verlangt eine Anmeldung, ``token_falls_da`` schickt sie
+    nur mit, wenn es eine gibt: Die Bewertung eines Plugins darf jeder
+    lesen, aber wer angemeldet ist, soll dabei auch die eigene Stimme
+    zurückbekommen.
+    """
     kopf = {"Accept": "application/json", "User-Agent": "DeckSwitch/1.0"}
     if typ:
         kopf["Content-Type"] = typ
@@ -99,6 +106,10 @@ def _anfrage(
         if not token:
             raise StoreError("Dafür musst du im Store angemeldet sein")
         kopf["Authorization"] = f"Bearer {token}"
+    elif token_falls_da:
+        token = lies_token()
+        if token:
+            kopf["Authorization"] = f"Bearer {token}"
 
     anfrage = urllib.request.Request(
         _url(pfad, **abfrage), data=rumpf, headers=kopf, method=methode
@@ -170,14 +181,218 @@ def beliebt(*, kind: str = "") -> dict[str, Any]:
     return _anfrage("/api/popular", kind=kind)
 
 
+# --------------------------------------------------------------------------
+# Bewertungen
+# --------------------------------------------------------------------------
+#
+# Nicht zwischengespeichert: Wer gerade auf „Daumen hoch" gedrückt hat, will
+# das sofort sehen und nicht in fünf Minuten. Es ist eine kleine Antwort und
+# sie wird nur beim Öffnen einer Detailansicht geholt.
+
+
+def bewertung(slug: str) -> dict[str, Any]:
+    """Stimmen, die eigene Stimme und die letzten Kommentare."""
+    return _anfrage(
+        f"/api/catalog/{urllib.parse.quote(slug)}/rating", token_falls_da=True
+    )
+
+
+def bewerte(slug: str, wert: int, kommentar: str = "") -> dict[str, Any]:
+    """Daumen hoch (``1``) oder runter (``-1``), auf Wunsch mit einem Satz."""
+    if wert not in (1, -1):
+        raise StoreError("Eine Bewertung ist entweder 1 oder -1")
+    rumpf = json.dumps({"value": wert, "comment": kommentar}).encode("utf-8")
+    daten = _anfrage(
+        f"/api/catalog/{urllib.parse.quote(slug)}/rating",
+        methode="PUT", rumpf=rumpf, typ="application/json", mit_token=True,
+    )
+    # Im Katalog stehen dieselben Zahlen — der Zwischenspeicher wüsste sonst
+    # noch die alten.
+    vergiss()
+    return daten
+
+
+def bewertung_zuruecknehmen(slug: str) -> dict[str, Any]:
+    daten = _anfrage(
+        f"/api/catalog/{urllib.parse.quote(slug)}/rating",
+        methode="DELETE", mit_token=True,
+    )
+    vergiss()
+    return daten
+
+
 def vergiss() -> None:
     """Den Zwischenspeicher leeren — nach einer Installation etwa."""
     _cache.leere()
+    _bilder.clear()
+
+
+# --------------------------------------------------------------------------
+# Bilder
+# --------------------------------------------------------------------------
+
+#: Wie groß ein Symbol oder Screenshot höchstens sein darf. Dieselbe Grenze
+#: wie im Store — was er nicht ausliefert, muss hier auch nicht ankommen.
+MAX_BILD_BYTES = 4 * 1024 * 1024
+
+#: Bildtypen, die die Oberfläche anzeigt. SVG steht bewusst nicht dabei: Es
+#: ist ein Dokument, darf Skript enthalten, und das liefe im Ursprung der GUI.
+BILDTYPEN = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+
+#: Schon geholte Bilder, nach Adresse. Ein Symbol wandert bei jedem Blick in
+#: die Liste über den Bildschirm; jedes Mal ins Netz zu greifen wäre eine
+#: Runde zu viel. Der Speicher ist klein und lebt nur, solange die App läuft.
+_bilder: dict[str, tuple[bytes, str]] = {}
+
+#: Mehr als so viele Bilder behält der Speicher nicht.
+_BILDER_MAX = 200
+
+
+def bild(slug: str, version: str, art: str, index: int = 0) -> tuple[bytes, str]:
+    """Symbol oder Screenshot einer Fassung — Bytes und Inhaltstyp.
+
+    Die Adresse kommt aus dem Katalog und wird nicht hier zusammengesetzt.
+    Das ist keine Bequemlichkeit, sondern die Schranke: Geholt wird nur, was
+    der Store selbst als Bild dieser Fassung genannt hat, und nur von *ihm*
+    — eine Adresse anderswohin lehnt diese Funktion ab, auch wenn sie im
+    Katalog stünde.
+    """
+    daten = plugin(slug)
+    fassungen = [*daten.get("versions", []), daten.get("latest")]
+    passend = next((v for v in fassungen if v and v.get("version") == version), None)
+    if passend is None:
+        raise StoreError(f"Fassung {version} steht nicht im Katalog")
+
+    if art == "icon":
+        adresse = passend.get("icon_url")
+    else:
+        bilder = passend.get("screenshot_urls") or []
+        adresse = bilder[index] if 0 <= index < len(bilder) else None
+    if not adresse:
+        raise StoreError("Dafür nennt der Katalog kein Bild")
+
+    return _hol_bild(adresse)
+
+
+def _hol_bild(adresse: str) -> tuple[bytes, str]:
+    zwischen = _bilder.get(adresse)
+    if zwischen is not None:
+        return zwischen
+
+    if not adresse.startswith(STORE_URL.rstrip("/") + "/"):
+        raise StoreError("Diese Bildadresse zeigt nicht auf den Store")
+
+    anfrage = urllib.request.Request(
+        adresse, headers={"Accept": "image/*", "User-Agent": "DeckSwitch/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(anfrage, timeout=ZEITLIMIT_S) as antwort:
+            typ = (antwort.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            roh = antwort.read(MAX_BILD_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        raise StoreError(_fehlertext(exc)) from exc
+    except urllib.error.URLError as exc:
+        raise StoreError(f"Der Store ist nicht erreichbar: {exc.reason}") from exc
+    except (TimeoutError, OSError) as exc:
+        raise StoreError(f"Verbindung abgebrochen: {exc}") from exc
+
+    if typ not in BILDTYPEN:
+        raise StoreError(f"Der Store hat kein Bild geschickt, sondern {typ or 'nichts Erkennbares'}")
+    if len(roh) > MAX_BILD_BYTES:
+        raise StoreError("Das Bild ist zu groß")
+
+    if len(_bilder) >= _BILDER_MAX:
+        _bilder.clear()
+    _bilder[adresse] = (roh, typ)
+    return roh, typ
 
 
 # --------------------------------------------------------------------------
 # Installieren
 # --------------------------------------------------------------------------
+
+
+# --------------------------------------------------------------------------
+# Versionen vergleichen
+# --------------------------------------------------------------------------
+
+
+def als_zahlen(version: str) -> tuple[int, ...]:
+    """``"1.10.2"`` → ``(1, 10, 2)`` — zum Vergleichen, nicht zum Anzeigen.
+
+    Zeichenweise verglichen wäre ``1.10`` kleiner als ``1.9``, und genau
+    dieser Fehler fällt erst auf, wenn die zehnte Fassung erscheint. Was
+    keine Zahl ist, zählt als 0: ``1.0.0-beta`` ist damit dasselbe wie
+    ``1.0.0``, und das ist die richtige Vorsicht — niemand soll aus Versehen
+    von einer Fassung auf eine Vorabfassung „aktualisiert" werden.
+    """
+    teile: list[int] = []
+    for stueck in str(version or "").split("."):
+        ziffern = ""
+        for zeichen in stueck:
+            if not zeichen.isdigit():
+                break
+            ziffern += zeichen
+        teile.append(int(ziffern) if ziffern else 0)
+    return tuple(teile) or (0,)
+
+
+def neuer_als(kandidat: str, vorhanden: str) -> bool:
+    """Ist ``kandidat`` eine spätere Fassung als ``vorhanden``?"""
+    a, b = als_zahlen(kandidat), als_zahlen(vorhanden)
+    # Unterschiedlich viele Stellen auffüllen: 1.1 und 1.1.0 sind dasselbe.
+    laenge = max(len(a), len(b))
+    a += (0,) * (laenge - len(a))
+    b += (0,) * (laenge - len(b))
+    return a > b
+
+
+def _passt_zur_app(mindestens: str | None) -> bool:
+    """Läuft eine Fassung mit dieser App — oder verlangt sie eine neuere?"""
+    if not mindestens:
+        return True
+    from .. import __version__
+
+    return not neuer_als(mindestens, __version__)
+
+
+def verfuegbare_updates(installiert: dict[str, str]) -> list[dict[str, Any]]:
+    """Was von den installierten Plugins im Store neuer vorliegt.
+
+    ``installiert`` ist ``{slug: version}``. Zurück kommt je Plugin ein
+    Eintrag mit alter und neuer Nummer — und was sich geändert hat, damit
+    die Oberfläche das zeigen kann, ohne noch einmal zu fragen.
+
+    Nicht angeboten wird, was diese App nicht ausführen kann: Ein Plugin,
+    das eine neuere Fassung von DECK//SWITCH verlangt, wäre nach dem
+    „Aktualisieren" kaputt statt neu.
+    """
+    if not installiert:
+        return []
+
+    eintraege = katalog().get("plugins", [])
+    updates: list[dict[str, Any]] = []
+    for eintrag in eintraege:
+        slug = str(eintrag.get("slug") or "")
+        habe = installiert.get(slug)
+        if habe is None:
+            continue
+        neueste = eintrag.get("latest") or {}
+        dort = str(neueste.get("version") or "")
+        if not dort or not neuer_als(dort, habe):
+            continue
+        updates.append({
+            "slug": slug,
+            "name": eintrag.get("name") or slug,
+            "installed": habe,
+            "available": dort,
+            "changelog": neueste.get("changelog"),
+            "size": neueste.get("size"),
+            "released_at": neueste.get("released_at"),
+            "min_app_version": neueste.get("min_app_version"),
+            "usable": _passt_zur_app(neueste.get("min_app_version")),
+        })
+    return sorted(updates, key=lambda u: str(u["slug"]))
 
 
 def _neueste(daten: dict[str, Any]) -> dict[str, Any] | None:

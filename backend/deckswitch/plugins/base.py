@@ -250,6 +250,14 @@ class RuntimeApi(Protocol):
     def steps_running(self, ctx: "SlotContext") -> bool:
         """Läuft auf dieser Belegung gerade eine Kette?"""
 
+    def switch_profile(self, name: str = "") -> bool:
+        """Wechselt das Profil dieses Decks.
+
+        ``name`` ist der Name aus der Profilliste; leer heißt „zurück zum
+        vorigen". Zurück kommt, ob gewechselt wurde — ein Name, den es nicht
+        gibt, ändert nichts und meldet ``False``.
+        """
+
     def publish_plugin_status(self, plugin_id: str) -> None:
         """Meldet der GUI, dass sich der Verbindungszustand geändert hat.
 

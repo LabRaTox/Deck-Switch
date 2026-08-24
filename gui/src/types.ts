@@ -100,6 +100,18 @@ export interface Page {
   touch_wallpaper: TouchWallpaper;
 }
 
+/** Ein Profil, wie es die Verwaltung auflistet. */
+export interface ProfileInfo {
+  id: string;
+  name: string;
+  pages: number;
+  /** Namen der Decks, die es gerade zeigen — Warnung vor dem Löschen. */
+  decks: string[];
+  active: boolean;
+  /** Programme, bei denen dieses Profil von selbst nach vorn kommt. */
+  auto_apps: string[];
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -470,6 +482,10 @@ export interface StoreVersion {
   downloads: number;
   released_at: string;
   download_url: string;
+  /** Symbol dieser Fassung, wenn das Manifest eines nennt. */
+  icon_url: string | null;
+  /** Die Bilder der Detailansicht — höchstens drei. */
+  screenshot_urls: string[];
   warnings: StoreWarnung[];
   /** Nur in der Einzelansicht: `approved` oder `withdrawn`. */
   state?: string;
@@ -491,6 +507,42 @@ export interface StorePlugin {
   /** Nur in der Einzelansicht. */
   description?: string | null;
   versions?: StoreVersion[];
+}
+
+/** Ein Plugin, für das im Store eine neuere Fassung liegt. */
+export interface StoreUpdate {
+  slug: string;
+  name: string;
+  installed: string;
+  available: string;
+  changelog: string | null;
+  size: number | null;
+  released_at: string | null;
+  min_app_version: string | null;
+  /** `false`, wenn die neue Fassung eine neuere App verlangt als diese. */
+  usable: boolean;
+}
+
+/** Eine Stimme mit Kommentar, so wie sie andere abgegeben haben. */
+export interface StoreKommentar {
+  value: number;
+  comment: string | null;
+  author: string;
+  at: string;
+}
+
+/**
+ * Die Bewertung eines Plugins.
+ *
+ * `mine` ist die eigene Stimme — `null`, wenn man nicht abgestimmt hat oder
+ * gar nicht angemeldet ist.
+ */
+export interface StoreBewertung {
+  up: number;
+  down: number;
+  mine: number | null;
+  comment: string | null;
+  comments: StoreKommentar[];
 }
 
 /** Wer im Store angemeldet ist. */

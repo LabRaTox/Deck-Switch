@@ -26,8 +26,8 @@ from pathlib import Path
 
 from deckswitch.plugins.base import ActionPlugin
 
-from ddc import DdcController
-from sysinfo import Reading, SystemInfo
+from .ddc import DdcController
+from .sysinfo import Reading, SystemInfo
 
 ACCENT = "#0ea5e9"
 

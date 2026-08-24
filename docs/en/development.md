@@ -23,7 +23,7 @@ backend/
                          shortcuts, session detection, portal, plugin store
     web/netdeck.html     the page a network guest gets in the browser
   plugins/               bundled plugins, ordinary ones technically
-    audio/ obs/ discord/ system/ streamdeck/ multi/ sound/ iconset-tabler/
+    audio/ system/ streamdeck/ multi/ sound/ iconset-tabler/
   tests/                 test suites (see below)
 gui/                     Tauri + Vite/React
 packaging/               udev rules, systemd unit, URL handler

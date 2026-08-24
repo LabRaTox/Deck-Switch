@@ -189,6 +189,7 @@ def install_archive(data: bytes, *, filename: str = "") -> Manifest:
     with tempfile.TemporaryDirectory(prefix="streamdeck-plugin-") as tmp:
         staging = Path(tmp) / "unpacked"
         staging.mkdir()
+
         _extract(data, staging)
 
         source = _find_plugin_root(staging)

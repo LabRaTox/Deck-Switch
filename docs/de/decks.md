@@ -14,6 +14,39 @@ allen dreien in derselben Zeichenkette.
 | **Virtuelles Deck** | Overlay auf dem eigenen Bildschirm | wenn das Gerät gerade nicht in Reichweite ist |
 | **Netz-Deck** | Browser eines anderen Rechners | wenn jemand anderes mitsteuern soll |
 
+## Profile
+
+Ein Profil ist ein eigener Satz Seiten. Jedes Deck zeigt genau eines — bei
+zwei Geräten kann jedes ein anderes zeigen.
+
+Gewählt wird es über dem Seitenbaum. Der Knopf daneben öffnet die Verwaltung:
+anlegen, umbenennen, kopieren, löschen. Eine Kopie bekommt eigene Seiten mit
+eigenen Kennungen; Ordnertasten und „Gehe zu Seite" zeigen danach in die
+Kopie und nicht mehr ins Original.
+
+Das letzte Profil lässt sich nicht löschen — ein Deck ohne Profil hätte keine
+Seite und damit nichts anzuzeigen. Wird ein Profil gelöscht, das gerade ein
+Deck anzeigt, wandert dieses Deck auf ein anderes.
+
+**Automatisch nach Programm.** Trägst du in der Profilverwaltung Programme
+ein (`obs`, `code`, …), wechselt das Deck von selbst auf dieses Profil, sobald
+eines davon vorn ist. Passt keines mehr, kommt zurück, was vorher galt. Wer
+zwischendurch von Hand wählt, behält seine Wahl — eine Wahl von Hand hebt die
+Automatik auf, bis das nächste Mal ein Muster passt.
+
+Gesucht wird in der Fensterklasse *und* im Titel, ohne Rücksicht auf Groß-
+und Kleinschreibung, als Teilstück: `obs` trifft `obs` wie `obs-studio`.
+
+Das geht nur unter **KDE Plasma**. Unter Wayland verrät kein Protokoll einer
+gewöhnlichen Anwendung, welches Fenster den Fokus hat; KDE lässt aber Skripte
+in den Compositor, und genau eines davon meldet uns die Wechsel. Auf anderen
+Desktops steht in der Verwaltung, dass die Automatik aus ist, und warum.
+
+**Vom Deck aus wechseln.** Die Aktion *Profil wechseln* legt einen Wechsel
+auf eine Taste. Ohne eingestelltes Profil führt sie zurück zum vorigen —
+damit reicht eine Taste je Profil und eine für den Rückweg. Liegt das
+eingestellte Profil gerade an, bekommt die Taste einen Rahmen.
+
 ## Mehrere Decks gleichzeitig
 
 Es können mehrere Stream Decks gleichzeitig angeschlossen sein. Jedes Gerät

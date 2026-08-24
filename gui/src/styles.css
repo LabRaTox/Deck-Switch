@@ -129,6 +129,20 @@ input[type="checkbox"] {
   background: #2f6fd8;
 }
 
+/* „Es liegt was Neues bereit" ist eine gute Nachricht und soll auch so
+   aussehen — gefüllt und grün, damit man sie in einer Reihe grauer Knöpfe
+   findet. Ausgegraut, wenn die Fassung eine neuere App verlangt: Dann ist
+   sie eben nicht bereit. */
+.btn.update {
+  background: #15803d;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.btn.update:hover:not(:disabled) {
+  background: #16a34a;
+}
+
 .btn.danger {
   border-color: #7f1d1d;
   color: #fca5a5;
@@ -1209,6 +1223,18 @@ input[type="checkbox"] {
   line-height: 1.4;
 }
 
+/* Adressen in Hinweistexten: erkennbar, aber nicht laut. Sie stehen dort,
+   damit man sie anklicken kann statt abzuschreiben. */
+.help a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.help a:hover {
+  text-decoration-thickness: 2px;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -1425,6 +1451,10 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Umbrechen statt quetschen: Mit einem Update-Knopf mehr blieb für die
+     Titelzeile so wenig übrig, dass „v1.0.0 · 6 Aktionen · MIT" über sechs
+     Zeilen lief. Lieber rutschen die Knöpfe eine Zeile tiefer. */
+  flex-wrap: wrap;
 }
 
 .plugin-title {
@@ -1432,6 +1462,16 @@ input[type="checkbox"] {
   flex-direction: column;
   flex: 1;
   min-width: 0;
+}
+
+/* Umbruch an einer bestimmten Stelle, statt ihn den Breiten zu überlassen:
+   Wo ein Update-Knopf dazukommt, sollen Symbol und Name zusammen oben
+   stehen und die Knöpfe geschlossen darunter. Ohne diese Marke rutschte
+   mal der Name unter das Symbol, mal der Schalter allein in Zeile zwei —
+   je nach Länge des Plugin-Namens. */
+.zeilenumbruch {
+  flex-basis: 100%;
+  height: 0;
 }
 
 .plugin-title small {
@@ -1551,7 +1591,16 @@ input[type="checkbox"] {
 .plugin-detail {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
+  /* Begrenzt, statt die Fensterbreite zu füllen. Der Wert ist kein Gefühl,
+     sondern die Summe der Teile: ein Bildschirmfoto in Deckbreite (rund
+     700), die Angabenspalte (290) und die Lücke dazwischen. Ohne die
+     Grenze stünden auf einem breiten Bildschirm Bild und Angaben an den
+     entgegengesetzten Rändern, mit einem Loch dazwischen. */
+  max-width: 1020px;
+  /* Und mittig statt am linken Rand: Auf einem breiten Bildschirm säße die
+     Seite sonst in der linken Hälfte, während rechts daneben nichts steht. */
+  margin: 0 auto;
 }
 
 .zurueck {
@@ -1570,13 +1619,13 @@ input[type="checkbox"] {
 .detail-kopf {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .detail-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
   object-fit: contain;
   flex: none;
 }
@@ -1584,10 +1633,23 @@ input[type="checkbox"] {
 .detail-icon.platzhalter {
   display: grid;
   place-items: center;
+  /* Ohne Akzentfarbe — ein Store-Plugin bringt keine mit — stünde der
+     Buchstabe sonst auf dem Seitengrund und wäre kaum zu sehen. */
+  background: var(--bg-sunken);
   font-size: 30px;
   font-weight: 600;
   color: #fff;
   text-transform: uppercase;
+}
+
+/* Installieren und Quelltext stehen rechts im Kopf: Bei einem Plugin aus
+   dem Store ist das die eine Handlung, wegen der man die Seite geöffnet hat
+   — sie soll nicht erst unter den Bildern auftauchen. */
+.detail-kopf-knoepfe {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .detail-kategorie {
@@ -1609,7 +1671,7 @@ input[type="checkbox"] {
   /* Die Angaben rechts brauchen wenig Platz, aber festen: Eine mitwandernde
      Spalte ließe die Werte je Plugin an anderer Stelle stehen. */
   grid-template-columns: minmax(0, 1fr) 290px;
-  gap: 24px;
+  gap: 20px;
   align-items: start;
 }
 
@@ -1622,7 +1684,7 @@ input[type="checkbox"] {
 .detail-text {
   color: var(--text-dim);
   line-height: 1.55;
-  margin: 0 0 20px;
+  margin: 0 0 16px;
 }
 
 .detail-bild-gross {
@@ -1642,7 +1704,7 @@ input[type="checkbox"] {
 .detail-bild-reihe {
   display: flex;
   gap: 8px;
-  margin: 8px 0 20px;
+  margin: 8px 0 16px;
 }
 
 .detail-bild-klein {
@@ -2127,6 +2189,225 @@ input[type="checkbox"] {
   border: 1px solid var(--border);
   background: #000;
 }
+
+/* Der Hinweis auf Aktualisierungen, über der Liste. Er steht dort und
+   nicht in jeder Karte einzeln: Wer vier Updates hat, will einmal drücken
+   und nicht viermal suchen. */
+.update-balken {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 13px;
+}
+
+.update-balken > span:first-child {
+  flex: 1 1 320px;
+}
+
+.update-balken .hint {
+  font-size: 12px;
+}
+
+/* Die Twitch-Anmeldung: erst ein Knopf, dann der Code zum Abtippen. Der
+   Code steht groß und mit weiten Zeichenabständen — er wird von einem
+   Bildschirm auf ein Handy übertragen, und dabei verwechselt man sonst
+   0 und O. */
+.twitch-verbinden,
+.youtube-verbinden {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.twitch-code,
+.youtube-code {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.twitch-code p,
+.youtube-code p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.twitch-code strong,
+.youtube-code strong {
+  font-size: 30px;
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+  color: #9146ff;
+}
+
+/* Der Code trägt die Farbe des Dienstes, bei dem er eingetippt wird. */
+.youtube-code strong {
+  color: #ff0033;
+}
+
+/* Bewertung in der Detailspalte: zwei Daumen, darunter was Leute dazu
+   geschrieben haben. Die eigene Stimme ist eingefärbt — grün für hoch, rot
+   für runter —, damit man ohne Nachdenken sieht, ob man schon abgestimmt
+   hat. */
+.bewertung {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.bewertung h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.bewertung-knoepfe {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn.daumen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn.daumen.aktiv {
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.btn.daumen.runter.aktiv {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.bewertung-schreiben {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bewertung-schreiben textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.bewertung-eigen {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-sunken);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bewertung-eigen small,
+.bewertung-liste small {
+  width: 100%;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.bewertung-liste {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bewertung-liste li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Die Profilwahl sitzt über dem Seitenbaum — beim Bauen gebraucht, nicht
+   beim Einrichten. */
+.profilbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profilbar-label {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.profilbar select {
+  flex: 1;
+  min-width: 0;
+}
+
+.profilliste {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profilliste li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "name kopieren loeschen"
+    "apps apps apps"
+    "hinweis hinweis hinweis";
+  gap: 6px 8px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profilliste li input { grid-area: name; }
+.profilliste li .hint { grid-area: hinweis; }
+.profilliste li .profil-apps {
+  grid-area: apps;
+  font-size: 12px;
+}
+
+.profil-neu {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.profil-neu input { flex: 1; min-width: 0; }
 
 /* ------------------------------------------------- Plugin-Symbole */
 
@@ -2793,6 +3074,22 @@ input[type="checkbox"] {
 
 /* Zugeklappt, aber da: Was die Durchsicht gefunden hat, soll niemanden
    erschlagen — und wer es wissen will, klickt einmal. */
+/* Die Fassungen eines Store-Plugins — eine je Zeile, Nummer voran. */
+.store-fassungen {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.store-fassungen li {
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
 .store-warnungen {
   border: 1px solid var(--warn, #f59e0b);
   border-radius: var(--radius);

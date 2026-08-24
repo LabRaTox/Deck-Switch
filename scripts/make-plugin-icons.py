@@ -7,8 +7,13 @@ manifest already declares — the plugin's accent colour plus the symbol of
 its first action — so the overview stays coherent instead of looking like a
 collection of unrelated logos.
 
-    ./scripts/make-plugin-icons.py            all bundled plugins
-    ./scripts/make-plugin-icons.py audio obs  only these
+    ./scripts/make-plugin-icons.py             all bundled plugins
+    ./scripts/make-plugin-icons.py audio       only this one
+    ./scripts/make-plugin-icons.py --erneuern  overwrite hand-made icons too
+
+Icons this script wrote carry a marker in the PNG. Anything without it is
+somebody's own logo — OBS and Spotify ship theirs — and stays untouched
+unless ``--erneuern`` says otherwise.
 """
 
 import json
@@ -31,10 +36,18 @@ if VENV_PYTHON.is_file() and Path(sys.prefix).resolve() != VENV.resolve():
 
 sys.path.insert(0, str(REPO / "backend"))
 
-from PIL import Image, ImageDraw, ImageFilter  # noqa: E402
+from PIL import Image, ImageDraw, ImageFilter, PngImagePlugin  # noqa: E402
 
 SIZE = 256
 FILENAME = "icon.png"
+
+#: Marke im PNG, an der dieses Skript sein eigenes Werk wiedererkennt.
+#:
+#: Ohne sie überschriebe der nächste Lauf jedes von Hand hinterlegte Logo —
+#: OBS und Spotify bringen ihres mit, und ein erzeugtes Quadrat mit
+#: Notensymbol wäre dort ein Rückschritt. Wer trotzdem neu erzeugen will,
+#: ruft mit ``--erneuern`` auf.
+MARKE = "deckswitch/make-plugin-icons"
 
 #: Wie beim App-Symbol: abgerundetes Quadrat mit Verlauf, Motiv in Weiss.
 CORNER_RADIUS = 0.22
@@ -114,11 +127,26 @@ def _glyph(name: str, iconset: Path) -> Image.Image | None:
     return Image.open(io.BytesIO(png)).convert("RGBA")
 
 
-def build(directory: Path, iconset: Path) -> bool:
+def _selbst_erzeugt(pfad: Path) -> bool:
+    """Ob dieses Bild aus diesem Skript stammt — es trägt dann die Marke."""
+    if not pfad.is_file():
+        return True  # Nichts da, nichts zu verlieren.
+    try:
+        with Image.open(pfad) as bild:
+            return bild.info.get("Software") == MARKE
+    except Exception:  # noqa: BLE001 — ein unlesbares Bild ist keins von uns
+        return False
+
+
+def build(directory: Path, iconset: Path, erneuern: bool = False) -> bool:
     manifest_file = directory / "manifest.json"
     if not manifest_file.is_file():
         return False
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+
+    if not erneuern and not _selbst_erzeugt(directory / FILENAME):
+        print(f"  – {directory.name:14} bringt ein eigenes Symbol mit, bleibt")
+        return False
 
     accent = _parse(manifest.get("accent"))
     image = _case(accent)
@@ -141,7 +169,9 @@ def build(directory: Path, iconset: Path) -> bool:
         image.alpha_composite(glyph, ((SIZE - glyph.width) // 2, (SIZE - glyph.height) // 2))
 
     target = directory / FILENAME
-    image.save(target)
+    kopf = PngImagePlugin.PngInfo()
+    kopf.add_text("Software", MARKE)
+    image.save(target, pnginfo=kopf)
 
     if manifest.get("icon") != FILENAME:
         manifest["icon"] = FILENAME
@@ -159,7 +189,9 @@ def main(argv: list[str]) -> int:
         print(f"Icon set not found: {iconset}", file=sys.stderr)
         return 1
 
-    wanted = set(argv[1:])
+    argumente = argv[1:]
+    erneuern = "--erneuern" in argumente
+    wanted = {a for a in argumente if not a.startswith("-")}
     built = 0
     for root in SEARCH:
         if not root.is_dir():
@@ -167,7 +199,7 @@ def main(argv: list[str]) -> int:
         for directory in sorted(p for p in root.iterdir() if p.is_dir()):
             if wanted and directory.name not in wanted:
                 continue
-            if build(directory, iconset):
+            if build(directory, iconset, erneuern):
                 built += 1
 
     print(f"\n{built} icon(s) written as {FILENAME}, manifests updated.")

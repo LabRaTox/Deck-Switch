@@ -26,6 +26,16 @@ TARGET = REPO / "dist" / "plugins"
 SKIP_DIRS = {"__pycache__", ".git", ".mypy_cache", ".ruff_cache"}
 SKIP_SUFFIXES = {".pyc", ".pyo"}
 
+# Build-time helpers that live in the repo, not on the user's machine.
+# ``screenshots.py`` draws a plugin's own store images and is run by
+# ``make-plugin-screenshots.py``; shipping it would put a script into every
+# installation that never runs there.
+SKIP_NAMES = {"screenshots.py"}
+
+# Every entry gets this timestamp so the archive only changes when the
+# content does. 1980-01-01 is the earliest a ZIP can store.
+EPOCH = (1980, 1, 1, 0, 0, 0)
+
 
 def package(directory: Path) -> Path | None:
     manifest_file = directory / "manifest.json"
@@ -51,13 +61,23 @@ def package(directory: Path) -> Path | None:
         if path.is_file()
         and not SKIP_DIRS.intersection(path.parts)
         and path.suffix not in SKIP_SUFFIXES
+        and path.name not in SKIP_NAMES
     ]
 
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in files:
             # Plugin folder as the top level — that way the installer can
             # tell the ID without relying on the archive's file name.
-            archive.write(path, f"{plugin_id}/{path.relative_to(directory)}")
+            name = f"{plugin_id}/{path.relative_to(directory)}"
+            # Fixed timestamp: a ZIP stores each file's mtime, so packing the
+            # same sources twice produced two different checksums. That made
+            # it impossible to tell "someone changed a file" from "someone
+            # ran the packer again" — and the store identifies a release by
+            # its sha256.
+            info = zipfile.ZipInfo(name, date_time=EPOCH)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, path.read_bytes())
 
     size = archive_path.stat().st_size / 1024
     print(

@@ -38,7 +38,7 @@ from pydantic import BaseModel, ValidationError
 from . import __version__
 from . import events as ev
 from . import paths
-from .config import Config, DeviceSettings, Page, Slot, TouchWallpaper
+from .config import Config, DeviceSettings, Page, Profile, Slot, TouchWallpaper
 from .plugins import installer
 from .runtime import Runtime
 from .virtualdeck import VirtualDevice
@@ -133,6 +133,20 @@ class DeckInput(BaseModel):
     #: nacheinander, ``rotate`` für das Mausrad auf einem Dial.
     action: str = "click"
     delta: int = 0
+
+
+class ProfileCreate(BaseModel):
+    """Ein neues Profil — leer oder als Kopie eines vorhandenen."""
+
+    name: str = ""
+    #: Kennung des Profils, das kopiert werden soll. Leer = leeres Profil.
+    copy_from: str = ""
+
+
+class ProfileUpdate(BaseModel):
+    name: str | None = None
+    #: Programme, bei denen dieses Profil von selbst nach vorn kommt.
+    auto_apps: list[str] | None = None
 
 
 class DeckUpdate(BaseModel):
@@ -566,6 +580,119 @@ def create_app(
     # ======================================================================
     # Config
     # ======================================================================
+
+    # ======================================================================
+    # Profile
+    #
+    # Ein Profil ist ein eigener Satz Seiten. Jedes Deck zeigt genau eines;
+    # gewechselt wird über ``PATCH /api/decks/{key}``. Gelöscht werden kann
+    # nur, was nicht das letzte ist — ohne Profil hätte ein Deck nichts
+    # anzuzeigen.
+    # ======================================================================
+
+    def _profil_liste() -> list[dict[str, Any]]:
+        benutzt: dict[str, list[str]] = {}
+        for binding in runtime.config.decks.values():
+            # Die Bindung ohne Namen ist der Platzhalter für „das erste
+            # Gerät". In der Liste stünde sonst „in Benutzung von " und
+            # dahinter nichts.
+            benutzt.setdefault(binding.profile_id, []).append(
+                binding.name or binding.serial or "Deck"
+            )
+        return [
+            {
+                "id": profil.id,
+                "name": profil.name,
+                "pages": len(profil.pages),
+                # Wer es gerade anzeigt — die GUI warnt damit vorm Löschen.
+                "decks": benutzt.get(profil.id, []),
+                "active": profil.id == runtime.config.active_profile_id,
+                "auto_apps": list(profil.auto_apps),
+            }
+            for profil in runtime.config.profiles.values()
+        ]
+
+    @app.get("/api/profiles")
+    async def list_profiles() -> dict[str, Any]:
+        return {"profiles": _profil_liste()}
+
+    @app.post("/api/profiles")
+    async def create_profile(payload: ProfileCreate) -> dict[str, Any]:
+        """Legt ein Profil an — leer oder als Kopie.
+
+        Die Kopie ist der übliche Fall: Wer ein zweites Profil anlegt, will
+        meist dasselbe noch einmal und dann etwas ändern. Kopiert werden
+        Seiten samt Belegungen, mit **neuen** Kennungen — sonst zeigten
+        beide Profile auf dieselben Seiten.
+        """
+        name = payload.name.strip() or "Neues Profil"
+        if payload.copy_from:
+            vorlage = runtime.config.profiles.get(payload.copy_from)
+            if vorlage is None:
+                raise HTTPException(404, "Vorlage nicht gefunden")
+            profil = _kopiere_profil(vorlage, name)
+        else:
+            wurzel = Page(name="Start")
+            profil = Profile(name=name, root_page_id=wurzel.id, pages={wurzel.id: wurzel})
+
+        runtime.config.profiles[profil.id] = profil
+        runtime.save_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="profile_created")
+        return {"profile": {"id": profil.id, "name": profil.name}}
+
+    @app.patch("/api/profiles/{profile_id}")
+    async def update_profile(profile_id: str, payload: ProfileUpdate) -> dict[str, Any]:
+        profil = runtime.config.profiles.get(profile_id)
+        if profil is None:
+            raise HTTPException(404, "Profil nicht gefunden")
+
+        if payload.name is not None:
+            name = payload.name.strip()
+            if not name:
+                raise HTTPException(422, "Ein Profil braucht einen Namen")
+            profil.name = name
+
+        if payload.auto_apps is not None:
+            profil.auto_apps = [m.strip() for m in payload.auto_apps if m.strip()]
+
+        runtime.save_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="profile_changed")
+        # Die erste Regel startet den Dienst, die letzte beendet ihn.
+        await runtime.smartprofile.neu_bewerten()
+        return {"ok": True}
+
+    @app.get("/api/profiles/automatik")
+    async def smartprofile_status() -> dict[str, Any]:
+        """Ob die Automatik läuft — und welches Fenster sie zuletzt sah."""
+        return runtime.smartprofile.status()
+
+    @app.delete("/api/profiles/{profile_id}")
+    async def delete_profile(profile_id: str) -> dict[str, Any]:
+        """Löscht ein Profil und setzt Decks, die daran hingen, um.
+
+        Das letzte bleibt stehen: Ein Deck ohne Profil hätte keine Seite und
+        damit nichts zu zeigen.
+        """
+        if profile_id not in runtime.config.profiles:
+            raise HTTPException(404, "Profil nicht gefunden")
+        if len(runtime.config.profiles) <= 1:
+            raise HTTPException(409, "Das letzte Profil kann nicht gelöscht werden")
+
+        del runtime.config.profiles[profile_id]
+        ersatz = next(iter(runtime.config.profiles))
+        if runtime.config.active_profile_id == profile_id:
+            runtime.config.active_profile_id = ersatz
+
+        umgezogen = []
+        for binding in runtime.config.decks.values():
+            if binding.profile_id == profile_id:
+                binding.profile_id = ersatz
+                umgezogen.append(binding.name or binding.serial or "Deck")
+        runtime.save_config()
+        for deck in runtime.decks.values():
+            deck.apply_config()
+        runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="profile_deleted")
+        return {"ok": True, "moved": umgezogen}
 
     @app.get("/api/config")
     async def get_config() -> dict[str, Any]:
@@ -1039,7 +1166,13 @@ def create_app(
         media = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         # Wie beim Upload: Ein Plugin-Symbol kommt aus fremder Hand und darf
         # bei direktem Aufruf kein Skript ausführen.
-        headers = {"X-Content-Type-Options": "nosniff"}
+        #
+        # ``no-cache`` heißt nicht „nicht speichern", sondern „vorher
+        # nachfragen": Die Adresse bleibt dieselbe, der Inhalt nicht — nach
+        # einer neuen Fassung zeigte der Browser sonst tagelang das alte
+        # Symbol. Die Nachfrage beantwortet Starlette mit 304 aus ETag und
+        # Zeitstempel, es wandern also keine Bytes.
+        headers = {"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"}
         if candidate.suffix.lower() == ".svg":
             headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
         return FileResponse(candidate, media_type=media, headers=headers)
@@ -1070,8 +1203,12 @@ def create_app(
             raise HTTPException(415, f"Nicht unterstützt: {candidate.suffix}")
 
         media = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+        # Wie beim Symbol: gleiche Adresse, wechselnder Inhalt — der Browser
+        # soll nachfragen statt zu raten.
         return FileResponse(
-            candidate, media_type=media, headers={"X-Content-Type-Options": "nosniff"}
+            candidate,
+            media_type=media,
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"},
         )
 
     @app.put("/api/plugins/{plugin_id}/config")
@@ -1102,7 +1239,14 @@ def create_app(
         except asyncio.TimeoutError as exc:
             raise HTTPException(504, "Zeitüberschreitung") from exc
         except Exception as exc:
-            raise HTTPException(500, f"{type(exc).__name__}: {exc}") from exc
+            # Nur die Meldung, nicht die Klasse. Ein Plugin, das „Es fehlt der
+            # Schlüssel" sagt, hat damit alles gesagt; „KeineZugangsdaten:"
+            # davor ist der Name einer Python-Klasse und steht auf dem
+            # Bildschirm eines Benutzers am falschen Ort. Fehlt eine
+            # Meldung, tritt der Klassenname ein — dann ist er das Einzige,
+            # was noch etwas verrät.
+            log.exception("Kommando '%s' an '%s' fehlgeschlagen", command, plugin_id)
+            raise HTTPException(500, str(exc) or type(exc).__name__) from exc
         return result if isinstance(result, dict) else {"result": result}
 
     @app.post("/api/plugins/{plugin_id}/enabled")
@@ -1121,6 +1265,24 @@ def create_app(
 
     @app.post("/api/plugins/reload")
     async def reload_plugins() -> dict[str, Any]:
+        """Nachsehen, was sich getan hat — ohne laufende Plugins abzuwürgen.
+
+        Hieß einmal „neu laden" und tat auch das: jedes Plugin abreißen und
+        neu aufbauen. Wer den Knopf drückt, will aber nachsehen, ob es
+        etwas Neues gibt — und dabei nicht seine Verbindungen verlieren.
+        Angefasst wird jetzt nur, was sich auf der Platte geändert hat.
+        """
+        geaendert = await runtime.sync_plugins()
+        return {"ok": True, **geaendert}
+
+    @app.post("/api/plugins/reload-all")
+    async def reload_all_plugins() -> dict[str, Any]:
+        """Der harte Weg: alles abreißen und neu aufbauen.
+
+        Bleibt erreichbar, weil es Fälle gibt, in denen genau das gewollt
+        ist — ein Plugin, das sich verhakt hat. Es hängt aber nicht mehr an
+        einem Knopf, den man aus Neugier drückt.
+        """
         await runtime.reload_plugins()
         return {"plugins": _plugins_payload(runtime)}
 
@@ -1262,6 +1424,92 @@ def create_app(
             return await _im_hintergrund(lambda: store.plugin(slug))
         except store.StoreError as exc:
             raise HTTPException(502, str(exc)) from exc
+
+    @app.get("/api/store/updates")
+    async def store_updates() -> dict[str, Any]:
+        """Was von den installierten Plugins im Store neuer vorliegt.
+
+        Verglichen wird gegen das, was wirklich auf der Platte liegt, und
+        nicht gegen eine Merkliste: Wer ein Plugin von Hand austauscht, soll
+        danach nicht zum „Aktualisieren" auf eine ältere Fassung gedrängt
+        werden.
+        """
+        installiert = {
+            geladen.id: geladen.manifest.version
+            for geladen in runtime.registry.plugins.values()
+            if not geladen.builtin
+        }
+        try:
+            gefunden = await _im_hintergrund(
+                lambda: store.verfuegbare_updates(installiert)
+            )
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {"count": len(gefunden), "updates": gefunden}
+
+    @app.get("/api/store/plugins/{slug}/rating")
+    async def store_bewertung(slug: str) -> dict[str, Any]:
+        """Wie ein Plugin ankommt — und wie man selbst abgestimmt hat.
+
+        Steht vor den Adressen mit ``{version}``, weil ``rating`` sonst als
+        Versionsnummer gelesen würde: FastAPI nimmt die erste Route, die
+        passt.
+        """
+        try:
+            return await _im_hintergrund(lambda: store.bewertung(slug))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.put("/api/store/plugins/{slug}/rating")
+    async def store_bewerten(slug: str, payload: dict[str, Any]) -> dict[str, Any]:
+        wert = payload.get("value")
+        if wert not in (1, -1):
+            raise HTTPException(400, "value muss 1 oder -1 sein")
+        kommentar = str(payload.get("comment") or "")
+        try:
+            return await _im_hintergrund(lambda: store.bewerte(slug, wert, kommentar))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.delete("/api/store/plugins/{slug}/rating")
+    async def store_bewertung_loeschen(slug: str) -> dict[str, Any]:
+        try:
+            return await _im_hintergrund(lambda: store.bewertung_zuruecknehmen(slug))
+        except store.StoreError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.get("/api/store/plugins/{slug}/{version}/icon")
+    async def store_icon(slug: str, version: str) -> Response:
+        """Das Symbol eines Plugins, das nur im Store liegt."""
+        return await _store_bild(slug, version, "icon", 0)
+
+    @app.get("/api/store/plugins/{slug}/{version}/screenshot/{index}")
+    async def store_screenshot(slug: str, version: str, index: int) -> Response:
+        """Eines der Bilder aus der Store-Detailansicht."""
+        return await _store_bild(slug, version, "screenshot", index)
+
+    async def _store_bild(slug: str, version: str, art: str, index: int) -> Response:
+        """Holt ein Bild beim Store und reicht es an die Oberfläche weiter.
+
+        Über das Backend und nicht direkt: Dort steht, welche Adressen der
+        Katalog genannt hat, dort liegt der Zwischenspeicher, und die
+        Oberfläche muss keine fremde Herkunft laden.
+        """
+        try:
+            daten, typ = await _im_hintergrund(lambda: store.bild(slug, version, art, index))
+        except store.StoreError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return Response(
+            content=daten,
+            media_type=typ,
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                # Bytes aus fremder Hand: Bei direktem Aufruf soll die
+                # Antwort nichts laden und nichts ausführen.
+                "Content-Security-Policy": "default-src 'none'; sandbox",
+                "Cache-Control": "public, max-age=300",
+            },
+        )
 
     @app.post("/api/store/install")
     async def store_install(
@@ -1735,6 +1983,57 @@ def _check_move_target(profile, page_id: str, parent_id: str | None) -> None:
         raise HTTPException(404, "Übergeordnete Seite existiert nicht")
     if parent_id in profile.subtree_ids(page_id):
         raise HTTPException(400, "Eine Seite kann nicht unter sich selbst liegen")
+
+
+def _kopiere_profil(vorlage: Profile, name: str) -> Profile:
+    """Ein Profil samt Seiten kopieren — mit neuen Kennungen.
+
+    Die Seiten bekommen neue IDs, und alles, was auf eine Seite zeigt
+    (Unterseiten, Ordnertasten, „Gehe zu Seite"), wird mitgezogen. Ohne das
+    führte die Kopie zurück ins Original, und wer dort etwas ändert, ändert
+    es an zwei Stellen.
+    """
+    neue_ids = {alt_id: _neue_seiten_id() for alt_id in vorlage.pages}
+    seiten: dict[str, Page] = {}
+
+    for alt_id, seite in vorlage.pages.items():
+        kopie = seite.model_copy(deep=True)
+        kopie.id = neue_ids[alt_id]
+        if kopie.parent_id:
+            kopie.parent_id = neue_ids.get(kopie.parent_id, "")
+        for mapping in (kopie.keys, kopie.dials):
+            for slot in mapping.values():
+                _biege_seitenbezug(slot, neue_ids)
+        seiten[kopie.id] = kopie
+
+    return Profile(
+        name=name,
+        root_page_id=neue_ids.get(vorlage.root_page_id, next(iter(seiten), "")),
+        pages=seiten,
+    )
+
+
+def _neue_seiten_id() -> str:
+    from .config import _new_id
+
+    return _new_id()
+
+
+def _biege_seitenbezug(slot: Slot, neue_ids: dict[str, str]) -> None:
+    """Zieht Verweise auf Seiten in einer Belegung auf die Kopien um."""
+    for schluessel in ("page_id", "target_page_id"):
+        alt = slot.settings.get(schluessel)
+        if isinstance(alt, str) and alt in neue_ids:
+            slot.settings[schluessel] = neue_ids[alt]
+    for zweig in ("long_press", "double_press", "turn_left", "turn_right"):
+        verschachtelt = getattr(slot, zweig, None)
+        if verschachtelt is not None:
+            _biege_seitenbezug(verschachtelt, neue_ids)
+    for schritt in getattr(slot, "steps", None) or []:
+        for schluessel in ("page_id", "target_page_id"):
+            alt = schritt.settings.get(schluessel)
+            if isinstance(alt, str) and alt in neue_ids:
+                schritt.settings[schluessel] = neue_ids[alt]
 
 
 def _drop_plugin_slots(runtime: Runtime, plugin_id: str) -> int:

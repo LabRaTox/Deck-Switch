@@ -1,7 +1,7 @@
 # Maintainer: LabRaTox <278214024+LabRaTox@users.noreply.github.com>
 
 pkgname=deckswitch
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Independent Elgato Stream Deck control software with its own plugin system"
 arch=('x86_64')
@@ -23,7 +23,6 @@ depends=(
   'python-xkbcommon'
   'python-elgato-streamdeck'
   'uvicorn'
-  'python-websockets'
   'python-watchfiles'
   'python-httptools'
   'python-uvloop'
@@ -61,7 +60,7 @@ makedepends=(
 # Alles, ohne das die App startet und das meiste kann — nur einzelne
 # Aktionen bleiben dann ohne Wirkung und melden das auch so.
 optdepends=(
-  'python-simpleobsws: OBS-Studio-Aktionen (nicht paketiert, siehe README)'
+  'python-simpleobsws: das nachinstallierbare OBS-Plugin (nicht paketiert, siehe README)'
   'ddcutil: Monitorhelligkeit über DDC/CI'
   'spectacle: Bildschirmfotos'
   'kscreen-doctor: Bildschirme an- und ausschalten'

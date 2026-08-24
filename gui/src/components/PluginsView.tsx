@@ -5,12 +5,17 @@ import { api } from "../api/client";
 import { localized } from "../i18n";
 import { KATEGORIEN, TYPEN, type PluginTyp } from "../lib/pluginSchubladen";
 import { useStore } from "../store";
-import type { PluginCategory, PluginInfo, StorePlugin } from "../types";
+import type { PluginCategory, PluginInfo, StorePlugin,
+  StoreUpdate } from "../types";
 import { Modal } from "./Modal";
 import { PfadText } from "./PfadText";
 import { PluginDetail } from "./PluginDetail";
 import { PluginInstaller } from "./PluginInstaller";
 import { SettingsForm } from "./SettingsForm";
+import { StoreDetail } from "./StoreDetail";
+import { TwitchVerbinden } from "./TwitchVerbinden";
+import { YouTubeVerbinden } from "./YouTubeVerbinden";
+import { UiIcon } from "./UiIcon";
 import { StoreEinreichen } from "./StoreEinreichen";
 import { StoreAnmeldung, StoreKarte, StoreHinweis } from "./StoreView";
 
@@ -43,10 +48,25 @@ export function PluginsView() {
   const [storeFehler, setStoreFehler] = useState("");
   const [laeuft, setLaeuft] = useState("");
   const [meldung, setMeldung] = useState("");
-  /** Welches Plugin gerade im Ganzen zu sehen ist — ``null`` = die Liste. */
-  const [detail, setDetail] = useState<string | null>(null);
-  /** ``null`` heißt „alle Kategorien". */
-  const [kategorie, setKategorie] = useState<PluginCategory | null>(null);
+  /**
+   * Welches Plugin gerade im Ganzen zu sehen ist — ``null`` = die Liste.
+   *
+   * Mit Herkunft, weil dieselbe Kennung an zwei Orten stehen kann: Ein
+   * installiertes Plugin zeigt sein Manifest von der Platte, eines aus dem
+   * Store seinen Katalogeintrag.
+   */
+  const [detail, setDetail] = useState<{ art: Eintrag["art"]; id: string } | null>(null);
+  /**
+   * Die Schublade im Menü links.
+   *
+   * „installiert" ist keine Kategorie, sondern eine Eigenschaft — steht aber
+   * an derselben Stelle, weil es dieselbe Frage beantwortet: Was will ich
+   * gerade sehen? Wer ein Plugin einstellen oder entfernen will, sucht genau
+   * diese Liste und nicht sein Thema.
+   */
+  const [filter, setFilter] = useState<"alle" | "installiert" | PluginCategory>("alle");
+  const [updates, setUpdates] = useState<StoreUpdate[]>([]);
+  const [alleLaufen, setAlleLaufen] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -57,8 +77,25 @@ export function PluginsView() {
         setKatalog([]);
         setStoreFehler(exc instanceof Error ? exc.message : String(exc));
       }
+      await ladeUpdates();
     })();
   }, []);
+
+  /**
+   * Was im Store neuer vorliegt, rechnet das Backend aus.
+   *
+   * Nicht hier: „Ist 1.10 neuer als 1.9?" ist eine Frage mit einer
+   * richtigen Antwort, und die soll an einer Stelle stehen und geprüft
+   * sein. Die Oberfläche stellt nur dar, was dabei herauskommt.
+   */
+  async function ladeUpdates() {
+    try {
+      const antwort = await api.storeUpdates();
+      setUpdates(antwort.updates);
+    } catch {
+      setUpdates([]);
+    }
+  }
 
   async function installiere(eintrag: StorePlugin) {
     setLaeuft(eintrag.slug);
@@ -68,11 +105,44 @@ export function PluginsView() {
       const ergebnis = await api.storeInstall(eintrag.slug);
       await reloadPlugins();
       setMeldung(t("store.installed", { name: eintrag.name, version: ergebnis.version }));
+      // Aus der Store-Detailansicht heraus zurück in die Liste: Das Plugin
+      // liegt jetzt auf dem Rechner, die Seite zeigte aber weiter den
+      // Katalogeintrag samt Knopf „Installieren" — als wäre nichts geschehen.
+      setDetail((jetzt) =>
+        jetzt?.art === "store" && jetzt.id === eintrag.slug ? null : jetzt,
+      );
     } catch (exc) {
       setStoreFehler(exc instanceof Error ? exc.message : String(exc));
     } finally {
       setLaeuft("");
+      await ladeUpdates();
     }
+  }
+
+  /**
+   * Alles auf einmal — nacheinander, nicht gleichzeitig.
+   *
+   * Jede Installation packt Dateien aus und lädt danach alle Plugins neu.
+   * Vier davon parallel wären vier Neuladungen übereinander; nacheinander
+   * dauert es ein paar Sekunden länger und geht dafür sicher.
+   */
+  async function aktualisiereAlle() {
+    setAlleLaufen(true);
+    setStoreFehler("");
+    let fertig = 0;
+    for (const update of updates.filter((u) => u.usable)) {
+      try {
+        await api.storeInstall(update.slug);
+        fertig += 1;
+      } catch (exc) {
+        setStoreFehler(exc instanceof Error ? exc.message : String(exc));
+        break;
+      }
+    }
+    await reloadPlugins();
+    await ladeUpdates();
+    setAlleLaufen(false);
+    if (fertig) setMeldung(t("store.updatedAll", { count: fertig }));
   }
 
   /**
@@ -112,13 +182,39 @@ export function PluginsView() {
     anzahl.set(k, (anzahl.get(k) ?? 0) + 1);
   }
 
-  const sichtbar = kategorie ? vomTyp.filter((e) => kategorieVon(e) === kategorie) : vomTyp;
+  const installierte = vomTyp.filter((e) => e.art === "installiert").length;
 
-  const gezeigt = detail ? plugins.find((p) => p.id === detail) : null;
+  const sichtbar =
+    filter === "alle"
+      ? vomTyp
+      : filter === "installiert"
+        ? vomTyp.filter((e) => e.art === "installiert")
+        : vomTyp.filter((e) => kategorieVon(e) === filter);
+
+  const gezeigt =
+    detail?.art === "installiert" ? plugins.find((p) => p.id === detail.id) : null;
   if (gezeigt) {
     return (
       <div className="page-view">
-        <PluginDetail plugin={gezeigt} onBack={() => setDetail(null)} />
+        <PluginDetail
+          plugin={gezeigt}
+          storeEintrag={katalog?.find((s) => s.slug === gezeigt.id) ?? null}
+          onBack={() => setDetail(null)}
+        />
+      </div>
+    );
+  }
+
+  if (detail?.art === "store") {
+    return (
+      <div className="page-view">
+        <StoreDetail
+          slug={detail.id}
+          bekannt={katalog?.find((s) => s.slug === detail.id) ?? null}
+          laeuft={laeuft === detail.id}
+          onInstallieren={(eintrag) => void installiere(eintrag)}
+          onBack={() => setDetail(null)}
+        />
       </div>
     );
   }
@@ -132,7 +228,17 @@ export function PluginsView() {
           <button type="button" className="btn" onClick={() => setEinreichenOpen(true)}>
             {t("store.submitTitle")}
           </button>
-          <button type="button" className="btn" onClick={() => void reloadPlugins()}>
+          {/* Ohne Rückfrage: Der Knopf sieht nur nach, was sich auf der
+              Platte getan hat, und fasst nur Geändertes an. Laufende
+              Plugins behalten ihre Verbindungen. Früher riss er alles ab —
+              dafür brauchte es die Warnung, und niemand wollte ihn mehr
+              anfassen. */}
+          <button
+            type="button"
+            className="btn"
+            title={t("plugins.reloadHint")}
+            onClick={() => void reloadPlugins()}
+          >
             {t("plugins.reload")}
           </button>
           <button
@@ -144,6 +250,27 @@ export function PluginsView() {
           </button>
         </div>
       </div>
+
+      {updates.length > 0 && (
+        <div className="update-balken">
+          <span>
+            {t("store.updatesAvailable", { count: updates.length })}
+            {" — "}
+            {updates.map((u) => `${u.name} ${u.installed} → ${u.available}`).join(", ")}
+          </span>
+          {updates.some((u) => !u.usable) && (
+            <span className="hint">{t("store.updateNeedsNewerApp")}</span>
+          )}
+          <button
+            type="button"
+            className="btn primary small"
+            disabled={alleLaufen || !updates.some((u) => u.usable)}
+            onClick={() => void aktualisiereAlle()}
+          >
+            {alleLaufen ? t("store.installing") : t("store.updateAll")}
+          </button>
+        </div>
+      )}
 
       <StoreHinweis />
       {storeFehler && <p className="error-note">{storeFehler}</p>}
@@ -167,7 +294,7 @@ export function PluginsView() {
                 // Beim Wechsel der Art alle Themen zeigen: Die vorher
                 // gewählte Kategorie ist hier womöglich gar nicht belegt,
                 // und eine leere Liste ohne erkennbaren Grund verwirrt.
-                setKategorie(null);
+                setFilter("alle");
               }}
             >
               {t(`plugins.types.${eintrag}`)}
@@ -181,11 +308,26 @@ export function PluginsView() {
         <nav className="plugin-kategorien" aria-label={t("plugins.title")}>
           <button
             type="button"
-            className={kategorie === null ? "kategorie aktiv" : "kategorie"}
-            onClick={() => setKategorie(null)}
+            className={filter === "alle" ? "kategorie aktiv" : "kategorie"}
+            onClick={() => setFilter("alle")}
           >
             {t("plugins.categories.all")}
             <span className="kategorie-zahl">{vomTyp.length}</span>
+          </button>
+          <button
+            type="button"
+            disabled={installierte === 0}
+            className={
+              filter === "installiert"
+                ? "kategorie aktiv"
+                : installierte === 0
+                  ? "kategorie leer"
+                  : "kategorie"
+            }
+            onClick={() => setFilter("installiert")}
+          >
+            {t("plugins.categories.installed")}
+            <span className="kategorie-zahl">{installierte}</span>
           </button>
           {/* Bewusst *alle* Kategorien, auch die leeren: Die Liste ist
               dieselbe wie im Elgato-Marketplace, und wer dort sucht, soll
@@ -200,13 +342,13 @@ export function PluginsView() {
                 type="button"
                 disabled={zahl === 0}
                 className={
-                  kategorie === k
+                  filter === k
                     ? "kategorie aktiv"
                     : zahl === 0
                       ? "kategorie leer"
                       : "kategorie"
                 }
-                onClick={() => setKategorie(k)}
+                onClick={() => setFilter(k)}
               >
                 {t(`plugins.categories.${k}`)}
                 <span className="kategorie-zahl">{zahl}</span>
@@ -238,9 +380,10 @@ export function PluginsView() {
                     // anderen Fassung, gehört das an die Karte: Sonst erfährt
                     // niemand von einer neuen Fassung, der nicht sucht.
                     imStore={katalog?.find((s) => s.slug === eintrag.plugin.id) ?? null}
+                    update={updates.find((u) => u.slug === eintrag.plugin.id) ?? null}
                     laeuft={laeuft === eintrag.plugin.id}
                     onAktualisieren={(s) => void installiere(s)}
-                    onOeffnen={() => setDetail(eintrag.plugin.id)}
+                    onOeffnen={() => setDetail({ art: "installiert", id: eintrag.plugin.id })}
                   />
                 ) : (
                   <StoreKarte
@@ -248,6 +391,7 @@ export function PluginsView() {
                     plugin={eintrag.plugin}
                     laeuft={laeuft === eintrag.plugin.slug}
                     onInstallieren={() => void installiere(eintrag.plugin)}
+                    onOeffnen={() => setDetail({ art: "store", id: eintrag.plugin.slug })}
                   />
                 ),
               )}
@@ -271,12 +415,16 @@ export function PluginsView() {
   );
 }
 
+/** Plugins, deren Einrichtung an einem Knopf hängt und nicht an Feldern. */
+const EIGENER_EINRICHTUNGSWEG = new Set(["discord", "twitch", "youtube"]);
+
+
 function PluginIcon({ plugin }: { plugin: PluginInfo }) {
   const { i18n } = useTranslation();
   const name = localized(plugin.manifest.name, i18n.language);
 
   if (plugin.has_icon) {
-    return <img className="plugin-icon" src={api.pluginIconUrl(plugin.id)} alt="" />;
+    return <img className="plugin-icon" src={api.pluginIconUrl(plugin.id, plugin.manifest.version)} alt="" />;
   }
   return (
     <span
@@ -313,6 +461,7 @@ function ConnectionDot({ status }: { status: PluginInfo["status"] }) {
 function PluginCard({
   plugin,
   imStore,
+  update,
   laeuft,
   onAktualisieren,
   onOeffnen,
@@ -320,6 +469,8 @@ function PluginCard({
   plugin: PluginInfo;
   /** Dasselbe Plugin im Store, falls es dort steht — sonst `null`. */
   imStore: StorePlugin | null;
+  /** Liegt im Store etwas Neueres? Vom Backend ausgerechnet. */
+  update: StoreUpdate | null;
   laeuft: boolean;
   onAktualisieren: (plugin: StorePlugin) => void;
   onOeffnen: () => void;
@@ -331,6 +482,19 @@ function PluginCard({
 
   const [draft, setDraft] = useState<Record<string, unknown>>(plugin.config);
   const [saved, setSaved] = useState(false);
+
+  /**
+   * Was im Formular steht in die Konfiguration übernehmen.
+   *
+   * Gebraucht von den Plugins, deren Einrichtung an einem Knopf hängt:
+   * Sie lesen ihre Zugangsdaten aus der Konfiguration, und die kennt das
+   * Eingabefeld nicht.
+   */
+  async function uebernimm() {
+    await setPluginConfig(plugin.id, draft);
+    setDirty(false);
+    setSaved(true);
+  }
   const [dirty, setDirty] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -348,7 +512,12 @@ function PluginCard({
     setDirty(false);
   }, [plugin.config, plugin.manifest.config_schema]);
 
-  const hasConfig = plugin.manifest.config_schema.length > 0;
+  // Manche Plugins brauchen keine Felder, aber trotzdem das Fenster: Ihr
+  // einziger Einrichtungsschritt ist ein Knopf, der sich in kein Formular
+  // fassen lässt — Discords Zustimmungsdialog, Twitchs Gerätecode. Ohne
+  // diese Zeile verschwände mit dem letzten Feld auch der Weg zum Anmelden.
+  const hasConfig =
+    plugin.manifest.config_schema.length > 0 || EIGENER_EINRICHTUNGSWEG.has(plugin.id);
 
   return (
     <div
@@ -378,19 +547,26 @@ function PluginCard({
           </small>
         </div>
 
-        {/* Steht im Store eine andere Fassung, gehört das an die Karte.
-            Verglichen wird auf *ungleich* und nicht auf *neuer*: Welche
-            Versionsnummer die größere ist, ist Ansichtssache (ist 1.10 mehr
-            als 1.9?), und der Store führt ohnehin nur die neueste. */}
-        {imStore && imStore.latest.version !== plugin.manifest.version && (
+        {/* Nur wenn im Store wirklich etwas *Neueres* liegt. Vorher stand
+            hier ein Vergleich auf ungleich — der bot auch dann an zu
+            „aktualisieren", wenn die eigene Fassung die neuere war. */}
+        {update && <span className="zeilenumbruch" aria-hidden="true" />}
+        {update && (
           <button
             type="button"
-            className="btn small"
-            disabled={laeuft}
-            title={t("store.newVersion", { version: imStore.latest.version })}
-            onClick={() => onAktualisieren(imStore)}
+            className="btn small update"
+            disabled={laeuft || !update.usable}
+            title={
+              update.usable
+                ? t("store.newVersion", { version: update.available })
+                : t("store.updateNeedsApp", { version: update.min_app_version })
+            }
+            onClick={() => imStore && onAktualisieren(imStore)}
           >
-            {laeuft ? t("store.installing") : t("store.update", { version: imStore.latest.version })}
+            <UiIcon name="arrow-up" size={14} />
+            {laeuft
+              ? t("store.installing")
+              : t("store.update", { version: update.available })}
           </button>
         )}
 
@@ -438,29 +614,46 @@ function PluginCard({
         <Modal
           title={`${localized(plugin.manifest.name, i18n.language)} — ${t("plugins.config")}`}
           width={560}
-          onClose={() => {
-            // Ungespeichertes verwerfen wäre unhöflich — lieber nachfragen.
-            if (dirty && !window.confirm(t("plugins.discardChanges"))) return;
-            setDraft(plugin.config);
+          onClose={async () => {
+            // Ungespeichertes still wegzuwerfen wäre unhöflich. Gefragt wird
+            // aber nach dem, was man meistens will: „Übernehmen?" — nicht
+            // „Verwerfen?", wo ein Wegklicken die Arbeit vernichtet.
+            if (dirty) {
+              if (window.confirm(t("plugins.saveOnClose"))) {
+                await setPluginConfig(plugin.id, draft);
+              } else {
+                setDraft(plugin.config);
+              }
+            }
             setDirty(false);
             setOpen(false);
           }}
           footer={
-            <>
-              {saved && <span className="saved-hint">{t("plugins.saved")}</span>}
-              <button
-                type="button"
-                className="btn primary"
-                disabled={!dirty}
-                onClick={async () => {
-                  await setPluginConfig(plugin.id, draft);
-                  setDirty(false);
-                  setSaved(true);
-                }}
-              >
-                {t("plugins.save")}
-              </button>
-            </>
+            // Ohne Felder gibt es nichts zu speichern — ein Knopf, der nie
+            // etwas tut, ist schlimmer als kein Knopf.
+            plugin.manifest.config_schema.length > 0 ? (
+              <>
+                {saved && <span className="saved-hint">{t("plugins.saved")}</span>}
+                {/* Nicht ausgegraut, wenn nichts „geändert" ist. Ob eine
+                    Eingabe als Änderung durchkommt, hängt daran, ob das Feld
+                    ein Ereignis geschickt hat — beim Einfügen aus einem
+                    Passwortspeicher oder per Autofill passiert das nicht
+                    immer. Dann steht der Wert im Feld, der Knopf ist tot,
+                    und es sieht aus, als nähme das Formular nichts an.
+                    Nochmal zu speichern, was schon gilt, schadet nichts. */}
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={async () => {
+                    await setPluginConfig(plugin.id, draft);
+                    setDirty(false);
+                    setSaved(true);
+                  }}
+                >
+                  {t("plugins.save")}
+                </button>
+              </>
+            ) : null
           }
         >
           <SettingsForm
@@ -474,7 +667,13 @@ function PluginCard({
             }}
           />
 
+          {/* „Verbinden" braucht die Zugangsdaten in der Konfiguration,
+              nicht bloß im Feld. Also wird vorher gespeichert, was offen
+              ist — sonst scheitert das Anmelden an Werten, die auf dem
+              Bildschirm stehen. */}
           {plugin.id === "discord" && <DiscordConnect />}
+          {plugin.id === "twitch" && <TwitchVerbinden vorher={uebernimm} />}
+          {plugin.id === "youtube" && <YouTubeVerbinden vorher={uebernimm} />}
         </Modal>
       )}
     </div>

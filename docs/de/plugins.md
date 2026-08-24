@@ -6,11 +6,9 @@
 
 | Plugin | Aktionen |
 | --- | --- |
-| **Audio** | Lautstärke (Dial mit Balken), Mikrofon stumm (auch Push-to-Talk), Ausgabegerät wechseln, App-Lautstärke |
+| **Audio** | Lautstärke (Dial mit Balken), Lautstärke auf Festwert setzen, Mikrofon stumm (auch Push-to-Talk), Ausgabegerät wechseln, App-Lautstärke |
 | **Multi-Aktion** | Multi-Aktion, Multi-Aktion (Umschalter) |
 | **Soundboard** | Klang abspielen (mit eigenem Ausgabegerät), alles anhalten |
-| **OBS** | Aufnahme (inkl. Pause und Kapitelmarken), Stream, Wiedergabepuffer und Replay speichern, Szenensammlung, Szene, Quelle, Ton stumm, Medienwiedergabe, Studio-Modus, Vorschau live schalten, Filter, Screenshot, Übergang, virtuelle Kamera |
-| **Discord** | Mute (auch Push-to-Talk und Push-to-Mute), Deafen, Sprachkanal wechseln, Kanal verlassen, Textkanal öffnen, Mikrofonpegel |
 | **System** | Programm starten und beenden, Ordner/Datei/Link öffnen, Shell-Befehl, Tastenkombination (auch als Umschalter und als Push-to-Talk), Text tippen, Multimedia, Fenster & Arbeitsfläche, Bildschirmfoto, Sitzung (sperren, abmelden, ruhen, neu starten, ausschalten), Systemwerte (CPU, RAM, GPU, Temperaturen, Netz), Monitorhelligkeit über DDC/CI |
 | **Streamdeck** | Ordner, Home, Zurück, Seitenanzeige, Gehe zu Seite, Blättern, Helligkeit, Leer (Platzhalter), Virtuelles Deck |
 | **Tabler-Icons** | kein Aktions-Plugin, sondern der mitgelieferte Symbolsatz |
@@ -76,11 +74,45 @@ Schleife, und ein zweiter Druck startet neu oder hält an.
 auch alle laufenden Streams mit. Sonst bliebe die schon laufende Musik auf
 dem alten Gerät.
 
+**Lautstärke setzen** springt mit einem Druck auf einen festen Prozentwert
+— eine Taste für 20 %, eine für 50 %, eine für 100 %. Ein stummes Gerät wird
+dabei standardmäßig wieder freigeschaltet, sonst zeigte der Balken den Wert
+und zu hören wäre nichts. Liegt der Wert gerade an, bekommt die Taste einen
+Rahmen. Auf einem Dial gilt beides: Drehen ändert wie gewohnt schrittweise,
+Druck springt auf den Festwert.
+
 **Zustände von außen.** Ändert jemand die Lautstärke in den
 Systemeinstellungen, wechselt OBS die Szene oder mutet Discord sich selbst,
 zeichnet die betroffene Taste sofort neu. Dafür laufen `pactl subscribe` und
 die Event-Kanäle von obs-websocket und Discord-RPC mit. Der Sekundentakt ist
 nur das Sicherheitsnetz.
+
+## Nachinstallierbare Plugins
+
+Diese neun gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
+[plugin-sources/](../../plugin-sources/).
+
+| Plugin | Aktionen |
+| --- | --- |
+| **Discord** | Mute (auch Push-to-Talk und Push-to-Mute), Deafen, Sprachkanal wechseln, Kanal verlassen, Textkanal öffnen, Mikrofonpegel |
+| **OBS** | Aufnahme (inkl. Pause und Kapitelmarken), Stream, Wiedergabepuffer und Replay speichern, Szenensammlung, Szene, Quelle, Ton stumm, Medienwiedergabe, Studio-Modus, Vorschau live schalten, Filter, Screenshot, Übergang, virtuelle Kamera |
+| **Spotify** | Wiedergabe, nächster/vorheriger Titel, Playlist starten, Shuffle, Wiederholung, Lautstärke, Multimedia-Dial |
+| **Wetter** | Aktuelles Wetter, Mehrtagesvorhersage, Luftqualität |
+| **Uhr-Schoner** | Bildschirmschoner: Uhrzeit als je eine Ziffer pro Taste |
+| **Timer** | Countdown, Stoppuhr, Wecker |
+| **Twitch** | Titel, Kategorie, Werbung, Marker, Clip, Raid, Chat, Chatmodus, Chat leeren, Shoutout, Umfrage, Vorhersage, Streamstatus, Follower |
+| **Govee** | An/Aus, Helligkeit, Farbe, Farbtemperatur, Szene, alle Geräte auf einmal |
+| **YouTube** | Zuschauer, Chatnachricht, Werbung, Dashboard öffnen, Stream starten und beenden |
+
+### Discord
+
+Braucht eine einmalige Einrichtung, siehe
+[discord-setup.md](discord-setup.md).
+
+**Kanaltasten** zeigen von sich aus das Logo des Servers, zu dem der Kanal
+gehört. Das kannst du je Taste abschalten, und ein selbst gewähltes Icon hat
+immer Vorrang. Die Logos liegen unter
+`~/.local/share/deckswitch/cache/discord-guilds/`.
 
 ### OBS
 
@@ -102,27 +134,6 @@ Besonderheiten:
   absichern („zweimal drücken"). Beim Stream ist das voreingestellt.
 * **Kapitelmarken** brauchen OBS 30.2 oder neuer und Hybrid-MP4 als
   Aufnahmeformat. Sonst erscheint ein Hinweis.
-
-### Discord
-
-Braucht eine einmalige Einrichtung, siehe
-[discord-setup.md](discord-setup.md).
-
-**Kanaltasten** zeigen von sich aus das Logo des Servers, zu dem der Kanal
-gehört. Das kannst du je Taste abschalten, und ein selbst gewähltes Icon hat
-immer Vorrang. Die Logos liegen unter
-`~/.local/share/deckswitch/cache/discord-guilds/`.
-
-## Nachinstallierbare Plugins
-
-Diese drei gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
-[plugin-sources/](../../plugin-sources/).
-
-| Plugin | Aktionen |
-| --- | --- |
-| **Spotify** | Wiedergabe, nächster/vorheriger Titel, Playlist starten, Shuffle, Wiederholung, Lautstärke, Multimedia-Dial |
-| **Wetter** | Aktuelles Wetter, Mehrtagesvorhersage, Luftqualität |
-| **Uhr-Schoner** | Bildschirmschoner: Uhrzeit als je eine Ziffer pro Taste |
 
 **Spotify** braucht gar keine Einrichtung. Die Steuerung läuft über MPRIS,
 den D-Bus-Standard für Medienspieler unter Linux: kein Konto, keine
@@ -155,6 +166,199 @@ der Trefferliste. Die Daten frischt das Plugin alle zehn Minuten auf.
 
 Jede Belegung kann über *Abweichender Ort* eine eigene Stadt bekommen. So
 liegen Heimatort und Urlaubsziel nebeneinander auf dem Deck.
+
+### Timer
+
+Drei Aktionen, und jede Belegung führt ihre eigene Uhr — zwei Countdowns
+nebeneinander stören sich nicht.
+
+**Countdown** zählt eine eingestellte Zeit herunter. Die Dauer trägst du als
+`5:00` oder `1:30:00` ein; `90`, `5m` und `1h30m` versteht er auch. Ein Druck
+startet und pausiert, am Dial stellt Drehen die Zeit — auch während er läuft,
+wie an einer Mikrowelle, an der man nachlegt. Am Ende klingelt es und die
+Kachel blinkt rot, bis du sie mit einem Druck abstellst.
+
+Zum Zurücksetzen legst du dieselbe Aktion mit *Ein Druck → setzt zurück* auf
+den Doppeldruck derselben Taste.
+
+**Stoppuhr** zählt hoch, bis du sie anhältst. Ein grüner Rahmen heißt: sie
+läuft, ein bernsteinfarbener: sie steht. Einen Balken kann sie nicht haben,
+weil sie kein Ziel hat. Drehen am Dial setzt sie zurück, solange sie steht.
+
+**Wecker** klingelt zu einer festen Uhrzeit, wahlweise täglich, montags bis
+freitags, am Wochenende oder einmalig. Ein Druck schaltet ihn scharf oder
+aus, am Dial geht die Weckzeit in Fünf-Minuten-Schritten.
+
+Unter der Uhrzeit steht die Zeit bis zum nächsten Klingeln, und die zählt
+die Tage mit: Wer am Samstagabend auf einen Wecker für Montag bis Freitag
+schaut, liest „in 1 Tag 11 h" und nicht „in 11 h". Ein einmaliger Wecker, der
+geklingelt hat, ist vorbei — dann steht dort nichts mehr, statt den nächsten
+Tag zu versprechen. Ein Druck macht ihn wieder scharf.
+
+Er klingelt in Schleife, bis du auf die Taste drückst — ein Wecker, der einmal
+piept und dann schweigt, weckt niemanden. Über *Ton wiederholen* lässt sich
+das abstellen. Beim Countdown ist es andersherum: Der klingelt einmal, kann
+aber auf Dauerklingeln gestellt werden.
+
+Der Klang ist mitgeliefert; du kannst stattdessen eine eigene Datei wählen
+(WAV, FLAC, OGG, Opus oder MP3) oder den Ton ganz abschalten.
+
+Was ein Neustart des Backends nicht überlebt: laufende Uhren und die am Dial
+gedrehten Zeiten. Danach gilt wieder, was im Formular steht.
+
+### Twitch
+
+Vierzehn Aktionen für das, was man während eines Streams tut, ohne dafür aus
+dem Spiel zu wechseln.
+
+**Anmelden.** Einzurichten gibt es nichts. Twitch will zu jedem Aufruf eine
+Client-ID sehen; die gehört zu einer registrierten App und wird mitgeliefert.
+Ein Geheimnis kommt nicht vor — was auf fremden Rechnern liegt, wäre keins
+mehr. Stattdessen der Gerätecode-Weg: Unter *Plugins → Twitch →
+Plugin-Einstellungen* auf *Mit Twitch verbinden* drücken, den angezeigten Code
+auf [twitch.tv/activate](https://www.twitch.tv/activate) eintippen, fertig.
+Das Token liegt danach in `~/.config/deckswitch/twitch-token.json` und ist nur
+für dich lesbar.
+
+**Stream steuern.** *Titel setzen* legt einen vorbereiteten Titel auf eine
+Taste, optional samt Kategorie — mehrere Tasten, mehrere Titel. *Kategorie
+setzen* hat eine Suchliste. Dazu *Werbung* (30 Sekunden bis 3 Minuten),
+*Marker setzen* für eine wiederauffindbare Stelle in der Aufzeichnung, *Clip
+erstellen* (auf Wunsch öffnet sich danach der Editor) und *Raid*, wo ein
+zweiter Druck den Countdown wieder abbricht.
+
+**Chat und Moderation.** Eine vorbereitete *Chatnachricht*, der *Chatmodus*
+für Slow, Nur-Abonnenten, Nur-Follower, Nur-Emotes und Keine-Wiederholungen —
+die Taste zeigt, was gerade gilt, und ein Druck schaltet um. Dazu *Chat
+leeren* und *Shoutout*.
+
+**Umfragen und Vorhersagen.** Frage und Antworten stehen in der Belegung,
+getrennt durch einen senkrechten Strich. Läuft schon eine Umfrage, beendet
+der Druck sie. Bei einer Vorhersage sperrt der erste Druck die Wetten, der
+nächste löst sie zur eingestellten Antwort auf.
+
+**Anzeigen.** *Streamstatus* zeigt Zuschauer, Laufzeit oder Follower — was
+groß dasteht, stellst du ein; ein farbiger Streifen unten sagt live oder
+nicht. *Follower* zeigt nur die Zahl. Beide gibt es auch auf dem Dial.
+
+**Was Twitch nicht kann: den Stream starten.** Die Helix-API hat dafür
+schlicht keinen Aufruf — an Stream-Endpunkten gibt es nur Streamschlüssel
+abfragen, Streams nachschlagen, Marker setzen und den Sendeplan pflegen.
+Das ist auch folgerichtig: Twitch *empfängt* nur; losgeschickt wird der
+Stream von deiner Software. Losgehen lässt du ihn deshalb mit der Aktion
+*Stream* aus dem OBS-Plugin. Wer beides auf einer Taste will — Titel setzen
+und live gehen —, legt eine Multi-Aktion an: erster Schritt *Twitch → Titel
+setzen*, zweiter Schritt *OBS → Stream*.
+
+Was nicht angezeigt werden kann, wird nicht behauptet: Ohne Verbindung steht
+dort „nicht verbunden" und keine Zahl. Gezählt wird alle 20 Sekunden nach —
+Twitch begrenzt die Zahl der Anfragen, und acht Kacheln sollen nicht acht
+Abfragen auslösen.
+
+### Govee
+
+**Einrichten.** Govee gibt jedem seinen eigenen Schlüssel: In der
+Govee-Home-App unter *Profil → Einstellungen → Apply for API Key* anfordern,
+er kommt per Mail. Dann unter *Plugins → Govee → Plugin-Einstellungen*
+eintragen.
+
+**Zwei Schnittstellen, ein Schalter.** Govee betreibt zwei APIs
+nebeneinander, und welche bei welchem Gerät funktioniert, lässt sich von
+außen nicht vorhersagen. An einem H615C meldete die neue die Helligkeit als
+154 und wies genau diesen Wert beim Setzen als „out of range" ab; sie hielt
+das Gerät zeitweise für offline, während die alte es einwandfrei schaltete;
+und sie quittierte Farbbefehle mit „success", ohne dass sich etwas änderte.
+Deshalb steht das zur Wahl statt zu raten:
+
+* **Alt** (Vorgabe) — `developer-api.govee.com`. Erprobt, kennt aber keine
+  Szenen.
+* **Neu** — `openapi.api.govee.com`. Kennt Szenen.
+* **Beide** — jeder Befehl geht über beide Wege. Für Geräte, bei denen die
+  neue quittiert, ohne zu handeln. Danach füllen sich die Auswahllisten von selbst — welche Geräte da
+sind und was sie können, sagt Govee, hier wird nichts geraten.
+
+**An/Aus** schaltet ein Gerät um; wahlweise nur ein oder nur aus, wenn eine
+Taste immer dasselbe tun soll. Die Kachel trägt einen farbigen Rand: gelb
+wenn an, grau wenn aus, rot wenn das Gerät nicht antwortet. Brennt eine
+Farbe, hat der Rand sie.
+
+**Helligkeit** setzt einen festen Wert; am Dial drehst du in einstellbaren
+Schritten. **Farbe** und **Farbtemperatur** funktionieren genauso — die
+Kachel zeigt die eingestellte Farbe schon, bevor du drückst, bei Weiß
+ungefähr die Lichtfarbe von warm bis tageslicht.
+
+**Szene** ruft ab, was das Gerät selbst an Szenen mitbringt. Die Liste kommt
+vom Gerät; ein Modell ohne Szenen zeigt eine leere.
+
+**Alle Geräte** ist die Taste für den Weg zur Tür. Beim Umschalten gilt:
+Brennt irgendwo Licht, geht alles aus. Jedes Gerät für sich umzuschalten
+ergäbe ein halb erleuchtetes Zimmer, und danach weiß niemand mehr, was der
+nächste Druck tut.
+
+**Govee zählt mit.** Dreißig Zustandsabfragen je Minute und Gerät — acht
+Kacheln, die jede Sekunde nachsehen, wären sofort gesperrt. Deshalb wird
+gebündelt abgefragt, alle 25 Sekunden, und nur für Geräte, die gerade auf
+einer sichtbaren Taste liegen. Was du selbst schaltest, steht sofort auf der
+Kachel, ohne auf die nächste Abfrage zu warten. Bremst Govee doch einmal,
+steht das im Klartext da statt „unbekannter Fehler".
+
+### YouTube
+
+Fünf Aktionen für den laufenden Livestream: **Zuschauer** zeigt, wie viele
+gerade zusehen. **Chatnachricht** schickt einen vorbereiteten Text in den
+Live-Chat. **Werbung** schiebt einen Block ein. **Dashboard öffnen** springt
+in YouTube Studio, bei laufender Sendung direkt auf deren Seite. **Stream
+starten/beenden** wechselt den Zustand der Sendung — die Taste zeigt, was
+gerade gilt.
+
+**Einrichten braucht ein eigenes Google-Projekt**, und das ist keine
+Schikane, sondern rechnerisch nötig: YouTubes Kontingent gilt je Projekt und
+nicht je Benutzer — zehntausend Einheiten am Tag, geteilt von allen, die
+dieselbe Kennung benutzen. Eine mitgelieferte Client-ID wäre nach ein paar
+Dutzend Installationen erschöpft, und dann funktioniert das Plugin für
+niemanden mehr. Bei Twitch zählt das Limit je Benutzer, dort reicht eine App
+für alle; hier nicht.
+
+So kommst du an die Zugangsdaten:
+
+1. In der [Google Cloud Console](https://console.cloud.google.com) ein
+   Projekt anlegen
+2. Unter *APIs & Dienste* die **YouTube Data API v3** aktivieren
+3. Unter *Anmeldedaten* einen **OAuth-Client** anlegen, Typ *Fernseher und
+   Geräte mit begrenzter Eingabe*
+4. Unter *OAuth-Zustimmungsbildschirm → Zielgruppe* dich selbst als
+   **Testnutzer** eintragen
+5. Client-ID und Client-Secret in die Plugin-Einstellungen eintragen
+6. *Mit YouTube verbinden* drücken, den Code auf
+   [google.com/device](https://www.google.com/device) eintippen
+
+Schritt 4 wird gern übersehen und ist der Punkt, an dem es zuerst hakt:
+Solange die App die Überprüfung durch Google nicht durchlaufen hat, lässt
+Google nur eingetragene Testnutzer hinein — auch dich selbst nicht, obwohl du
+sie angelegt hast. Die Anmeldung endet dann mit „Zugriff blockiert" und
+`Fehler 403: access_denied`.
+
+Im Testmodus laufen die Anmeldungen nach sieben Tagen ab; danach einmal neu
+verbinden. Wer das nicht will, schickt die App durch Googles Überprüfung —
+für den Eigengebrauch ist das mehr Aufwand als Nutzen.
+
+Das Secret liegt danach auf deinem Rechner. Google nennt es bei installierten
+Anwendungen ausdrücklich nicht geheim — es benennt die Anwendung, es erlaubt
+nichts. Das Token liegt in `~/.config/deckswitch/youtube-token.json` und ist
+nur für dich lesbar.
+
+**Mit dem Kontingent wird gerechnet.** Lesen kostet eine Einheit, Schreiben
+fünfzig. Die Zuschauerzahl frischt sich standardmäßig alle 30 Sekunden auf —
+das sind knapp 3 000 Einheiten am Tag und lässt Luft für Chat und Werbung.
+Auf 5 Sekunden gestellt wären es 17 000, und danach ginge bis Mitternacht
+nichts mehr, auch kein Beenden des Streams. Das Feld lässt sich deshalb nicht
+unter 10 Sekunden stellen. Gezeichnet wird nur aus gespiegelten Werten; die
+Kacheln selbst fragen nie.
+
+**Was YouTube nicht verspricht:** dass jeder Zuschauer die Werbung sieht.
+Ausgespielt wird sie denen, denen gerade Werbung zusteht — die übrigen sehen
+weiter zu. Und eine Sendung muss in YouTube Studio angelegt sein, bevor sie
+sich von hier starten lässt.
 
 ## Nachinstallieren
 

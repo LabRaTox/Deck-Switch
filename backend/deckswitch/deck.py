@@ -71,12 +71,33 @@ def uses_default_background(appearance: Appearance) -> bool:
     return appearance.background == Background()
 
 
+#: Schlüssel der Bindung, die noch keine Seriennummer hat — also „das
+#: erste Gerät, das kommt". Ein Name statt einer leeren Zeichenkette, weil
+#: er in Adressen auftaucht. Kollidiert nicht mit echten Seriennummern
+#: (Buchstaben und Ziffern) und auch nicht mit ``virtual-…``/``net-…``.
+PLATZHALTER_KEY = "erstes-deck"
+
+
+def bindungs_key(binding) -> str:
+    """Der Schlüssel, unter dem eine Bindung ansprechbar ist.
+
+    Dasselbe wie :attr:`Deck.key`, aber schon vor dem Anlegen einer Sitzung
+    zu haben — die Runtime braucht es beim Abgleich mit der Konfiguration.
+    """
+    return binding.serial or PLATZHALTER_KEY
+
+
 class Deck:
     """Eine Gerätesitzung: ein Deck, sein Profil, seine Eingaben, sein Bild."""
 
     def __init__(self, runtime: "Runtime", binding: DeckBinding) -> None:
         self.runtime = runtime
         self.binding = binding
+        #: Wohin ``switch_profile("")`` zurückführt.
+        self._voriges_profil = ""
+        #: Das Profil, das ohne Fensterregel gälte. Gesetzt, solange ein
+        #: automatischer Wechsel aktiv ist.
+        self._auto_grundprofil = ""
         self.device = StreamDeckDevice()
         self.view = DeckView(self)
 
@@ -175,8 +196,16 @@ class Deck:
 
     @property
     def key(self) -> str:
-        """Kennung der Bindung — auch dann stabil, wenn nichts angesteckt ist."""
-        return self.binding.serial
+        """Kennung der Bindung — auch dann stabil, wenn nichts angesteckt ist.
+
+        Für die Bindung ohne Seriennummer steht hier
+        :data:`PLATZHALTER_KEY`. Die *leere* Seriennummer bleibt in der
+        Konfiguration, denn an ihr erkennt die Runtime, welche Bindung ein
+        neu angestecktes Deck übernehmen darf. Ansprechbar ist sie damit
+        trotzdem: Ein leeres Pfadsegment gibt es in keiner Adresse, und
+        ``/api/decks//…`` landete auf der Liste, die kein PATCH kennt.
+        """
+        return self.binding.serial or PLATZHALTER_KEY
 
     # ======================================================================
     # Lebenszyklus
@@ -543,7 +572,6 @@ class Deck:
             page_id=ctx.page_id,
             suffix=f"step-{step.id}",
         )
-
         for hook, name in (
             (plugin.on_key_down, "on_key_down"),
             (plugin.on_key_up, "on_key_up"),
@@ -1639,6 +1667,67 @@ class Deck:
     # ======================================================================
     # Config-Änderungen
     # ======================================================================
+
+    def switch_profile(self, name: str = "") -> bool:
+        """Auf ein anderes Profil umschalten — nach Namen.
+
+        Der Name statt der Kennung, weil das der einzige Bezug ist, den ein
+        Plugin kennt: In seiner Welt heißen Profile so, wie sie in der Liste
+        stehen. Ein leerer Name bedeutet „zurück", wie bei Elgato auch.
+        """
+        if not name:
+            ziel = self._voriges_profil
+            if not ziel or ziel == self.binding.profile_id:
+                return False
+        else:
+            gesucht = name.strip().casefold()
+            ziel = next(
+                (p.id for p in self.runtime.config.profiles.values()
+                 if p.name.strip().casefold() == gesucht),
+                "",
+            )
+            if not ziel or ziel == self.binding.profile_id:
+                return False
+
+        self._voriges_profil = self.binding.profile_id
+        # Von Hand gewählt schlägt geliehen: Wer selbst umschaltet, will
+        # nicht beim nächsten Fensterwechsel zurückgeworfen werden.
+        self._auto_grundprofil = ""
+        self.binding.profile_id = ziel
+        self.runtime.save_config()
+        self.apply_config()
+        self.runtime.bus.publish(
+            ev.EVT_CONFIG_CHANGED, reason="profile_switched", deck=self.key
+        )
+        return True
+
+    def auto_profil(self, profile_id: str | None) -> bool:
+        """Vom Fensterwechsel gesteuerter Profilwechsel.
+
+        Getrennt von :meth:`switch_profile`, weil der Rückweg ein anderer
+        ist: Nach einem Wechsel von Hand gilt das gewählte Profil, bis
+        jemand wieder etwas wählt. Ein automatischer Wechsel dagegen ist
+        geliehen — passt kein Programm mehr, kommt zurück, was vorher stand.
+        """
+        if profile_id is None:
+            if not self._auto_grundprofil:
+                return False
+            ziel, self._auto_grundprofil = self._auto_grundprofil, ""
+        else:
+            if profile_id not in self.runtime.config.profiles:
+                return False
+            if profile_id == self.binding.profile_id:
+                return False
+            ziel = profile_id
+            if not self._auto_grundprofil:
+                self._auto_grundprofil = self.binding.profile_id
+
+        self.binding.profile_id = ziel
+        self.apply_config()
+        self.runtime.bus.publish(
+            ev.EVT_CONFIG_CHANGED, reason="profile_switched", deck=self.key
+        )
+        return True
 
     def apply_config(self) -> None:
         """Nach einer Änderung an der Config alles Abhängige auffrischen."""

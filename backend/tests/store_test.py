@@ -21,6 +21,7 @@ Aufruf (mit eigener Config, damit die echte unangetastet bleibt):
 import _wache  # bricht ab, statt in die echte Config zu schreiben
 _wache.sichere_umgebung()
 
+import base64
 import hashlib
 import json
 import os
@@ -93,6 +94,12 @@ def node(skript: str, *argumente: str, umgebung: dict[str, str]) -> str:
     return lauf.stdout.strip()
 
 
+#: Ein gültiges 1×1-PNG — klein genug, um es hier stehen zu lassen.
+PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
 def baue_plugin(wurzel: Path, slug: str, version: str = "1.0.0") -> Path:
     ordner = wurzel / slug
     ordner.mkdir(parents=True, exist_ok=True)
@@ -105,7 +112,18 @@ def baue_plugin(wurzel: Path, slug: str, version: str = "1.0.0") -> Path:
             "entry": "plugin.py",
             "class": "TestPlugin",
             "description": "Nur zum Prüfen",
+            "icon": "icon.png",
+            # Zwei Einträge, von denen einer keiner ist: Der Katalog soll
+            # das SVG aussortieren, nicht die App damit umgehen müssen.
+            "screenshots": ["screenshots/deck.png", "boese.svg"],
         }),
+        encoding="utf-8",
+    )
+    (ordner / "icon.png").write_bytes(PNG)
+    (ordner / "screenshots").mkdir(exist_ok=True)
+    (ordner / "screenshots" / "deck.png").write_bytes(PNG)
+    (ordner / "boese.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
         encoding="utf-8",
     )
     (ordner / "plugin.py").write_text(
@@ -224,6 +242,27 @@ def main() -> None:
             check("das Plugin steht im Katalog", katalog["count"] == 1,
                   str(katalog["count"]))
 
+            eintrag = katalog["plugins"][0]
+            check("und nennt die Adresse seines Symbols",
+                  bool(eintrag["latest"].get("icon_url")),
+                  str(eintrag["latest"].get("icon_url")))
+            check("nur echte Bilder stehen als Screenshot dabei",
+                  eintrag["latest"].get("screenshot_urls") == [
+                      f"http://127.0.0.1:{port}/api/assets/{slug}/1.0.0/screenshots/deck.png"
+                  ],
+                  str(eintrag["latest"].get("screenshot_urls")))
+
+            daten, typ = store.bild(slug, "1.0.0", "icon")
+            check("das Symbol kommt als PNG herein", typ == "image/png", typ)
+            check("und unverändert", daten == PNG)
+            check("ein Screenshot ebenso",
+                  store.bild(slug, "1.0.0", "screenshot", 0)[0] == PNG)
+            check("nach einer Stelle, die es nicht gibt, wird nicht gefragt",
+                  _wirft(lambda: store.bild(slug, "1.0.0", "screenshot", 7), store.StoreError))
+            check("und keine Adresse außerhalb des Stores",
+                  _wirft(lambda: store._hol_bild("http://fremde.example/icon.png"),
+                         store.StoreError))
+
             ergebnis = store.installiere(slug)
             check("installiert", ergebnis["plugin_id"] == slug, json.dumps(ergebnis))
             from deckswitch import paths  # noqa: E402
@@ -238,6 +277,88 @@ def main() -> None:
                   gefunden[0].name if gefunden else "nicht gefunden")
             check("die Prüfsumme stimmt mit der des Archivs überein",
                   ergebnis["sha256"] == hashlib.sha256(archiv).hexdigest())
+
+            print("\nNeu laden macht den Katalog wieder frisch")
+            # Der Katalog wird fünf Minuten festgehalten. Wer gerade etwas
+            # freigegeben hat, sah es sonst minutenlang nicht — und drückt
+            # dann „Plugins neu laden", weil er genau das erwartet.
+            store.katalog()
+            check("beim zweiten Mal kommt er aus dem Zwischenspeicher",
+                  store._cache.hol(f"katalog::") is not None)
+            store.vergiss()
+            check("und danach ist er leer", store._cache.hol("katalog::") is None)
+
+            print("\nVersionen vergleichen")
+            faelle = [
+                ("1.0.1", "1.0.0", True), ("1.0.0", "1.0.1", False),
+                ("1.0.0", "1.0.0", False),
+                # Der Klassiker: zeichenweise wäre 1.10 kleiner als 1.9.
+                ("1.10.0", "1.9.0", True), ("1.9.0", "1.10.0", False),
+                ("1.1", "1.0.9", True), ("1.1", "1.1.0", False),
+                ("2.0", "1.99.99", True),
+                # Was keine Zahl ist, zählt als 0 — niemand soll aus Versehen
+                # von einer Fassung auf eine Vorabfassung „aktualisieren".
+                ("1.0.0-beta", "1.0.0", False),
+            ]
+            for neuer, alter, erwartet in faelle:
+                check(f"{neuer} ist {'neuer' if erwartet else 'nicht neuer'} als {alter}",
+                      store.neuer_als(neuer, alter) is erwartet,
+                      str(store.neuer_als(neuer, alter)))
+            check("1.10.2 wird zu (1, 10, 2)", store.als_zahlen("1.10.2") == (1, 10, 2),
+                  str(store.als_zahlen("1.10.2")))
+
+            print("\nBewerten")
+            # Angemeldet ist gerade der Moderator; der Autor kommt gleich
+            # als zweite Stimme dazu.
+            leer = store.bewertung(slug)
+            check("am Anfang hat niemand abgestimmt",
+                  (leer["up"], leer["down"], leer["mine"]) == (0, 0, None),
+                  json.dumps(leer))
+
+            hoch = store.bewerte(slug, 1, "Läuft bei mir seit Tagen.")
+            check("ein Daumen hoch zählt", hoch["up"] == 1, json.dumps(hoch))
+            check("und gilt als die eigene Stimme", hoch["mine"] == 1)
+            check("der Kommentar steht dabei",
+                  hoch["comment"] == "Läuft bei mir seit Tagen.", str(hoch["comment"]))
+
+            store.vergiss()
+            im_katalog = store.katalog(q=slug)["plugins"][0]["rating"]
+            check("der Katalog zeigt dieselbe Zahl", im_katalog["up"] == 1,
+                  json.dumps(im_katalog))
+
+            umentschieden = store.bewerte(slug, -1)
+            check("eine zweite Stimme ersetzt die erste, statt sich zu addieren",
+                  (umentschieden["up"], umentschieden["down"]) == (0, 1),
+                  json.dumps(umentschieden))
+
+            zurueckgezogen = store.bewertung_zuruecknehmen(slug)
+            check("zurückziehen räumt sie weg",
+                  (zurueckgezogen["up"], zurueckgezogen["down"], zurueckgezogen["mine"])
+                  == (0, 0, None), json.dumps(zurueckgezogen))
+            check("und ein zweites Mal ist kein Fehler",
+                  store.bewertung_zuruecknehmen(slug)["mine"] is None)
+
+            store.bewerte(slug, 1, "Von der Moderation.")
+            store.schreib_token(token)
+            zweite = store.bewerte(slug, 1, "Und vom Autor.")
+            check("zwei Leute sind zwei Stimmen", zweite["up"] == 2, json.dumps(zweite))
+            check("jeder sieht nur die eigene als seine", zweite["mine"] == 1)
+            fremde = [k for k in zweite["comments"] if k["author"] != autor]
+            check("der Kommentar des anderen ist zu lesen",
+                  any(k["comment"] == "Von der Moderation." for k in fremde),
+                  json.dumps(zweite["comments"]))
+
+            check("etwas anderes als 1 oder -1 nimmt er nicht",
+                  _wirft(lambda: store.bewerte(slug, 5), store.StoreError))
+
+            store.schreib_token("")
+            check("ohne Anmeldung lässt sich lesen",
+                  store.bewertung(slug)["up"] == 2)
+            check("aber nicht abstimmen",
+                  _wirft(lambda: store.bewerte(slug, 1), store.StoreError))
+            check("und die eigene Stimme ist dann keine",
+                  store.bewertung(slug)["mine"] is None)
+            store.schreib_token(mod_token)
 
             print("\nWenn unterwegs etwas ausgetauscht wird")
             # Die Datei im Store ersetzen, die Prüfsumme im Katalog stehen
@@ -272,6 +393,44 @@ def main() -> None:
             check("fremde Einreichungen gehen niemanden etwas an",
                   _wirft(lambda: store.zuruecknehmen(slug, "1.1.0"), store.StoreError))
             store.schreib_token(token)
+
+            print("\nEine neue Fassung finden und einspielen")
+            store.vergiss()
+            check("mit der aktuellen Fassung gibt es nichts zu tun",
+                  store.verfuegbare_updates({slug: "1.0.0"}) == [],
+                  json.dumps(store.verfuegbare_updates({slug: "1.0.0"})))
+            check("und für nicht installierte Plugins auch nicht",
+                  store.verfuegbare_updates({}) == [])
+
+            # Hochladen darf nur, wem das Plugin gehört — gerade ist die
+            # Moderation angemeldet.
+            zweite = baue_plugin(Path(tmp) / "zweite", slug, version="1.2.0")
+            store.schreib_token(token)
+            store.hochladen(store.packe(zweite), dateiname=f"{slug}.zip")
+            store.schreib_token(mod_token)
+            node("test-approve.mjs", slug, umgebung=umgebung)
+            store.vergiss()
+
+            gefunden = store.verfuegbare_updates({slug: "1.0.0"})
+            check("die neue Fassung wird gefunden", len(gefunden) == 1,
+                  json.dumps(gefunden))
+            if gefunden:
+                eintrag = gefunden[0]
+                check("mit alter und neuer Nummer",
+                      (eintrag["installed"], eintrag["available"]) == ("1.0.0", "1.2.0"),
+                      json.dumps(eintrag))
+                check("und sie lässt sich mit dieser App benutzen", eintrag["usable"])
+            check("wer schon die neue hat, bekommt nichts angeboten",
+                  store.verfuegbare_updates({slug: "1.2.0"}) == [])
+            check("und wer eine noch neuere hat, erst recht nicht",
+                  store.verfuegbare_updates({slug: "2.0.0"}) == [])
+
+            ergebnis = store.installiere(slug)
+            check("das Einspielen holt die neue Fassung",
+                  ergebnis["version"] == "1.2.0", json.dumps(ergebnis))
+            store.vergiss()
+            check("danach ist nichts mehr offen",
+                  store.verfuegbare_updates({slug: "1.2.0"}) == [])
 
             print("\nAbmelden")
             store.abmelden()

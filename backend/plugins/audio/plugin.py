@@ -16,12 +16,19 @@ from deckswitch.services.backgrounds import parse_color
 
 ACCENT = "#3b82f6"
 
+#: Wie weit die aktuelle Lautstärke vom Festwert abweichen darf, damit die
+#: Taste als „eingestellt“ gilt. Ein Prozentpunkt Luft, weil PipeWire in
+#: 1/65536-Schritten rechnet und ein gesetzter Wert selten exakt zurückkommt.
+PRESET_TOLERANZ = 0.01
+
 
 class AudioPlugin(ActionPlugin):
     # -- Eingaben ----------------------------------------------------------
 
     def on_dial_rotate(self, action_id, settings, delta, ctx):
-        if action_id == "volume":
+        if action_id in ("volume", "volume_set"):
+            # Auch der Festwert-Dial dreht relativ: Der eingestellte Prozent-
+            # wert ist der Sprung beim Druck, nicht eine Sperre beim Drehen.
             step = float(ctx.setting("step", 2))
             self.services.audio.change_volume(_target(settings), delta * step)
         elif action_id == "app_volume":
@@ -50,12 +57,13 @@ class AudioPlugin(ActionPlugin):
             self.services.audio.set_mute(_target(settings, source=True), True)
 
     def on_touch(self, action_id, settings, x, y, ctx):
-        """Tippen auf das Segment schaltet stumm — unabhängig von der Stelle.
+        """Tippen auf das Segment wirkt wie ein Druck — unabhängig von der Stelle.
 
         Die Tippposition wird bewusst ignoriert: Der Streifen liegt direkt
         über den Dials, und ein Balken, der die Lautstärke dorthin setzt, wo
         man ihn berührt, springt bei jedem versehentlichen Streifen. Tippen
-        macht deshalb dasselbe wie ein Druck auf den Dial.
+        macht deshalb dasselbe wie ein Druck auf den Dial: stumm schalten
+        bzw. beim Festwert auf den eingestellten Prozentwert springen.
         """
         self._activate(action_id, settings, ctx)
 
@@ -63,6 +71,13 @@ class AudioPlugin(ActionPlugin):
         audio = self.services.audio
         if action_id == "volume":
             audio.toggle_mute(_target(settings))
+        elif action_id == "volume_set":
+            target = _target(settings)
+            if ctx.setting("unmute", True):
+                # Sonst bliebe ein stummes Gerät nach dem Druck still — der
+                # Balken zeigte 50 %, zu hören wäre nichts.
+                audio.set_mute(target, False)
+            audio.set_volume(target, _preset(settings))
         elif action_id == "mic_mute":
             audio.toggle_mute(_target(settings, source=True))
         elif action_id == "output_device":
@@ -86,6 +101,14 @@ class AudioPlugin(ActionPlugin):
         audio = self.services.audio
         if action_id == "volume":
             return "muted" if audio.get_volume(_target(settings)).muted else "default"
+        if action_id == "volume_set":
+            state = audio.get_volume(_target(settings))
+            erreicht = (
+                state.available
+                and not state.muted
+                and abs(state.volume - _preset(settings)) <= PRESET_TOLERANZ
+            )
+            return "active" if erreicht else "inactive"
         if action_id == "mic_mute":
             return "muted" if audio.get_volume(_target(settings, source=True)).muted else "default"
         if action_id == "output_device":
@@ -93,6 +116,10 @@ class AudioPlugin(ActionPlugin):
         return None
 
     def get_label(self, action_id, settings, ctx):
+        if action_id == "volume_set" and not ctx.appearance.label_text:
+            # Ohne eigenes Label den Zielwert zeigen — bei mehreren Festwert-
+            # Tasten nebeneinander ist genau das die Beschriftung.
+            return self._default_label(action_id, settings, ctx)
         if action_id == "output_device" and not ctx.appearance.label_text:
             # Ohne eigenes Label den Gerätenamen zeigen — sonst stünde da nichts.
             sink = settings.get("sink")
@@ -121,7 +148,7 @@ class AudioPlugin(ActionPlugin):
 
         width, height = ctx.size
         mit_balken = (
-            action_id in ("volume", "app_volume")
+            action_id in ("volume", "volume_set", "app_volume")
             and ctx.setting("show_bar", True)
             and level is not None
         )
@@ -138,7 +165,7 @@ class AudioPlugin(ActionPlugin):
             self.services.render.draw_bar(
                 image, level, box=box, color=ctx.setting("bar_color", ACCENT)
             )
-        if action_id == "output_device" and state == "active":
+        if action_id in ("output_device", "volume_set") and state == "active":
             self.services.render.draw_badge(
                 image, ctx.setting("active_badge", "#22c55e")
             )
@@ -185,7 +212,7 @@ class AudioPlugin(ActionPlugin):
         # Schriftgröße mitwachsen lassen: Die eingestellte Größe passt für
         # den Streifen des Geräts, auf einer halb so hohen Kachel nicht.
         schrift = max(9, min(ctx.appearance.label_size, round(height * 0.30)))
-        label = ctx.appearance.label_text or self._default_label(action_id, settings)
+        label = ctx.appearance.label_text or self._default_label(action_id, settings, ctx)
         text_left = rand + icon_px + max(6, rand)
         # Prozentwert steht rechts — das Label darf nicht darunter laufen.
         label_width = width - text_left - (round(schrift * 3.2) if show_percent else rand)
@@ -223,7 +250,7 @@ class AudioPlugin(ActionPlugin):
                 color=color,
             )
 
-        if action_id == "output_device" and state == "active":
+        if action_id in ("output_device", "volume_set") and state == "active":
             render.draw_badge(image, ctx.setting("active_badge", "#22c55e"), width=3)
         return image
 
@@ -252,7 +279,7 @@ class AudioPlugin(ActionPlugin):
 
     def _level(self, action_id, settings) -> float | None:
         audio = self.services.audio
-        if action_id == "volume":
+        if action_id in ("volume", "volume_set"):
             state = audio.get_volume(_target(settings))
             return state.volume if state.available else None
         if action_id == "mic_mute":
@@ -285,7 +312,14 @@ class AudioPlugin(ActionPlugin):
                 return entry.default_icon
         return action.default_icon
 
-    def _default_label(self, action_id, settings) -> str:
+    def _default_label(self, action_id, settings, ctx: SlotContext | None = None) -> str:
+        if action_id == "volume_set":
+            # Auf dem Streifen steht rechts schon der Istwert; ohne Vorzeichen
+            # stünden dort zwei nackte Zahlen nebeneinander. Kein Pfeil („→“):
+            # Noto Sans, die Standardschrift der Kacheln, kennt ihn nicht und
+            # zeichnet ein leeres Kästchen.
+            zeiger = "» " if ctx is not None and ctx.input_type == "dial" else ""
+            return f"{zeiger}{round(_preset(settings) * 100)}%"
         if action_id == "app_volume":
             return settings.get("app_name") or "App"
         if action_id == "output_device":
@@ -294,6 +328,15 @@ class AudioPlugin(ActionPlugin):
                 if info.name == sink:
                     return info.description
         return ""
+
+
+def _preset(settings: dict) -> float:
+    """Der eingestellte Festwert als Pegel 0.0–1.5."""
+    try:
+        prozent = float(settings.get("value", 50))
+    except (TypeError, ValueError):
+        prozent = 50.0
+    return max(0.0, min(1.5, prozent / 100.0))
 
 
 def _target(settings: dict, source: bool = False) -> str:

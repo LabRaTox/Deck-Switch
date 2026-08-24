@@ -4,15 +4,31 @@
     ./scripts/make-plugin-screenshots.py            alle unter plugin-sources/
     ./scripts/make-plugin-screenshots.py weather    nur dieses
 
-**Was diese Bilder sind — und was nicht.** Sie zeigen, wie die Tasten eines
-Plugins aussehen: dieselben Symbole, dieselbe Akzentfarbe, dieselbe Schrift
-wie im Betrieb. Sie sind aber *gebaut* und nicht abfotografiert — es läuft
-kein Deck dabei, und die Werte darauf sind Beispiele. Ein Wetter-Plugin ohne
-Netz kann nun einmal keine echten 18 Grad anzeigen.
+**Auf diesen Bildern steht nichts Erfundenes.** Jeder Name und jedes Symbol
+stammt aus dem Manifest des Plugins: die Aktionen, ihre Zustände, deren
+Symbole. Damit veralten die Bilder gemeinsam mit dem Plugin, statt eine
+Fassung zu zeigen, die es längst nicht mehr gibt.
 
-Alles, was auf den Bildern steht, stammt aus dem Manifest: die Aktionen, ihre
-Namen, ihre Symbole. Damit veralten die Bilder gemeinsam mit dem Plugin,
-statt eine Fassung zu zeigen, die es längst nicht mehr gibt.
+Hier standen einmal auch „Deck-Blätter" mit Beispielwerten — 18 Grad, ein
+laufendes Lied, eine Aufnahme seit 12 Minuten. Die sind am 2026-08-23
+ersatzlos geflogen: Ein Bild, das eine Szene „Kamera" zeigt, behauptet etwas
+über ein fremdes OBS, das niemand geprüft hat. Was ein Plugin im Betrieb
+anzeigt, hängt an Konten, Kanälen und Geräten, die dieses Skript nicht kennt
+— und was es nicht kennt, malt es nicht.
+
+Ein Schoner ist die Ausnahme, und zwar keine halbe: Er wird wirklich
+ausgeführt. Was auf ``schoner.png`` steht, hat das Plugin selbst gezeichnet.
+
+**Plugins, die ihre Kacheln selbst zeichnen, machen auch ihre Bilder selbst.**
+Das Tastenfeld hier oben baut jede Kachel aus Symbol und Namen — richtig für
+alle, die die gewöhnliche Darstellung nutzen, falsch für eines, das
+``render`` überschreibt. Der Timer zeigt eine Uhrzeit, einen Balken und einen
+farbigen Rahmen; ein Bild mit Sanduhr und dem Wort „Countdown" behauptete
+etwas, das auf keinem Deck steht. Liegt im Plugin-Ordner ein
+``screenshots.py`` mit einer Funktion ``erzeuge(ziel, werkzeug)``, wird die
+gerufen und ihr Ergebnis genommen — das Plugin führt sich mit seinem eigenen
+Zeichencode vor. ``werkzeug`` ist dieses Modul, damit Maße und Blattlayout
+dieselben bleiben.
 """
 
 import json
@@ -117,6 +133,7 @@ def _taste(
     mittel: str = "",
     balken: float | None = None,
     rahmen: bool = False,
+    rahmen_farbe=None,
     farbe=None,
     grund=None,
 ) -> Image.Image:
@@ -127,6 +144,11 @@ def _taste(
     kräftige Zeile darüber (``mittel``), eine Beschriftung am unteren Rand, ein Pegelbalken und ein Rahmen für einen
     aktiven Zustand. Welche davon vorkommen, entscheidet das Beispiel — je
     nachdem, was das Plugin an dieser Stelle wirklich zeichnet.
+
+    ``rahmen_farbe`` färbt allein den Rahmen. Das ist die Farbe, die
+    ``draw_badge`` bekommt — und nur die: Ein Zustandsrahmen färbt im Betrieb
+    weder die Kachelfläche noch den Text. Über ``farbe`` liefe genau das,
+    denn sie tönt den Grund und die große Zahl mit.
     """
     bild = Image.new("RGBA", (TASTE, TASTE), (0, 0, 0, 0))
     stift = ImageDraw.Draw(bild)
@@ -218,7 +240,10 @@ def _taste(
 
     if rahmen:
         stift.rounded_rectangle(
-            (1, 1, TASTE - 2, TASTE - 2), radius=RADIUS - 1, outline=(*farbe, 255), width=3
+            (1, 1, TASTE - 2, TASTE - 2),
+            radius=RADIUS - 1,
+            outline=(*(rahmen_farbe or farbe), 255),
+            width=3,
         )
 
     return bild
@@ -261,115 +286,11 @@ def _leere_taste(akzent, grund=None) -> Image.Image:
     return bild
 
 
-def _streifen(
-    blatt: Image.Image, akzent, geteilt: bool = True, grund=None
-) -> tuple[int, int, int, int]:
-    """Zeichnet den Touchstrip und gibt sein Rechteck zurück.
-
-    ``geteilt`` zieht die Trennlinien zwischen den vier Segmenten ein. Ein
-    Bildschirmschoner malt über den ganzen Streifen und braucht sie nicht —
-    ein Plugin auf einem Dial hat nur sein Viertel.
-    """
-    stift = ImageDraw.Draw(blatt)
-    links, breite, hoehe = RAND, _breite(), _strip_hoehe()
-    oben = blatt.height - RAND - hoehe
-    stift.rounded_rectangle(
-        (links, oben, links + breite - 1, oben + hoehe - 1),
-        radius=10,
-        fill=(*(grund if grund else _mix((20, 20, 24), akzent, 0.08)), 255),
-    )
-    if geteilt:
-        for i in range(1, SEGMENTE):
-            x = links + round(breite * i / SEGMENTE)
-            stift.line((x, oben + 6, x, oben + hoehe - 6), fill=(255, 255, 255, 22))
-    return links, oben, breite, hoehe
-
-
-def _segment(blatt: Image.Image, akzent, nummer: int) -> tuple[int, int, int, int, float]:
-    """Das Rechteck eines Segments samt Maßstab zu den echten 200×100."""
-    links, oben, breite, hoehe = _streifen(blatt, akzent)
-    seg = breite / SEGMENTE
-    return (
-        round(links + seg * nummer),
-        oben,
-        round(seg),
-        hoehe,
-        hoehe / STRIP_PIXEL[1],
-    )
-
-
-def _segment_medien(blatt, akzent, symbol: str, titel: str, kuenstler: str) -> None:
-    """Was Spotify auf einem Dial zeigt: Symbol links, Titel, Künstler.
-
-    Im Betrieb liegt dahinter noch das Albumbild, weichgezeichnet. Das hier
-    zeigt den Fall ohne Cover — ein erfundenes Album wäre ein fremdes Bild in
-    unserem Repository.
-    """
-    x, y, breite, hoehe, f = _segment(blatt, akzent, 0)
-    stift = ImageDraw.Draw(blatt)
-
-    glyph = _glyph(symbol, round(55 * f))
-    if glyph is not None:
-        blatt.paste(glyph, (x + round(10 * f), y + (hoehe - glyph.height) // 2), glyph)
-
-    text = x + round(75 * f)
-    platz = breite - round(87 * f)
-    stift.text((text, y + round(14 * f)), _kuerze(stift, titel, _schrift(round(16 * f)), platz),
-               font=_schrift(round(16 * f)), fill=(240, 244, 248, 255))
-    stift.text((text, y + round(36 * f)), _kuerze(stift, kuenstler, _schrift(round(13 * f)), platz),
-               font=_schrift(round(13 * f)), fill=(199, 199, 209, 255))
-
-
-def _segment_wetter(blatt, akzent, symbol: str, kopf: str, gross: str, rechts: str) -> None:
-    """Und was das Wetter auf einem Dial zeigt: die Stundenansicht."""
-    x, y, breite, hoehe, f = _segment(blatt, akzent, 0)
-    stift = ImageDraw.Draw(blatt)
-
-    glyph = _glyph(symbol, round(56 * f))
-    if glyph is not None:
-        blatt.paste(glyph, (x + round(10 * f), y + (hoehe - glyph.height) // 2), glyph)
-
-    links = x + round(76 * f)
-    platz = breite - round(88 * f)
-    stift.text((links, y + round(8 * f)), _kuerze(stift, kopf, _schrift(round(12 * f)), platz),
-               font=_schrift(round(12 * f)), fill=(199, 199, 209, 255))
-    stift.text((links, y + round(30 * f)), gross, font=_schrift(round(24 * f), fett=True),
-               fill=(226, 232, 240, 255))
-
-    schrift = _schrift(round(12 * f))
-    stift.text((x + breite - round(12 * f) - stift.textlength(rechts, font=schrift),
-                y + round(36 * f)), rechts, font=schrift, fill=(147, 197, 253, 255))
-
-
-def _streifen_text(blatt, akzent, text: str, grund=None) -> None:
-    """Ein Wort über den ganzen Streifen — so macht es der Bildschirmschoner.
-
-    Er bekommt das Deck als *ein* Bild und darf überall hinmalen. Das ist der
-    einzige Fall, in dem eine Darstellung über die Segmentgrenzen geht.
-    """
-    _, oben, breite, hoehe = _streifen(blatt, akzent, geteilt=False, grund=grund)
-    stift = ImageDraw.Draw(blatt)
-    schrift = _schrift(round(hoehe * 0.5), fett=True)
-    stift.text(
-        (RAND + (breite - stift.textlength(text, font=schrift)) / 2, oben + hoehe * 0.22),
-        text,
-        font=schrift,
-        fill=(226, 232, 240, 160),
-    )
-
-
-def _kuerze(stift, text: str, schrift, platz: int) -> str:
-    """Kürzt mit Auslassungszeichen, wie es die Anzeige auch tut."""
-    if stift.textlength(text, font=schrift) <= platz:
-        return text
-    while text and stift.textlength(text + "…", font=schrift) > platz:
-        text = text[:-1]
-    return text + "…"
-
-
-# --------------------------------------------------------------------------
-# Die Bilder je Plugin
-# --------------------------------------------------------------------------
+def _text(wert) -> str:
+    """Deutscher Text aus einem Manifest-Eintrag — oder was da steht."""
+    if isinstance(wert, dict):
+        return wert.get("de") or wert.get("en") or ""
+    return str(wert or "")
 
 
 def _aktionen_blatt(manifest: dict, akzent) -> Image.Image:
@@ -383,106 +304,132 @@ def _aktionen_blatt(manifest: dict, akzent) -> Image.Image:
         if i >= len(aktionen):
             _setze(blatt, _leere_taste(akzent), spalte, zeile)
             continue
-        name = aktionen[i].get("name")
-        beschriftung = name.get("de") if isinstance(name, dict) else str(name or "")
+        beschriftung = _text(aktionen[i].get("name"))
         _setze(blatt, _taste(aktionen[i].get("default_icon"), beschriftung, akzent), spalte, zeile)
     return blatt
 
 
-#: Was ein Plugin auf einem laufenden Deck zeigt.
-#:
-#: Die Werte sind erfunden — es gibt keine 18 Grad und kein laufendes Lied,
-#: während dieses Skript läuft. Der Aufbau ist es nicht: Was hier steht, hält
-#: sich an das, was ``render()`` im jeweiligen Plugin zeichnet. Die
-#: Wiedergabe-Taste zeigt deshalb den Titel und nicht den Künstler (Vorgabe
-#: von ``show_track``), die Lautstärke hat einen Balken statt einer
-#: Prozentzahl, und was auf einem Dial läuft, füllt ein Viertel des Streifens
-#: und nicht den ganzen.
-BEISPIELE = {
-    "weather": {
-        # _render_current_key, _render_forecast_key, _render_air_key
-        "tasten": [
-            {"symbol": "cloud", "gross": "18°", "text": "bedeckt"},
-            {"oben": "Sa", "symbol": "cloud-rain", "mittel": "21° / 11°", "text": "40 % Regen"},
-            {"oben": "AQI", "gross": "42", "text": "Gut", "farbe": (34, 197, 94)},
-        ],
-        # _render_hourly — die Vorgabe für ein Dial-Segment
-        "segment": ("wetter", "cloud", "Berlin · 14:00", "18°", "40 % Regen"),
-    },
-    "spotify": {
-        # Die Wiedergabe läuft: Titel als Beschriftung, Akzentrahmen darum.
-        # „Nächster Titel“ und „Lautstärke“ tragen den Namen, den man der
-        # Taste selbst gibt — das Plugin liefert dort keine Beschriftung.
-        "tasten": [
-            {"symbol": "player-pause", "text": "Fairytale Gone Bad", "rahmen": True},
-            {"symbol": "player-track-prev", "text": "Vorheriger Titel"},
-            {"symbol": "player-track-next", "text": "Nächster Titel"},
-            {"symbol": "volume", "text": "Lautstärke", "balken": 0.65},
-        ],
-        # _render_multimedia
-        "segment": ("medien", "player-pause", "Fairytale Gone Bad", "Sunrise Avenue"),
-    },
-    # Der Bildschirmschoner malt über das ganze Deck: obere Reihe Uhrzeit,
-    # untere das Datum, je eine Ziffer pro Taste, und der Wochentag über den
-    # Streifen.
-    "clock-saver": {
-        # Schwarz und ein helles Grau — die Vorgaben des Schoners, nicht die
-        # Akzentfarbe des Plugins.
-        "grund": (0, 0, 0),
-        "farbe": (226, 232, 240),
-        "tasten": [
-            {"gross": "1"}, {"gross": "4"}, {"gross": "3"}, {"gross": "5"},
-            {"gross": "2"}, {"gross": "2"}, {"gross": "0"}, {"gross": "8"},
-        ],
-        "segment": ("ganz", "Freitag"),
-    },
-}
+def _zustaende_blatt(manifest: dict, akzent) -> Image.Image | None:
+    """Die Zustände, in denen eine Taste ein anderes Symbol trägt.
 
+    Alles darauf steht im Manifest: der Name der Aktion, der Name des
+    Zustands, sein Symbol. Nichts ist erfunden — deshalb taugt dieses Blatt
+    auch für Plugins, deren Tasten im Betrieb Namen aus einem fremden Konto
+    tragen (Kanäle, Server, Szenen). Ein Bild mit ausgedachten Kanalnamen
+    zeigte ein Discord, das es nicht gibt.
 
-def _beispiel_blatt(kennung: str, akzent) -> Image.Image | None:
-    """Ein Blatt mit Beispielwerten — was im Betrieb auf dem Deck steht."""
-    beispiel = BEISPIELE.get(kennung)
-    if not beispiel:
+    Gezeigt werden nur Zustände mit eigenem Symbol. Ein Zustand, der sich
+    allein durch einen Rahmen oder einen Schleier unterscheidet, sähe hier
+    aus wie sein Nachbar — und woher der Rahmen seine Farbe nimmt, steht im
+    Quelltext des Plugins und nicht im Manifest.
+    """
+    eintraege: list[tuple[str, str, str]] = []
+    for aktion in manifest.get("actions") or []:
+        zustaende = [z for z in aktion.get("states") or [] if z.get("default_icon")]
+        if len(zustaende) < 2:
+            # Ein einzelner Zustand sagt nichts: Er sieht aus wie die Aktion
+            # selbst, und die steht schon auf dem anderen Blatt.
+            continue
+        for zustand in zustaende:
+            eintraege.append((
+                _text(aktion.get("name")),
+                _text(zustand.get("name")),
+                zustand["default_icon"],
+            ))
+
+    if not eintraege:
         return None
 
-    grund = beispiel.get("grund")
-    vorgabe = beispiel.get("farbe")
-    tasten = beispiel["tasten"]
-    zeilen = max(1, -(-len(tasten) // SPALTEN))
-    blatt = _blatt(zeilen, strip=True)
-
+    zeilen = max(1, -(-len(eintraege) // SPALTEN))
+    blatt = _blatt(zeilen)
     for i in range(zeilen * SPALTEN):
         spalte, zeile = i % SPALTEN, i // SPALTEN
-        if i >= len(tasten):
-            _setze(blatt, _leere_taste(akzent, grund), spalte, zeile)
+        if i >= len(eintraege):
+            _setze(blatt, _leere_taste(akzent), spalte, zeile)
             continue
-        taste = tasten[i]
-        _setze(
-            blatt,
-            _taste(
-                taste.get("symbol"),
-                taste.get("text", ""),
-                akzent,
-                gross=taste.get("gross", ""),
-                oben=taste.get("oben", ""),
-                mittel=taste.get("mittel", ""),
-                balken=taste.get("balken"),
-                rahmen=taste.get("rahmen", False),
-                farbe=taste.get("farbe", vorgabe),
-                grund=grund,
-            ),
-            spalte,
-            zeile,
-        )
-
-    art, *rest = beispiel["segment"]
-    if art == "medien":
-        _segment_medien(blatt, akzent, *rest)
-    elif art == "wetter":
-        _segment_wetter(blatt, akzent, *rest)
-    else:
-        _streifen_text(blatt, akzent, *rest, grund=grund)
+        aktion, zustand, symbol = eintraege[i]
+        _setze(blatt, _taste(symbol, zustand, akzent, oben=aktion), spalte, zeile)
     return blatt
+
+
+def _schoner_blatt(ordner: Path, manifest: dict) -> Image.Image | None:
+    """Der Schoner, wie er wirklich aussieht — vom Plugin selbst gezeichnet.
+
+    Kein Nachbau: Das Plugin wird geladen und gerufen, genau wie im Betrieb.
+    Die Uhr zeigt deshalb die Uhrzeit dieses Laufs. Anschließend wird die
+    Leinwand so zerschnitten, wie die App es tut — sonst sähe man ein
+    durchgehendes Bild statt acht Tasten und einen Streifen.
+    """
+    import importlib.util
+
+    from deckswitch.config import default_config
+    from deckswitch.plugins.base import Manifest, Services
+    from deckswitch.services import screensaver as schoner
+    from deckswitch.services.icons import IconService
+    from deckswitch.services.render import RenderService
+
+    eintrag = ordner / manifest.get("entry", "plugin.py")
+    if not eintrag.is_file() or not manifest.get("class"):
+        return None
+
+    spec = importlib.util.spec_from_file_location(f"schoner_{manifest['id']}", eintrag)
+    if spec is None or spec.loader is None:
+        return None
+    modul = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = modul
+    spec.loader.exec_module(modul)
+    klasse = getattr(modul, manifest["class"], None)
+    if klasse is None:
+        return None
+
+    icons = IconService()
+    config = default_config()
+    # Die Vorgaben aus dem Schema, wie sie eine frische Installation hätte.
+    config.plugin_settings[manifest["id"]] = {
+        feld["key"]: feld["default"]
+        for feld in manifest.get("config_schema") or []
+        if feld.get("default") is not None
+    }
+    dienste = Services(
+        audio=None, icons=icons, render=RenderService(icons),
+        runtime=None, config=config, plugin_dir=ordner,
+    )
+
+    plugin = klasse(Manifest.model_validate(manifest), dienste)
+    # Dieselbe Geometrie wie am Stream Deck+: acht Tasten zu 120×120 und ein
+    # Touchstrip von 800×100.
+    layout = plugin.deck_layout = schoner.layout((120, 120), 8, STRIP_PIXEL)
+    leinwand = plugin.render(layout.canvas, 0.0)
+    tasten, streifen = schoner.split(leinwand, layout)
+
+    blatt = _blatt(2, strip=True)
+    for i, taste in enumerate(tasten[: 2 * SPALTEN]):
+        _setze(blatt, taste.convert("RGBA"), i % SPALTEN, i // SPALTEN)
+    links, breite, hoehe = RAND, _breite(), _strip_hoehe()
+    blatt.paste(streifen.convert("RGB").resize((breite, hoehe), Image.LANCZOS),
+                (links, blatt.height - RAND - hoehe))
+    return blatt
+
+
+def _eigene_bilder(ordner: Path, ziel: Path) -> list[str] | None:
+    """Lässt das Plugin seine Bilder selbst machen, wenn es das anbietet."""
+    datei = ordner / "screenshots.py"
+    if not datei.is_file():
+        return None
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(f"bilder_{ordner.name}", datei)
+    if spec is None or spec.loader is None:
+        return None
+    modul = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = modul
+    spec.loader.exec_module(modul)
+    erzeuge = getattr(modul, "erzeuge", None)
+    if erzeuge is None:
+        print(f"  ! {ordner.name}: screenshots.py ohne erzeuge(), übersprungen")
+        return None
+    return list(erzeuge(ziel, sys.modules[__name__]))
 
 
 def baue(ordner: Path) -> bool:
@@ -497,14 +444,33 @@ def baue(ordner: Path) -> bool:
 
     bilder: list[str] = []
 
-    beispiel = _beispiel_blatt(manifest["id"], akzent)
-    if beispiel is not None:
-        beispiel.save(ziel / "deck.png")
-        bilder.append(f"{UNTERORDNER}/deck.png")
+    eigene = _eigene_bilder(ordner, ziel)
+    if eigene is not None:
+        manifest["screenshots"] = eigene[:3]
+        datei.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                         encoding="utf-8")
+        print(f"  ✔ {ordner.name:14} {len(eigene)} Bild(er) vom Plugin selbst: "
+              f"{', '.join(eigene)}")
+        return True
+
+    if manifest.get("type") in ("screensaver", "wallpaper"):
+        try:
+            schoner = _schoner_blatt(ordner, manifest)
+        except Exception as exc:  # noqa: BLE001 — ein Plugin darf hier scheitern
+            print(f"  ! {ordner.name}: Schoner nicht zu zeichnen ({exc})")
+            schoner = None
+        if schoner is not None:
+            schoner.save(ziel / "schoner.png")
+            bilder.append(f"{UNTERORDNER}/schoner.png")
 
     if manifest.get("actions"):
         _aktionen_blatt(manifest, akzent).save(ziel / "aktionen.png")
         bilder.append(f"{UNTERORDNER}/aktionen.png")
+
+    zustaende = _zustaende_blatt(manifest, akzent)
+    if zustaende is not None:
+        zustaende.save(ziel / "zustaende.png")
+        bilder.append(f"{UNTERORDNER}/zustaende.png")
 
     if not bilder:
         print(f"  – {ordner.name}: nichts zu zeigen")

@@ -80,19 +80,30 @@ One image across all keys and the touch strip, animated or still. Every page
 can have its own touch strip wallpaper.
 
 **Plugins**
-Eight plugins are built in: audio, OBS, Discord, system, soundboard,
-multi-action, navigation and the Tabler icon set. Three more can be installed
-afterwards: Spotify, weather and a clock screensaver. For your own there is
+Six plugins are built in: audio, system, soundboard, multi-action,
+navigation and the Tabler icon set. Five more can be installed afterwards:
+OBS, Discord, Spotify, weather and a clock screensaver. For your own there is
 an open API. Icon sets are plugins too.
 
 There are four ways to install one: through the **store** inside the app,
 from a ZIP file, from a URL, or through a `streamdeck://` link in the
 browser.
 
-**Plugin overview and settings**
+**Built-in plugin store**
+It shows you every plugin there is, the installed ones included. The ones you
+do not have yet carry a dashed frame. Clicking the name opens the detail page
+with pictures, description, licence and size. Filter by topic on the left,
+by kind at the top.
 
 <p align="center">
-  <img src="docs/screenshots/plugins.png" alt="Plugin overview" width="49%">
+  <img src="docs/screenshots/plugins.png" alt="Plugin overview with store cards" width="49%">
+  <img src="docs/screenshots/store.png" alt="A plugin from the store" width="49%">
+</p>
+
+**Settings**
+Language, default icon set, autostart and everything about the decks.
+
+<p align="center">
   <img src="docs/screenshots/einstellungen.png" alt="Settings" width="49%">
 </p>
 
