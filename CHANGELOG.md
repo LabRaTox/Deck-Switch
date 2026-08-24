@@ -1,33 +1,32 @@
 # Changelog
 
-## 1.1.0 — 24. August 2026
+## 1.1.0 — 24 August 2026
 
-### Neu
+### New
 
-- Vier Plugins im Store: **Timer**, **Twitch**, **Govee** und **YouTube**
-- Plugins werden aus dem integrierten Store geladen
-- Bewertungen im Store: Daumen hoch oder runter, eine Stimme je Konto
-- Die App zeigt an der Plugin-Karte, wenn im Store eine neuere Fassung
-  liegt, und spielt auf Wunsch alle auf einmal ein
-- Profile lassen sich anlegen, kopieren und umschalten. Unter KDE wechseln
-  sie auf Wunsch automatisch mit dem Programm im Vordergrund
-- Lautstärke lässt sich auf einen festen Prozentwert stellen
+- Plugins are installed from the built-in store
+- Store ratings: thumbs up or down, one vote per account
+- Plugin cards show when a newer version is in the store, and can
+  update all of them at once
+- Profiles can be created, copied and switched. On KDE they follow the
+  program in the foreground if you want them to
+- Volume can be set to a fixed percentage
 
-### Behoben
+### Fixed
 
-- Auf einer frischen Installation ließen sich die Deck-Einstellungen nicht
-  ändern, solange kein Gerät angesteckt war
-- Anmeldungen an Twitch und YouTube gingen nach einem Neustart verloren
-- Adressen in Hinweistexten sind anklickbar
+- On a fresh install the deck settings could not be changed while no
+  device was plugged in
+- Twitch and YouTube logins were lost after a restart
+- Links in hint texts are clickable
 
-## 1.0.0 — 19. August 2026
+## 1.0.0 — 19 August 2026
 
-Erste Fassung.
+First release.
 
-- Tasten und Dials belegen, Seiten und Ordner, Multi-Aktionen
-- Eingebaute Plugins: Audio, Multimedia, Soundboard, System, Streamdeck
-- Plugins zum Nachinstallieren: OBS, Spotify, Discord, Wetter, Uhr-Schoner
-- Bildschirmschoner, Hintergrundbilder, eigene Tastenbilder
-- Virtuelle Decks als Overlay, Netzwerk-Decks
-- Plugin-Store zum Suchen, Installieren und Einreichen
-- AUR-Paket
+- Keys and dials, pages and folders, multi-actions
+- Built-in plugins: audio, multimedia, soundboard, system, streamdeck
+- Plugins to install: OBS, Spotify, Discord, weather, clock screensaver
+- Screensavers, wallpapers, custom key images
+- Virtual decks as an overlay, network decks
+- Plugin store to browse, install and submit
+- AUR package
