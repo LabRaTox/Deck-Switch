@@ -1,7 +1,7 @@
 # Maintainer: LabRaTox <278214024+LabRaTox@users.noreply.github.com>
 
 pkgname=deckswitch
-pkgver=1.1.0
+pkgver=1.3.0
 pkgrel=1
 pkgdesc="Independent Elgato Stream Deck control software with its own plugin system"
 arch=('x86_64')
@@ -70,6 +70,9 @@ optdepends=(
 install="$pkgname.install"
 
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# Achtung beim Versionswechsel: Die Summe gilt für den Tarball des Tags und
+# lässt sich erst berechnen, wenn dieser auf GitHub liegt. Danach mit
+# `updpkgsums` erneuern und `makepkg --printsrcinfo > .SRCINFO` nachziehen.
 sha256sums=('7fc427da27afa7db5ba2491877b2943ba3f427979b8e348ec41bee4754b13099')
 
 _srcdir="Deck-Switch-$pkgver"

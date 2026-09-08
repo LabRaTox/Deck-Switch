@@ -5,7 +5,7 @@ name = "deckswitch"
 # Muss mit `backend/deckswitch/__init__.py` übereinstimmen — geprüft von
 # `backend/tests/version_test.py`. Rust kann die Python-Datei nicht lesen,
 # also wird die Zahl hier wiederholt und die Übereinstimmung erzwungen.
-version = "1.1.0"
+version = "1.3.0"
 description = "Steuerung für das Elgato Stream Deck+"
 authors = ["Heiko Stuhrmann"]
 license = "MIT"
