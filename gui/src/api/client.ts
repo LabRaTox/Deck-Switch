@@ -56,6 +56,17 @@ function resolveBase(): string {
 export const API_BASE: string = resolveBase();
 
 /**
+ * Set der fest eingebauten Symbole — Ordner, Zurück, Menü und was die
+ * Anwendung sonst von sich aus zeichnet.
+ *
+ * Bewusst keine Einstellung: Diese Symbole gehören zum Programm, nicht zur
+ * Belegung. Hochgeladene Iconsets sind für die Kacheln da und werden je
+ * Belegung in der Icon-Auswahl gewählt. Das Backend hält denselben Wert in
+ * `services.icons.SYSTEM_ICONSET`.
+ */
+export const SYSTEM_ICONSET = "iconset-tabler";
+
+/**
  * Das Deck, das die GUI gerade bearbeitet.
  *
  * Seiten, Belegungen und Vorschauen gibt es je Gerät — jedes Deck hat sein
@@ -139,7 +150,7 @@ export const api = {
    * älter als das, was inzwischen am Gerät oder von einem anderen Fenster
    * aus passiert ist — das würde sonst stillschweigend überschrieben.
    */
-  patchAppSettings: (patch: { language?: string; active_iconset?: string }) =>
+  patchAppSettings: (patch: { language?: string }) =>
     request<AppSettings>("/api/config/app", {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -662,7 +673,70 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  // -- Sicherung ----------------------------------------------------------
+  //
+  // Der Export oben ist die Konfiguration als JSON. Ein Sicherungspaket
+  // nimmt zusätzlich die hochgeladenen Bilder mit — ohne sie käme eine
+  // Taste, die auf ein eigenes Symbol zeigt, leer zurück.
+
+  backupUrl: () => `${API_BASE}/api/backup`,
+
+  restoreBackup: async (file: File): Promise<Config> => {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(`${API_BASE}/api/backup/restore`, {
+      method: "POST",
+      body,
+    });
+    if (!response.ok) throw new Error(await fehlertext(response));
+    return (await response.json()) as Config;
+  },
+
+  snapshots: () =>
+    request<{ snapshots: Snapshot[] }>("/api/backup/snapshots").then(
+      (antwort) => antwort.snapshots,
+    ),
+
+  restoreSnapshot: (name: string) =>
+    request<Config>(`/api/backup/snapshots/${encodeURIComponent(name)}/restore`, {
+      method: "POST",
+    }),
+
+  profileExportUrl: (profileId: string) =>
+    `${API_BASE}/api/profiles/${profileId}/export`,
+
+  importProfile: async (file: File): Promise<{ id: string; name: string }> => {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(`${API_BASE}/api/profiles/import`, {
+      method: "POST",
+      body,
+    });
+    if (!response.ok) throw new Error(await fehlertext(response));
+    const daten = (await response.json()) as { profile: { id: string; name: string } };
+    return daten.profile;
+  },
 };
+
+/** Ein automatisch abgelegter Stand der Konfiguration. */
+export interface Snapshot {
+  name: string;
+  /** Unix-Zeit in Sekunden. */
+  saved_at: number;
+  size: number;
+}
+
+/** Holt die Begründung aus einer Fehlerantwort — sonst bleibt nur "500". */
+async function fehlertext(response: Response): Promise<string> {
+  try {
+    const daten = (await response.json()) as { detail?: string };
+    if (daten.detail) return daten.detail;
+  } catch {
+    // Keine JSON-Antwort — dann muss der Status genügen.
+  }
+  return `HTTP ${response.status}`;
+}
 
 // --------------------------------------------------------------------------
 // WebSocket

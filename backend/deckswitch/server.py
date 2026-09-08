@@ -16,6 +16,7 @@ import logging
 import mimetypes
 import re
 import subprocess
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -42,7 +43,7 @@ from .config import Config, DeviceSettings, Page, Profile, Slot, TouchWallpaper
 from .plugins import installer
 from .runtime import Runtime
 from .virtualdeck import VirtualDevice
-from .services import autostart, backgrounds, screensaver, store
+from .services import autostart, backgrounds, backup, screensaver, store
 from .services import render as render_service
 
 log = logging.getLogger(__name__)
@@ -59,6 +60,10 @@ PLUGIN_SCREENSHOT_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 SCREENSAVER_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 
 MAX_UPLOAD_BYTES = 4 * 1024 * 1024
+
+#: Sicherungen dürfen deutlich größer sein als ein einzelnes Symbol — sie
+#: enthalten alle Bilder auf einmal.
+MAX_BACKUP_BYTES = 128 * 1024 * 1024
 SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -82,7 +87,6 @@ class AppSettingsUpdate(BaseModel):
     """Nur die App-Einstellungen — kein Rundumschlag über die ganze Config."""
 
     language: str | None = None
-    active_iconset: str | None = None
 
 
 class VirtualDeckCreate(BaseModel):
@@ -712,8 +716,6 @@ def create_app(
             if payload.language not in ("de", "en"):
                 raise HTTPException(422, "Unbekannte Sprache")
             app_settings.language = payload.language
-        if payload.active_iconset is not None:
-            app_settings.active_iconset = payload.active_iconset
 
         runtime.save_config()
         runtime.icons.clear_cache()
@@ -901,6 +903,80 @@ def create_app(
             raise HTTPException(422, f"Import fehlgeschlagen: {exc}") from exc
         runtime.apply_config(config, save=False)
         return config.model_dump(mode="json")
+
+    # -- Sicherung ---------------------------------------------------------
+    #
+    # Der Export oben ist die Konfiguration allein. Ein Paket nimmt die
+    # eigenen Bilder mit — ohne sie käme eine Taste, die auf ein
+    # hochgeladenes Symbol zeigt, leer zurück.
+
+    @app.get("/api/backup")
+    async def create_backup() -> Response:
+        stempel = time.strftime("%Y%m%d-%H%M")
+        return Response(
+            backup.make_archive(runtime.store),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="deckswitch-backup-{stempel}.zip"'
+            },
+        )
+
+    @app.post("/api/backup/restore")
+    async def restore_backup(file: UploadFile = File(...)) -> dict[str, Any]:
+        daten = await file.read(MAX_BACKUP_BYTES + 1)
+        if len(daten) > MAX_BACKUP_BYTES:
+            raise HTTPException(413, "Sicherung zu groß")
+        try:
+            config = backup.restore_archive(daten, runtime.store)
+        except backup.BackupError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        runtime.apply_config(config, save=False)
+        return config.model_dump(mode="json")
+
+    @app.get("/api/backup/snapshots")
+    async def list_snapshots() -> dict[str, Any]:
+        """Die Stände, die der Store vor jedem Überschreiben ablegt."""
+        return {"snapshots": [s.as_dict() for s in backup.snapshots()]}
+
+    @app.post("/api/backup/snapshots/{name}/restore")
+    async def restore_snapshot(name: str) -> dict[str, Any]:
+        try:
+            config = backup.restore_snapshot(name, runtime.store)
+        except backup.BackupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        runtime.apply_config(config, save=False)
+        return config.model_dump(mode="json")
+
+    @app.get("/api/profiles/{profile_id}/export")
+    async def export_profile(profile_id: str) -> Response:
+        """Ein einzelnes Profil zum Weitergeben, samt seiner Bilder."""
+        try:
+            daten = backup.export_profile(runtime.store, profile_id)
+        except backup.BackupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        name = SAFE_FILENAME.sub("-", runtime.config.profiles[profile_id].name)[:40]
+        return Response(
+            daten,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="{name or "profil"}.deckprofile.zip"'
+            },
+        )
+
+    @app.post("/api/profiles/import")
+    async def import_profile(file: UploadFile = File(...)) -> dict[str, Any]:
+        """Nimmt ein Profilpaket an — immer zusätzlich, nie ersetzend."""
+        daten = await file.read(MAX_BACKUP_BYTES + 1)
+        if len(daten) > MAX_BACKUP_BYTES:
+            raise HTTPException(413, "Paket zu groß")
+        try:
+            profil = backup.import_profile(daten, runtime.store)
+        except backup.BackupError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        runtime.apply_config(runtime.store.config, save=False)
+        return {"profile": {"id": profil.id, "name": profil.name}}
 
     # ======================================================================
     # Seiten

@@ -148,7 +148,6 @@
   },
   "background": {
     "title": "Background",
-    "kind": "Type",
     "kinds": {
       "transparent": "Transparent",
       "solid": "Solid",
@@ -298,7 +297,6 @@
       "de": "German",
       "en": "English"
     },
-    "iconset": "Default icon set",
     "autostart": "Start on login",
     "autostartHint": "Starts the backend together with the graphical session. Takes effect at the next login — the running service is left alone.",
     "autostartUnavailable": "Autostart cannot be changed here: {{reason}}",
@@ -335,7 +333,19 @@
     "perDeckHint": "These settings apply to the deck selected above.",
     "version": "Version {{version}}",
     "versionUnknown": "Version unknown — the backend has not reported in yet.",
-    "optionUnavailable": "{{label}} (has no effect in this session)"
+    "optionUnavailable": "{{label}} (has no effect in this session)",
+    "paket": "Backup archive",
+    "paketHint": "Configuration and all your own images in one ZIP file. Unlike the JSON export, uploaded icons survive a move as well.",
+    "paketLaden": "Download backup",
+    "paketEinspielen": "Restore backup",
+    "paketConfirm": "The backup replaces the current configuration and writes its images into your data directory. Continue?",
+    "paketDone": "Backup restored",
+    "staende": "Earlier states",
+    "staendeHint": "Before every overwrite DECK//SWITCH keeps a copy of the configuration. Kept for a week: the last day hourly, older days once each.",
+    "staendeKeine": "No states yet.",
+    "standZurueck": "Restore",
+    "standConfirm": "Go back to the state from {{zeit}}? The current one is saved first.",
+    "standDone": "State from {{zeit}} is back"
   },
   "errors": {
     "title": "Problems",
@@ -610,6 +620,9 @@
     "autoPlaceholder": "Programs, e.g. obs, code",
     "autoHelp": "List programs here and the deck switches to this profile by itself as soon as one of them is in front. When none matches any more, it goes back.",
     "autoOff": "Automation off: {{reason}}",
-    "autoSeen": "last in front: {{app}}"
+    "autoSeen": "last in front: {{app}}",
+    "export": "Export",
+    "import": "Import profile",
+    "importDone": "Profile “{{name}}” imported"
   }
 }

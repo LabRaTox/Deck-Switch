@@ -218,7 +218,6 @@ export interface DeckInfo extends DeviceInfo {
 
 export interface AppSettings {
   language: "de" | "en";
-  active_iconset: string;
   host: string;
   port: number;
   plugin_order: string[];

@@ -110,6 +110,23 @@ def main() -> None:
     check("die Unit landet dort, wo autostart.py sie erwartet",
           '"$pkgdir/usr/lib/systemd/user/deckswitch.service"' in text)
 
+    print("\nDas Fenster wird über das Startskript aufgerufen")
+    # Direkt nach /usr/bin darf die Binärdatei nicht: Auf manchen Treibern
+    # geht das Fenster unter Wayland gar nicht erst auf, und das fängt erst
+    # packaging/deckswitch-gui.sh ab.
+    check("die Binärdatei liegt unter /usr/lib",
+          '"$pkgdir/usr/lib/$pkgname/deckswitch"' in text)
+    # Der Dateiname bestimmt die Fensterklasse (gemessen mit `xprop`), und
+    # `StartupWMClass` in der .desktop-Datei zeigt auf `deckswitch`.
+    check("und heißt so, wie StartupWMClass es erwartet",
+          "StartupWMClass=deckswitch\n"
+          in (WURZEL / "packaging" / "deckswitch.desktop").read_text(encoding="utf-8"))
+    check("und /usr/bin/deckswitch-gui ist das Startskript",
+          "packaging/deckswitch-gui.sh" in text)
+    check("die Binärdatei geht nicht direkt nach /usr/bin",
+          '"$pkgdir/usr/bin/deckswitch-gui"' not in text.replace(
+              'packaging/deckswitch-gui.sh \\\n    "$pkgdir/usr/bin/deckswitch-gui"', ""))
+
     print()
     if FAILS:
         print(f"FEHLGESCHLAGEN ({len(FAILS)}): " + ", ".join(FAILS))

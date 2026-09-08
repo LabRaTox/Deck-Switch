@@ -101,7 +101,7 @@ by kind at the top.
 </p>
 
 **Settings**
-Language, default icon set, autostart and everything about the decks.
+Language, autostart, backup and restore, and everything about the decks.
 
 <p align="center">
   <img src="docs/screenshots/einstellungen.png" alt="Settings" width="49%">
@@ -146,7 +146,9 @@ For hacking on it, or if you would rather not package anything:
 ```sh
 git clone https://github.com/LabRaTox/Deck-Switch.git
 cd Deck-Switch
-./scripts/setup.sh          # packages, venv, GUI build, udev rule
+./scripts/setup.sh          # packages, venv, GUI and window build, udev rule,
+                            # input group, menu entry, streamdeck://,
+                            # and the autostart service if you want it
 ./scripts/start-backend.sh  # start the backend
 ```
 
@@ -181,7 +183,8 @@ Then unplug the Stream Deck once and plug it back in.
 
 The same rule also sets up access to `/dev/uinput`. That is the virtual
 keyboard behind **hotkey** and **type text**. Your user needs to be in the
-`input` group for it:
+`input` group for it. `setup.sh` checks this and offers to add you; by
+hand it goes like this:
 
 ```sh
 groups | grep -q input || sudo usermod -aG input "$USER"
@@ -190,6 +193,51 @@ groups | grep -q input || sudo usermod -aG input "$USER"
 Group membership only takes effect after your next login. You can see whether
 it worked in the interface: the settings of a hotkey action spell out what is
 missing.
+
+### When the window does not open
+
+On some drivers WebKitGTK and Wayland do not get along — the window closes
+after half a second and the terminal says `Gdk-Message: Error 71 (protocol
+error) dispatching to Wayland display`. With NVIDIA under KDE this happens
+every time.
+
+This is dealt with: if the first attempt dies right away, the window starts
+over with the DMABUF renderer switched off. That lives in
+`packaging/deckswitch-gui.sh` — the same script the package installs as
+`deckswitch-gui` and that `scripts/start-gui.sh` calls in a checkout, so an
+installed copy behaves exactly the same.
+
+It only happens once, though. The outcome is written down, together with a
+signature of the system — session type, graphics driver and WebKit version
+— in
+
+```
+~/.cache/deckswitch/fensterstart
+```
+
+As long as those three stay the same, the window starts correctly right
+away, without the brief failed attempt. If one of them changes, after a
+driver update for instance, the note is discarded and measured again.
+Deleting the file is harmless at any time.
+
+To skip the detour from the start, set the switch yourself:
+
+```sh
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+```
+
+### In the application menu
+
+`setup.sh` creates the launcher along the way. By hand:
+
+```sh
+./scripts/install-desktop-entry.sh            # add it
+./scripts/install-desktop-entry.sh --remove   # take it out again
+```
+
+Entry and icon go to `~/.local/share`, so no sudo is involved. The launcher
+runs `scripts/start-gui.sh`, which needs the backend running — the service
+below is the comfortable way. The AUR package ships the entry anyway.
 
 ### Start at login
 
@@ -200,6 +248,27 @@ the systemd service and turns it on or off. The same from the command line:
 ./scripts/install-service.sh            # set up
 ./scripts/install-service.sh --remove   # remove again
 ```
+
+### Backup, restore, hand over
+
+In the settings under **Backup & restore**:
+
+| | |
+| --- | --- |
+| **Export configuration** | The configuration as JSON — small and readable, but without your uploaded images |
+| **Backup archive** | Configuration *and* all your own images in one ZIP file. This is the one for a move or a real backup |
+| **Earlier states** | Before every overwrite DECK//SWITCH keeps a copy of the configuration, at most one per hour and the last thirty of them. This is the way back |
+
+A single profile goes out through the profile manager: **Export** next to the
+profile packs it together with the images used in it. **Import profile** adds
+it on the other side — nothing is overwritten, and a name that already exists
+gets a number.
+
+Not included are the soundboard's sounds: you point at them by arbitrary
+paths, so they live somewhere on your disk rather than in the application's
+data directory. The references survive a backup, the files themselves you back
+up like your other own files. Plugins you installed later are not included
+either — get those from the store after restoring.
 
 ---
 

@@ -16,4 +16,10 @@ if ! curl -sf -o /dev/null http://127.0.0.1:8770/api/device 2>/dev/null; then
     printf '\033[33mNote: the backend does not appear to be running. Start it with:\n  ./scripts/start-backend.sh\033[0m\n'
 fi
 
-exec "$BINARY"
+# Gestartet wird über dasselbe Skript, das im Paket als `deckswitch-gui`
+# landet — nur mit der selbst gebauten Datei statt der installierten. So
+# gibt es die Behandlung des Wayland-Fehlstarts genau einmal, und was hier
+# im Checkout läuft, ist dasselbe, was Nutzer des Pakets bekommen.
+DECKSWITCH_GUI_BINARY="$BINARY"
+export DECKSWITCH_GUI_BINARY
+exec "$REPO/packaging/deckswitch-gui.sh" "$@"

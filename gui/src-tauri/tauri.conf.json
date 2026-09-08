@@ -12,11 +12,12 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "DECK//SWITCH",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 1100,
-        "minHeight": 700,
+        "width": 1760,
+        "height": 980,
+        "minWidth": 1400,
+        "minHeight": 760,
         "resizable": true,
         "fullscreen": false,
         "theme": "Dark"

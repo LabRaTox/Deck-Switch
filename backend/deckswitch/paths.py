@@ -90,6 +90,28 @@ OVERLAY_QML: Path = _bundled(
 #: Die gebaute Oberfläche, die der Server ausliefert.
 GUI_DIST: Path = _bundled("gui/dist", "gui")
 
+def gui_command() -> list[str] | None:
+    """Der Befehl, der das Fenster öffnet — oder ``None``, wenn es keins gibt.
+
+    Im Checkout wird ``start-gui.sh`` genommen und nicht die Binärdatei
+    direkt: Das Skript fängt den Wayland-Fehlstart ab, an dem das Fenster
+    auf manchen Treibern sonst sofort stirbt. Aufgerufen wird es aber nur,
+    wenn schon gebaut wurde — sonst würde ein Klick im Systemabschnitt
+    minutenlang unsichtbar kompilieren.
+
+    Ist die App installiert, bringt das Paket ``deckswitch-gui`` mit.
+    """
+    if REPO_ROOT is not None:
+        gebaut = REPO_ROOT / "gui/src-tauri/target/release/deckswitch"
+        starter = REPO_ROOT / "scripts/start-gui.sh"
+        if os.access(gebaut, os.X_OK) and os.access(starter, os.X_OK):
+            return [str(starter)]
+        return None
+
+    pfad = shutil.which("deckswitch-gui")
+    return [pfad] if pfad else None
+
+
 #: Die vom Paket mitgelieferte systemd-Unit. Gibt es sie, gehört sie der
 #: Paketverwaltung und wird nicht überschrieben.
 PACKAGED_UNIT: Path = Path("/usr/lib/systemd/user/deckswitch.service")

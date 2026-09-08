@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "../api/client";
+import { api, type Snapshot } from "../api/client";
 import { SUPPORTED_LANGUAGES } from "../i18n";
 import { useStore } from "../store";
 import { ScreensaverCard } from "./ScreensaverCard";
@@ -10,7 +10,7 @@ import type { AutostartStatus, SessionCapabilities } from "../types";
 
 /** App- und Geräteeinstellungen sowie Export/Import der Belegung. */
 export function SettingsView() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const config = useStore((s) => s.config);
   const patchApp = useStore((s) => s.patchAppSettings);
   const patchDeck = useStore((s) => s.patchDeckSettings);
@@ -19,14 +19,61 @@ export function SettingsView() {
   const activeDeck = useStore((s) => s.activeDeck);
   const load = useStore((s) => s.load);
 
-  const [sets, setSets] = useState<{ id: string; name: string; count: number }[]>([]);
   const [importMerge, setImportMerge] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const paketInput = useRef<HTMLInputElement>(null);
+  const [staende, setStaende] = useState<Snapshot[]>([]);
+  const [laeuft, setLaeuft] = useState(false);
 
-  useEffect(() => {
-    api.iconSets().then(setSets).catch(() => undefined);
-  }, []);
+  const staendeLaden = () => {
+    api.snapshots().then(setStaende).catch(() => setStaende([]));
+  };
+  useEffect(staendeLaden, []);
+
+  /** Zeitpunkt eines Standes, so wie ihn der Benutzer schreiben würde. */
+  const alsZeit = (sekunden: number) =>
+    new Date(sekunden * 1000).toLocaleString(i18n.language, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+
+  const melde = (fehler: unknown) =>
+    setMessage({
+      kind: "error",
+      text: fehler instanceof Error ? fehler.message : String(fehler),
+    });
+
+  const paketEinspielen = async (file: File) => {
+    if (!window.confirm(t("settings.paketConfirm"))) return;
+    setLaeuft(true);
+    try {
+      await api.restoreBackup(file);
+      await load();
+      staendeLaden();
+      setMessage({ kind: "ok", text: t("settings.paketDone") });
+    } catch (error) {
+      melde(error);
+    } finally {
+      setLaeuft(false);
+    }
+  };
+
+  const standZurueck = async (stand: Snapshot) => {
+    const zeit = alsZeit(stand.saved_at);
+    if (!window.confirm(t("settings.standConfirm", { zeit }))) return;
+    setLaeuft(true);
+    try {
+      await api.restoreSnapshot(stand.name);
+      await load();
+      staendeLaden();
+      setMessage({ kind: "ok", text: t("settings.standDone", { zeit }) });
+    } catch (error) {
+      melde(error);
+    } finally {
+      setLaeuft(false);
+    }
+  };
 
   if (!config || !device) return null;
 
@@ -73,20 +120,6 @@ export function SettingsView() {
           </select>
         </div>
 
-        <div className="field">
-          <label htmlFor="iconset">{t("settings.iconset")}</label>
-          <select
-            id="iconset"
-            value={config.app.active_iconset}
-            onChange={(event) => void patchApp({ active_iconset: event.target.value })}
-          >
-            {sets.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name} ({entry.count})
-              </option>
-            ))}
-          </select>
-        </div>
 
         <AutostartField />
       </section>
@@ -283,6 +316,63 @@ export function SettingsView() {
           />
           <span>{t("settings.importMerge")}</span>
         </label>
+
+        <h4>{t("settings.paket")}</h4>
+        <div className="row">
+          <a className="btn" href={api.backupUrl()}>
+            {t("settings.paketLaden")}
+          </a>
+          <button
+            type="button"
+            className="btn"
+            disabled={laeuft}
+            onClick={() => paketInput.current?.click()}
+          >
+            {t("settings.paketEinspielen")}
+          </button>
+          <input
+            ref={paketInput}
+            type="file"
+            accept="application/zip,.zip"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void paketEinspielen(file);
+              event.target.value = "";
+            }}
+          />
+        </div>
+        <small className="help">{t("settings.paketHint")}</small>
+
+        {/* Zugeklappt, weil die Liste sonst die halbe Seite einnimmt und
+            man sie an den meisten Tagen gar nicht braucht. */}
+        <details className="staende">
+          <summary>
+            {t("settings.staende")}
+            <span className="hint"> ({staende.length})</span>
+          </summary>
+          <small className="help">{t("settings.staendeHint")}</small>
+          {staende.length === 0 ? (
+            <p className="hint">{t("settings.staendeKeine")}</p>
+          ) : (
+            <ul className="standliste">
+              {staende.map((stand) => (
+                <li key={stand.name}>
+                  <span>{alsZeit(stand.saved_at)}</span>
+                  <span className="hint">{Math.round(stand.size / 1024)} kB</span>
+                  <button
+                    type="button"
+                    className="btn small"
+                    disabled={laeuft}
+                    onClick={() => void standZurueck(stand)}
+                  >
+                    {t("settings.standZurueck")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </details>
 
         {message && (
           <p className={message.kind === "ok" ? "saved-hint" : "error-text"}>

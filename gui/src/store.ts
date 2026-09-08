@@ -124,7 +124,7 @@ interface StoreState {
 
   patchConfig: (mutate: (config: Config) => Config) => Promise<void>;
   /** App-Einstellungen gezielt ändern, ohne die ganze Config zu schicken. */
-  patchAppSettings: (patch: { language?: "de" | "en"; active_iconset?: string }) => Promise<void>;
+  patchAppSettings: (patch: { language?: "de" | "en" }) => Promise<void>;
   /** Hintergrundbild des Touchstrips dieser Seite. */
   patchTouchWallpaper: (pageId: string, patch: Partial<TouchWallpaper>) => Promise<void>;
   setPluginConfig: (pluginId: string, config: Record<string, unknown>) => Promise<void>;

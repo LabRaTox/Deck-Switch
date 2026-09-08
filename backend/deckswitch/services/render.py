@@ -21,6 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ..config import Appearance
 from . import backgrounds
+from . import icons as icons_service
 from .backgrounds import parse_color
 
 log = logging.getLogger(__name__)
@@ -471,10 +472,13 @@ class RenderService:
 
     @staticmethod
     def _active_set(ctx) -> str | None:
-        try:
-            return ctx.services.config.app.active_iconset
-        except AttributeError:
-            return None
+        """Das Set der eingebauten Symbole — immer dasselbe.
+
+        Der Parameter ``ctx`` bleibt, weil alle Helfer hier so aussehen; der
+        Wert hängt aber nicht mehr an der Konfiguration.
+        """
+        del ctx
+        return icons_service.SYSTEM_ICONSET
 
     @staticmethod
     def _fallback_icon_name(ctx, state: str | None) -> str | None:

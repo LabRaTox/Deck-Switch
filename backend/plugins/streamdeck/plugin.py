@@ -174,7 +174,7 @@ class StreamdeckPlugin(ActionPlugin):
                 ctx.appearance.icon_for_state(None),
                 size=max(16, min(ctx.size) // 3),
                 fallback_name="file-description",
-                fallback_set=self.services.config.app.active_iconset,
+                fallback_set=self.services.icons.system_iconset,
                 color=ctx.appearance.label_color,
             )
             image.alpha_composite(icon, ((ctx.size[0] - icon.width) // 2, 6))
@@ -208,7 +208,7 @@ class StreamdeckPlugin(ActionPlugin):
             ctx.appearance.icon_for_state(None),
             size=max(16, min(inhalt, round(min(ctx.size) * ctx.appearance.icon_size / 100))),
             fallback_name="sun",
-            fallback_set=self.services.config.app.active_iconset,
+            fallback_set=self.services.icons.system_iconset,
             color=ctx.appearance.label_color,
         )
         image.alpha_composite(icon, (rand, rand + (inhalt - icon.height) // 2))

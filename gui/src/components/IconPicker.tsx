@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "../api/client";
-import { useStore } from "../store";
+import { api, SYSTEM_ICONSET } from "../api/client";
 import type { IconRef } from "../types";
 import { IconGlyph } from "./IconGlyph";
 import { Modal } from "./Modal";
@@ -21,7 +20,9 @@ interface Props {
  */
 export function IconPicker({ value, onChange, onClose, title }: Props) {
   const { t } = useTranslation();
-  const activeSet = useStore((s) => s.config?.app.active_iconset ?? "iconset-tabler");
+  // Startwert der Auswahl; umschalten lässt sich hier weiterhin auf
+  // jedes installierte Set — genau dafür sind hochgeladene Sets da.
+  const activeSet = SYSTEM_ICONSET;
 
   const [sets, setSets] = useState<{ id: string; name: string; count: number }[]>([]);
   const [setId, setSetId] = useState(value?.set_id ?? activeSet);

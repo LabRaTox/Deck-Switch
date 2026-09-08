@@ -907,10 +907,52 @@ input[type="checkbox"] {
 }
 
 /* Gerätegeometrie: 4×2 Tasten, darunter ein durchgehender Streifen. */
-/* Spaltenzahl und Kachelgröße setzt DeckGrid inline aus den Gerätedaten —
-   ein Stream Deck XL hat 8 Spalten, ein Mini 3. */
+/* Spaltenzahl und die Obergrenze für eine Kachel setzt DeckGrid inline aus
+   den Gerätedaten — ein Stream Deck XL hat 8 Spalten, ein Mini 3.
+
+   Die Spalten sind 1fr, damit ein breites Deck in die Editor-Spalte
+   hineinschrumpft, statt rechts und links herauszulaufen. Die max-width
+   deckelt das nach oben: Wo Platz ist, sind die Kacheln genau so groß wie
+   bisher und werden nicht größer. Gerechnet wird mit Rand und Abständen,
+   weil box-sizing überall border-box ist. */
+/* Die Tasten-Section streckt sich über die ganze Editor-Spalte, damit das
+   Raster darin überhaupt weiß, wie viel Platz es hat: `.deck` zentriert
+   seine Kinder, und ein zentriertes Flex-Kind bekommt nur Inhaltsbreite.
+   Die max-width hält sie dann auf der Größe, die das Raster gerne hätte —
+   ist mehr Platz da, bleibt es dabei und die Section wird mittig gesetzt. */
+.deck-section.keys {
+  align-self: stretch;
+  /* Eine einzige Spalte, so breit wie das Raster sein möchte, höchstens
+     aber so breit wie der Platz — und mittig gesetzt. Kein `margin: auto`:
+     Auto-Ränder heben bei einem Flex-Kind das Strecken wieder auf, und
+     ohne Strecken kennt die Section die verfügbare Breite nicht. */
+  display: grid;
+  justify-content: center;
+  /* Läuft das Raster über, richtet `safe` es am Anfang aus statt mittig —
+     sonst verschwindet die erste Spalte links aus dem Bild und ist auch
+     durch Scrollen nicht mehr erreichbar. */
+  justify-content: safe center;
+  overflow-x: auto;
+  /* Zwischen zwei Grenzen: nach oben die gewohnte Kachelgröße, nach unten
+     die Größe, bei der eine Taste noch zu treffen und zu erkennen ist.
+     Darunter wird nicht weiter geschrumpft — dann scrollt der Bereich. */
+  grid-template-columns: clamp(
+    calc(
+      var(--spalten, 4) * var(--kachel-min, 72px) +
+      (var(--spalten, 4) - 1) * 12px + 34px
+    ),
+    100%,
+    calc(
+      var(--spalten, 4) * var(--kachel, 118px) +
+      (var(--spalten, 4) - 1) * 12px + 34px
+    )
+  );
+}
+
 .key-grid {
   display: grid;
+  grid-template-columns: repeat(var(--spalten, 4), minmax(0, 1fr));
+  width: 100%;
   gap: 12px;
   padding: 16px;
   background: var(--bg-sunken);
@@ -918,10 +960,30 @@ input[type="checkbox"] {
   border-radius: var(--radius-lg);
 }
 
+/* Streifen und Drehknöpfe bekommen dieselbe Breite wie das Tastenraster —
+   auf dem Gerät sitzt der Touchstrip ja genau unter den Tasten. Dass die
+   Section sich strecken muss, ist derselbe Grund wie oben: `.deck`
+   zentriert seine Kinder, und ein zentriertes Flex-Kind kennt die
+   verfügbare Breite nicht. Ohne das Strecken fällt der Streifen auf seine
+   Inhaltsbreite zusammen und wird zum Miniaturbalken. */
+.deck-section.dials {
+  align-self: stretch;
+  display: grid;
+  justify-content: center;
+  justify-content: safe center;
+  grid-template-columns: min(
+    100%,
+    calc(
+      var(--spalten, 4) * var(--kachel, 118px) +
+      (var(--spalten, 4) - 1) * 12px + 34px
+    )
+  );
+}
+
 .dial-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  width: 532px;
+  width: 100%;
   gap: 1px;
   padding: 6px;
   background: var(--bg-sunken);
@@ -932,7 +994,7 @@ input[type="checkbox"] {
 .dial-knobs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  width: 532px;
+  width: 100%;
   margin-top: 12px;
   justify-items: center;
 }
@@ -950,16 +1012,35 @@ input[type="checkbox"] {
   margin: 0;
   border-radius: var(--radius);
   background: #000;
-  border: 2px solid transparent;
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.12s ease, transform 0.08s ease;
+  transition: box-shadow 0.12s ease, transform 0.08s ease;
+}
+
+/* Der Ring für Überfahren, Auswahl und Ablegen liegt über dem Tastenbild
+   und nimmt keinen Platz weg.
+   Als echter Rahmen an der Kachel schob er das Bild um zwei Pixel nach
+   innen: Es lag dann mit eigener Rundung in der gerundeten Kachel, und
+   zwischen beiden klaffte ein dunkler Zwickel — am deutlichsten dort, wo
+   eine Aktion selbst einen farbigen Rahmen zeichnet, etwa als Markierung
+   für „dieses Ausgabegerät ist gerade aktiv".
+   Als `inset`-Schatten wäre er zwar platzfrei, läge aber *unter* dem Bild
+   und wäre damit unsichtbar, sobald eine Taste belegt ist. */
+.tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid transparent;
+  pointer-events: none;
+  transition: border-color 0.12s ease;
 }
 
 .tile.key {
-  /* Vorgabe für den Fall ohne Gerät; DeckGrid überschreibt sie inline. */
-  width: 118px;
-  height: 118px;
+  /* Die Breite kommt aus der Rasterspalte, die Höhe folgt ihr — eine Taste
+     ist quadratisch, egal wie groß das Raster gerade sein darf. */
+  width: 100%;
+  aspect-ratio: 1;
 }
 
 .tile.dial {
@@ -967,23 +1048,43 @@ input[type="checkbox"] {
   border-radius: 4px;
 }
 
-.tile:hover {
+.tile:hover::after {
   border-color: var(--border-strong);
 }
 
-.tile.selected {
+.tile.selected::after {
   border-color: var(--accent);
+}
+
+.tile.selected {
   box-shadow: 0 0 0 2px #3b82f633;
 }
 
-.tile.drop {
+.tile.drop::after {
   border-color: var(--ok);
+}
+
+.tile.drop {
   transform: scale(1.02);
 }
 
 .tile.empty {
   background: #0a0a0c;
-  border: 2px dashed #26262d;
+}
+
+/* Auch die gestrichelte Andeutung einer freien Taste läuft über den Ring —
+   als echter Rahmen läge sie zusätzlich zu ihm da, mit leicht anderer
+   Rundung. Überfahren, Auswahl und Ablegen färben ihn dann nur um; damit er
+   dabei nicht gestrichelt bleibt, setzen sie die Linienart mit. */
+.tile.empty::after {
+  border-style: dashed;
+  border-color: #26262d;
+}
+
+.tile.empty:hover::after,
+.tile.empty.selected::after,
+.tile.empty.drop::after {
+  border-style: solid;
 }
 
 .tile-preview {
@@ -1271,6 +1372,13 @@ input[type="checkbox"] {
   overflow: hidden;
 }
 
+/* Ohne das Auswahlfeld „Art" ist diese Markierung die einzige Anzeige
+   dafür, welcher Hintergrund gerade eingestellt ist. */
+.preset.aktiv {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #3b82f633;
+}
+
 .preset span {
   font-size: 9px;
   color: #ffffffcc;
@@ -1553,6 +1661,60 @@ input[type="checkbox"] {
 
 .switch input:checked + span::after {
   transform: translateX(17px);
+}
+
+/* Zwischenüberschrift innerhalb einer Einstellungskarte — trennt etwa
+   Sicherungspaket und frühere Stände, ohne dafür eigene Karten zu brauchen. */
+.settings-card h4 {
+  margin: 6px 0 -4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* Die früheren Stände sind zugeklappt: gebraucht werden sie selten, und
+   ausgeklappt schöben sie alles darunter aus dem Bild. */
+.staende > summary {
+  cursor: pointer;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 4px 0;
+}
+
+.staende > summary:hover {
+  color: var(--text);
+}
+
+.staende[open] > summary {
+  margin-bottom: 8px;
+}
+
+.staende > .help {
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* Die früheren Stände: Zeitpunkt, Größe, Weg zurück. */
+.standliste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.standliste li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 .settings-card {

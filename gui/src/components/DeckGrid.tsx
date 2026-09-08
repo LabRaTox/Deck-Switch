@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
@@ -85,22 +85,37 @@ export function DeckGrid() {
   const columns = device?.key_columns || 4;
   const dialCount = device?.dial_count ?? 4;
 
-  // Die Kacheln schrumpfen mit der Spaltenzahl: acht Spalten (XL) passen
-  // sonst nicht in die mittlere Spalte des Editors.
+  // Obergrenze für eine Kachel, gestaffelt nach Spaltenzahl. Größer wird
+  // eine Taste nie — das Raster füllt die Editor-Spalte nicht aus, wenn das
+  // Deck klein ist. Kleiner dagegen schon: Reicht der Platz nicht, teilen
+  // sich die Spalten die vorhandene Breite (siehe .key-grid im CSS). Ein XL
+  // braucht bei 76 px rund 726 px, die Editor-Spalte bietet in einem 1440
+  // breiten Fenster aber nur 564 — ohne das Schrumpfen fehlten zwei Spalten.
   const tileSize = columns >= 8 ? 76 : columns >= 5 ? 96 : 118;
 
+  // Untergrenze, damit das Schrumpfen nicht in Unbrauchbarkeit kippt: ohne
+  // sie blieben von einer Taste in einem schmalen Fenster 50 px übrig, beim
+  // XL keine 20. 72 px sind für jedes Modell gleich — eine Taste ist eine
+  // Taste, egal wie viele davon nebeneinander liegen. Reicht der Platz
+  // dafür nicht, scrollt der Bereich (siehe .deck-section.keys im CSS).
+  const tileMin = Math.min(tileSize, 72);
+
   return (
-    <div className="deck">
-      <section className="deck-section">
+    <div
+      className="deck"
+      style={
+        {
+          "--spalten": columns,
+          "--kachel": `${tileSize}px`,
+          "--kachel-min": `${tileMin}px`,
+        } as CSSProperties
+      }
+    >
+      <section className="deck-section keys">
         <h3>{t("grid.keys")}</h3>
-        <div
-          className="key-grid"
-          style={{
-            gridTemplateColumns: `repeat(${columns}, ${tileSize}px)`,
-          }}
-        >
+        <div className="key-grid">
           {Array.from({ length: keyCount }, (_, index) => (
-            <SlotTile key={index} inputType="key" index={index} size={tileSize} />
+            <SlotTile key={index} inputType="key" index={index} />
           ))}
         </div>
       </section>
@@ -108,7 +123,7 @@ export function DeckGrid() {
       {/* Dials und Touchstrip gibt es nur beim Plus — bei allen anderen
           Modellen entfällt der ganze Abschnitt, statt leer dazustehen. */}
       {dialCount > 0 && (
-        <section className="deck-section">
+        <section className="deck-section dials">
           <h3>{t("grid.dials")}</h3>
           <div className="dial-strip">
             {Array.from({ length: dialCount }, (_, index) => (
@@ -129,12 +144,9 @@ export function DeckGrid() {
 function SlotTile({
   inputType,
   index,
-  size,
 }: {
   inputType: InputType;
   index: number;
-  /** Kantenlänge einer Taste in Pixeln; Dials rechnen mit ihrem Seitenverhältnis. */
-  size?: number;
 }) {
   const { t, i18n } = useTranslation();
   const [dropActive, setDropActive] = useState(false);
@@ -264,7 +276,6 @@ function SlotTile({
         event.dataTransfer.setData(SLOT_MIME, JSON.stringify({ inputType, index }));
         event.dataTransfer.effectAllowed = "move";
       }}
-      style={size && inputType === "key" ? { width: size, height: size } : undefined}
       title={
         slot && action
           ? `${localized(plugin?.manifest.name, i18n.language)} · ${localized(action.name, i18n.language)}`

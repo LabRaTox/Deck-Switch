@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
@@ -74,6 +74,8 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
     window: { app: string; title: string };
   } | null>(null);
   const [fehler, setFehler] = useState("");
+  const [hinweis, setHinweis] = useState("");
+  const datei = useRef<HTMLInputElement>(null);
   const [neuerName, setNeuerName] = useState("");
   const [kopieVon, setKopieVon] = useState("");
 
@@ -104,6 +106,7 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
   return (
     <Modal title={t("profiles.manage")} width={560} onClose={onClose}>
       {fehler && <p className="error-note">{fehler}</p>}
+      {hinweis && <p className="hint">{hinweis}</p>}
 
       <ul className="profilliste">
         {(liste ?? []).map((p) => (
@@ -138,6 +141,9 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
             >
               {t("profiles.duplicate")}
             </button>
+            <a className="btn small" href={api.profileExportUrl(p.id)}>
+              {t("profiles.export")}
+            </a>
             <button
               type="button"
               className="btn small danger"
@@ -168,6 +174,30 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
       </p>
 
       <div className="profil-neu">
+        <button
+          type="button"
+          className="btn small"
+          onClick={() => datei.current?.click()}
+        >
+          {t("profiles.import")}
+        </button>
+        {/* Ein importiertes Profil kommt immer hinzu und ersetzt nie eines —
+            deshalb braucht es hier keine Rückfrage. */}
+        <input
+          ref={datei}
+          type="file"
+          accept="application/zip,.zip"
+          hidden
+          onChange={(event) => {
+            const gewaehlt = event.target.files?.[0];
+            event.target.value = "";
+            if (!gewaehlt) return;
+            void fuehreAus(async () => {
+              const neu = await api.importProfile(gewaehlt);
+              setHinweis(t("profiles.importDone", { name: neu.name }));
+            });
+          }}
+        />
         <input
           value={neuerName}
           placeholder={t("profiles.newName")}

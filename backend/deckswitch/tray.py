@@ -20,6 +20,7 @@ import contextlib
 import logging
 import os
 import struct
+import subprocess
 import webbrowser
 from collections.abc import Callable
 
@@ -28,6 +29,8 @@ from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
 from dbus_next.constants import PropertyAccess
 from PIL import Image
+
+from . import paths
 
 from .services import brand
 
@@ -355,6 +358,33 @@ class SystemTray:
         ]
 
     def open_gui(self) -> None:
+        """Öffnet das Fenster; ersatzweise die Oberfläche im Browser.
+
+        Das Fenster ist der reguläre Weg in die Anwendung. Nur wenn es
+        keines gibt — nicht gebaut, nicht installiert — bleibt der Browser,
+        der dieselbe Oberfläche vom selben Server bekommt.
+        """
+        befehl = paths.gui_command()
+        if befehl is not None:
+            try:
+                # Eigene Sitzung: Das Fenster soll weiterleben, wenn das
+                # Backend neu startet, und nicht an dessen Prozessgruppe
+                # hängen.
+                # Ausgaben landen im Nichts, nicht im Journal: WebKitGTK
+                # schreibt beim Start seitenweise eigene Fehlermeldungen,
+                # die hier nur das Log zumüllen würden. Dass gestartet
+                # wurde, hält stattdessen diese Zeile fest.
+                subprocess.Popen(
+                    befehl,
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                log.info("Fenster gestartet: %s", " ".join(befehl))
+                return
+            except OSError as exc:
+                log.warning("Fenster ließ sich nicht starten: %s", exc)
+
         try:
             webbrowser.open(self.url)
         except Exception as exc:

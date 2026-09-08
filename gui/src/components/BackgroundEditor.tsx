@@ -11,15 +11,6 @@ interface Props {
   onChange: (background: Background) => void;
 }
 
-const KINDS: Background["kind"][] = [
-  "transparent",
-  "solid",
-  "gradient",
-  "noise",
-  "accent",
-  "image",
-];
-
 /**
  * Hintergrund einer Kachel — vor allem für die Touchstrip-Segmente gedacht,
  * die sonst schlicht schwarz wären. Gezeichnet wird zuerst der Hintergrund,
@@ -50,6 +41,8 @@ export function BackgroundEditor({ value, onChange }: Props) {
     };
   }, [value.kind]);
 
+  const aktiv = aktivesPreset(presets, value);
+
   return (
     <div className="background-editor">
       <div className="preset-row">
@@ -57,7 +50,8 @@ export function BackgroundEditor({ value, onChange }: Props) {
           <button
             key={preset.id}
             type="button"
-            className="preset"
+            className={preset.id === aktiv ? "preset aktiv" : "preset"}
+            aria-pressed={preset.id === aktiv}
             title={localized(preset.name, i18n.language)}
             onClick={() => patch(preset.background)}
             style={presetStyle(preset.background)}
@@ -65,21 +59,6 @@ export function BackgroundEditor({ value, onChange }: Props) {
             <span>{localized(preset.name, i18n.language)}</span>
           </button>
         ))}
-      </div>
-
-      <div className="field">
-        <label htmlFor="bg-kind">{t("background.kind")}</label>
-        <select
-          id="bg-kind"
-          value={value.kind}
-          onChange={(event) => patch({ kind: event.target.value as Background["kind"] })}
-        >
-          {KINDS.map((kind) => (
-            <option key={kind} value={kind}>
-              {t(`background.kinds.${kind}`)}
-            </option>
-          ))}
-        </select>
       </div>
 
       {value.kind === "transparent" && (
@@ -258,6 +237,34 @@ export function BackgroundEditor({ value, onChange }: Props) {
       )}
     </div>
   );
+}
+
+/**
+ * Welche Kachel den aktuellen Hintergrund darstellt.
+ *
+ * Seit das Auswahlfeld „Art" weg ist, sind die Kacheln die einzige Anzeige
+ * dafür, was eingestellt ist — und deshalb muss immer genau eine markiert
+ * sein. Passt eine Kachel exakt (alle ihre Felder stimmen), gewinnt sie;
+ * sonst reicht die gleiche Art. Zwei Kacheln teilen sich „einfarbig", und
+ * wer die Farbe selbst ändert, soll trotzdem sehen, wo er gerade ist.
+ */
+function aktivesPreset(
+  presets: { id: string; background: Partial<Background> }[],
+  value: Background,
+): string | undefined {
+  const gleicheArt = presets.filter((p) => p.background.kind === value.kind);
+  const genau = gleicheArt.find((p) =>
+    Object.entries(p.background).every(
+      ([feld, inhalt]) => inhalt === null || value[feld as keyof Background] === inhalt,
+    ),
+  );
+  if (genau) return genau.id;
+  // Keine Kachel trifft genau — jemand hat also selbst an den Farben
+  // gedreht. Dann nur markieren, wenn die Art eindeutig zu einer Kachel
+  // gehört. „Einfarbig" haben Dunkel und Graphit gemeinsam; dort raten
+  // hieße, das Falsche zu behaupten, und lieber nichts markieren als die
+  // verkehrte Kachel.
+  return gleicheArt.length === 1 ? gleicheArt[0].id : undefined;
 }
 
 function presetStyle(background: Partial<Background>): React.CSSProperties {

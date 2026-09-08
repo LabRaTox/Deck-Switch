@@ -204,7 +204,7 @@ class AudioPlugin(ActionPlugin):
             ctx.appearance.icon_for_state(state),
             size=icon_px,
             fallback_name=self._fallback_icon(action_id, state),
-            fallback_set=self.services.config.app.active_iconset,
+            fallback_set=self.services.icons.system_iconset,
             color=ctx.appearance.label_color,
         )
         image.alpha_composite(icon, (rand, rand + (inhalt_hoehe - icon.height) // 2))

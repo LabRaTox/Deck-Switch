@@ -105,7 +105,7 @@ filterst du nach Thema, oben nach Art.
 </p>
 
 **Einstellungen**
-Sprache, Standard-Iconset, Autostart und alles zu den Decks.
+Sprache, Autostart, Sichern und Wiederherstellen und alles zu den Decks.
 
 <p align="center">
   <img src="docs/screenshots/einstellungen.png" alt="Einstellungen" width="49%">
@@ -150,7 +150,9 @@ Zum Mitentwickeln, oder wenn du gar nicht erst paketieren willst:
 ```sh
 git clone https://github.com/LabRaTox/Deck-Switch.git
 cd Deck-Switch
-./scripts/setup.sh          # Pakete, venv, GUI-Build, udev-Regel
+./scripts/setup.sh          # Pakete, venv, GUI und Fenster bauen, udev-Regel,
+                            # Gruppe input, Menüeintrag, streamdeck://,
+                            # auf Wunsch der Autostart-Dienst
 ./scripts/start-backend.sh  # Backend starten
 ```
 
@@ -186,7 +188,8 @@ Danach den Stream Deck einmal ab- und wieder anstecken.
 
 Dieselbe Regel richtet auch den Zugriff auf `/dev/uinput` ein. Darüber läuft
 die virtuelle Tastatur für **Tastenkombination** und **Text tippen**. Dafür
-muss dein Benutzer in der Gruppe `input` sein:
+muss dein Benutzer in der Gruppe `input` sein. `setup.sh` prüft das und
+bietet an, dich einzutragen; von Hand geht es so:
 
 ```sh
 groups | grep -q input || sudo usermod -aG input "$USER"
@@ -195,6 +198,52 @@ groups | grep -q input || sudo usermod -aG input "$USER"
 Die Gruppenmitgliedschaft greift erst nach dem nächsten Anmelden. Ob es
 geklappt hat, siehst du in der Oberfläche: In den Einstellungen einer
 Hotkey-Aktion steht sonst im Klartext, was fehlt.
+
+### Wenn das Fenster nicht aufgeht
+
+Auf manchen Treibern verträgt sich WebKitGTK nicht mit Wayland — das
+Fenster schließt sich nach einer halben Sekunde und im Terminal steht
+`Gdk-Message: Error 71 (Protokollfehler) dispatching to Wayland display`.
+Mit NVIDIA unter KDE tritt das zuverlässig auf.
+
+Das wird abgefangen: Geht der erste Versuch sofort schief, startet das
+Fenster gleich noch einmal mit abgeschaltetem DMABUF-Renderer. Zuständig
+ist `packaging/deckswitch-gui.sh` — dasselbe Skript, das im Paket als
+`deckswitch-gui` landet und das `scripts/start-gui.sh` im Checkout
+aufruft. Aus dem Paket installiert gilt also genau dasselbe.
+
+Passieren tut das aber nur einmal. Was dabei herauskam, notiert das Skript
+zusammen mit einer Signatur des Systems — Sitzungsart, Grafiktreiber und
+WebKit-Version — in
+
+```
+~/.cache/deckswitch/fensterstart
+```
+
+Solange diese drei gleich bleiben, startet das Fenster künftig sofort
+richtig, ohne den kurzen Fehlversuch. Ändert sich eines davon, etwa nach
+einem Treiberwechsel, wird die Notiz verworfen und neu gemessen. Die Datei
+zu löschen ist jederzeit harmlos.
+
+Wer den Umweg von vornherein überspringen will, setzt den Schalter selbst:
+
+```sh
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+```
+
+### Im Anwendungsmenü
+
+`setup.sh` legt den Starter gleich mit an. Von Hand:
+
+```sh
+./scripts/install-desktop-entry.sh            # eintragen
+./scripts/install-desktop-entry.sh --remove   # wieder entfernen
+```
+
+Eintrag und Symbol landen unter `~/.local/share`, dafür braucht es kein
+sudo. Der Starter ruft `scripts/start-gui.sh` auf, das Backend muss also
+laufen — am bequemsten über den Dienst weiter unten. Aus dem AUR-Paket
+kommt der Eintrag ohnehin mit.
 
 ### Beim Anmelden starten
 
@@ -206,6 +255,27 @@ Dasselbe von der Kommandozeile:
 ./scripts/install-service.sh            # einrichten
 ./scripts/install-service.sh --remove   # wieder entfernen
 ```
+
+### Sichern, wiederherstellen, weitergeben
+
+In den Einstellungen unter **Sichern & Wiederherstellen**:
+
+| | |
+| --- | --- |
+| **Belegung exportieren** | Die Konfiguration als JSON — klein und lesbar, aber ohne deine hochgeladenen Bilder |
+| **Sicherungspaket** | Konfiguration *und* alle eigenen Bilder in einer ZIP-Datei. Das ist der Weg für einen Umzug oder ein echtes Backup |
+| **Frühere Stände** | Vor jedem Überschreiben legt DECK//SWITCH eine Kopie der Konfiguration ab, höchstens eine je Stunde und die letzten dreißig davon. Hier führt der Weg zurück |
+
+Ein einzelnes Profil gibst du über die Profilverwaltung weiter: **Exportieren**
+neben dem Profil packt es samt der Bilder, die darin vorkommen. **Profil
+importieren** legt es beim Empfänger *zusätzlich* an — überschrieben wird
+dabei nichts, und bei gleichem Namen bekommt es eine Nummer.
+
+Nicht enthalten sind die Klänge des Soundboards: Die bindest du über beliebige
+Pfade ein, sie liegen also irgendwo bei dir und nicht im Datenverzeichnis der
+Anwendung. Die Verweise darauf überstehen eine Sicherung, die Dateien selbst
+sicherst du wie deine anderen eigenen Dateien. Nachinstallierte Plugins sind
+ebenfalls nicht dabei — die holst du nach dem Zurückspielen über den Store.
 
 ---
 

@@ -108,7 +108,18 @@ package() {
 
   # -- Programme -----------------------------------------------------------
   # `deckswitch` selbst legt bereits das Wheel an (project.scripts).
+  #
+  # Das Fenster kommt nicht direkt nach /usr/bin: Auf manchen Treibern geht
+  # es unter Wayland gar nicht erst auf, und das fängt erst das Startskript
+  # ab. Aufgerufen wird deshalb immer der Wrapper; die Binärdatei liegt
+  # daneben, wo niemand versehentlich an ihm vorbeistartet.
+  # Der Dateiname zaehlt: GTK leitet die Fensterklasse daraus ab, und
+  # `StartupWMClass` in der .desktop-Datei muss dazu passen. Hiesse die
+  # Datei `deckswitch-gui`, meldete sich das Fenster auch so — und die
+  # Fensterleiste faende kein Symbol dazu.
   install -Dm755 "gui/src-tauri/target/release/deckswitch" \
+    "$pkgdir/usr/lib/$pkgname/deckswitch"
+  install -Dm755 packaging/deckswitch-gui.sh \
     "$pkgdir/usr/bin/deckswitch-gui"
   install -Dm755 packaging/streamdeck-url-handler.py \
     "$pkgdir/usr/bin/deckswitch-url-handler"
@@ -123,7 +134,9 @@ package() {
     "$pkgdir/usr/lib/systemd/user/deckswitch.service"
 
   # -- Desktop-Anbindung ---------------------------------------------------
-  install -Dm644 packaging/deckswitch.desktop \
+  sed 's|__EXEC__|deckswitch-gui|' packaging/deckswitch.desktop \
+    > "$srcdir/deckswitch.desktop"
+  install -Dm644 "$srcdir/deckswitch.desktop" \
     "$pkgdir/usr/share/applications/$pkgname.desktop"
   sed 's|__HANDLER__|/usr/bin/deckswitch-url-handler|' \
     packaging/streamdeck-url-handler.desktop \

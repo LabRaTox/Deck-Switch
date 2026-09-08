@@ -25,6 +25,16 @@ from .backgrounds import parse_color
 
 log = logging.getLogger(__name__)
 
+#: Das Set, aus dem die fest eingebauten Symbole kommen — Ordner, Zurück,
+#: Menü, Helligkeit und was die Anwendung sonst von sich aus zeichnet.
+#:
+#: Bewusst keine Einstellung: Diese Symbole gehören zum Programm, nicht zur
+#: Belegung. Ein fremdes Set kennt ihre Namen meist gar nicht, und wo es
+#: einzelne davon kennt, entstünde ein Flickenteppich aus zwei Handschriften.
+#: Hochgeladene Iconsets sind für die Kacheln da und stehen dort in der
+#: Icon-Auswahl zur Verfügung.
+SYSTEM_ICONSET = "iconset-tabler"
+
 _CURRENT_COLOR = re.compile(r"currentColor", re.IGNORECASE)
 ALLOWED_UPLOAD_SUFFIXES = {".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
@@ -53,6 +63,11 @@ class IconService:
         #: Ob eine Datei überhaupt bewegt ist — aus dem Dateikopf, ohne sie
         #: zu dekodieren. Wird sehr oft gefragt.
         self._animated: dict[tuple, bool] = {}
+
+    @property
+    def system_iconset(self) -> str:
+        """Set der eingebauten Symbole — für Plugins, die selbst zeichnen."""
+        return SYSTEM_ICONSET
 
     def bind_registry(self, registry) -> None:
         self.registry = registry

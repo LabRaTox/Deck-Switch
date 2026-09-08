@@ -148,7 +148,6 @@
   },
   "background": {
     "title": "Hintergrund",
-    "kind": "Art",
     "kinds": {
       "transparent": "Transparent",
       "solid": "Einfarbig",
@@ -298,7 +297,6 @@
       "de": "Deutsch",
       "en": "Englisch"
     },
-    "iconset": "Standard-Iconset",
     "autostart": "Beim Anmelden starten",
     "autostartHint": "Startet das Backend automatisch mit der grafischen Sitzung. Die Änderung wirkt beim nächsten Anmelden — der laufende Dienst wird nicht angefasst.",
     "autostartUnavailable": "Autostart lässt sich hier nicht schalten: {{reason}}",
@@ -335,7 +333,19 @@
     "perDeckHint": "Diese Einstellungen gelten für das oben gewählte Deck.",
     "version": "Version {{version}}",
     "versionUnknown": "Version unbekannt — das Backend hat sich noch nicht gemeldet.",
-    "optionUnavailable": "{{label}} (in dieser Sitzung wirkungslos)"
+    "optionUnavailable": "{{label}} (in dieser Sitzung wirkungslos)",
+    "paket": "Sicherungspaket",
+    "paketHint": "Konfiguration und alle eigenen Bilder in einer ZIP-Datei. Anders als der JSON-Export überstehen damit auch hochgeladene Symbole einen Umzug.",
+    "paketLaden": "Sicherung herunterladen",
+    "paketEinspielen": "Sicherung einspielen",
+    "paketConfirm": "Die Sicherung ersetzt die aktuelle Konfiguration und schreibt ihre Bilder in dein Datenverzeichnis. Fortfahren?",
+    "paketDone": "Sicherung eingespielt",
+    "staende": "Frühere Stände",
+    "staendeHint": "Vor jedem Überschreiben legt DECK//SWITCH eine Kopie der Konfiguration ab. Aufgehoben wird eine Woche: der letzte Tag stündlich, ältere Tage je einmal.",
+    "staendeKeine": "Noch keine Stände vorhanden.",
+    "standZurueck": "Zurückspielen",
+    "standConfirm": "Auf den Stand vom {{zeit}} zurückgehen? Der jetzige Stand wird vorher gesichert.",
+    "standDone": "Stand vom {{zeit}} ist wieder da"
   },
   "errors": {
     "title": "Probleme",
@@ -610,6 +620,9 @@
     "autoPlaceholder": "Programme, z. B. obs, code",
     "autoHelp": "Trägst du hier Programme ein, wechselt das Deck von selbst auf dieses Profil, sobald eines davon vorn ist. Passt keines mehr, geht es zurück.",
     "autoOff": "Automatik aus: {{reason}}",
-    "autoSeen": "zuletzt vorn: {{app}}"
+    "autoSeen": "zuletzt vorn: {{app}}",
+    "export": "Exportieren",
+    "import": "Profil importieren",
+    "importDone": "Profil „{{name}}“ importiert"
   }
 }

@@ -5,13 +5,22 @@ GenericName=Stream Deck control
 GenericName[de]=Stream-Deck-Steuerung
 Comment=Configure and control your Elgato Stream Deck
 Comment[de]=Das Elgato Stream Deck einrichten und steuern
-Exec=deckswitch-gui
+# Der Platzhalter unten wird beim Installieren ersetzt — von
+# scripts/install-desktop-entry.sh oder vom PKGBUILD.
+Exec=__EXEC__
 Icon=deckswitch
 Terminal=false
-Categories=Utility;Settings;
+# Nur eine Hauptkategorie: Mit Utility und Settings zugleich taucht der
+# Eintrag in manchen Menüs doppelt auf (desktop-file-validate meckert es
+# auch an). Utility, weil das hier ein Programm ist und keine
+# Systemeinstellung.
+Categories=Utility;
 Keywords=streamdeck;elgato;deck;macro;
 StartupNotify=true
-# Kein StartupWMClass: Womit sich das Fenster beim Fenstermanager meldet,
-# ist ungeprüft, und ein falscher Wert verhindert die Zuordnung von Symbol
-# und Fenster genauso zuverlässig wie ein fehlender. Nachzutragen, sobald
-# es einmal an einem echten Desktop gelaufen ist (`xprop WM_CLASS`).
+# Am 2026-09-07 am laufenden Fenster abgelesen (`xprop WM_CLASS` unter
+# XWayland): "deckswitch", "Deckswitch". Ohne diese Zeile ordnet die
+# Fensterleiste dem Fenster kein Symbol zu. Unter nativem Wayland zählt
+# statt WM_CLASS die App-ID; die ist ungeprüft, schadet hier aber nicht —
+# steht sie falsch, greift bloß die Zuordnung nicht, die es vorher auch
+# nicht gab.
+StartupWMClass=deckswitch

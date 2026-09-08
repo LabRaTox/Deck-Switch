@@ -21,10 +21,18 @@ fail() { printf '\033[31m  ✘ %s\033[0m\n' "$1"; }
 
 ask() {
     # Ask a question; assume the default when running non-interactively.
+    #
+    # $1 the question, $2 the default: "y" means a bare Enter counts as yes.
+    # Without that second argument a "[Y/n]" prompt would quietly turn every
+    # Enter into a no — exactly the wrong answer for the udev rule.
     if [ ! -t 0 ]; then return 1; fi
     printf '  %s ' "$1"
     read -r answer
-    case "$answer" in [yY]*) return 0 ;; *) return 1 ;; esac
+    case "$answer" in
+        [yYjJ]*) return 0 ;;
+        "")      [ "${2:-n}" = y ] ;;
+        *)       return 1 ;;
+    esac
 }
 
 # --------------------------------------------------------------- Packages
@@ -99,6 +107,28 @@ else
     fail "npm is missing — cannot build the GUI"
 fi
 
+# ------------------------------------------------------------ Tauri window
+
+step "Building the application window"
+# Das Fenster ist der reguläre Weg in die Anwendung, also gehört sein Bau
+# ins Setup. Sonst baut ihn der erste Klick im Anwendungsmenü — minutenlang
+# und ohne sichtbare Rückmeldung.
+if [ -x gui/src-tauri/target/release/deckswitch ]; then
+    ok "Window already built"
+else
+    echo "  The first Rust build takes a few minutes."
+    # Scheitert der Bau — kein Rust, abgebrochene Installation, kein Netz —
+    # ist das ärgerlich, aber kein Grund, hier stehenzubleiben: Danach kommt
+    # die udev-Regel, und ohne die gehört das Deck root. Also weitermachen
+    # und am Ende sagen, was fehlt.
+    if (cd gui && npx tauri build --no-bundle); then
+        ok "Window built into gui/src-tauri/target/release"
+    else
+        warn "Window could not be built — the browser interface works anyway."
+        echo "  Retry later with:  ./scripts/start-gui.sh"
+    fi
+fi
+
 # -------------------------------------------------------------------- udev
 
 step "Device access (udev)"
@@ -106,11 +136,65 @@ if [ -f /etc/udev/rules.d/70-streamdeck.rules ]; then
     ok "udev rule already installed"
 else
     echo "  Without the udev rule the Stream Deck is only reachable as root."
-    if ask "Install the rule now (needs sudo)? [Y/n]" || [ ! -t 0 ]; then
+    if ask "Install the rule now (needs sudo)? [Y/n]" y || [ ! -t 0 ]; then
         sudo install -m 644 packaging/70-streamdeck.rules /etc/udev/rules.d/
         sudo udevadm control --reload-rules
         sudo udevadm trigger --subsystem-match=usb --subsystem-match=hidraw
         ok "Rule installed — unplug and replug the Stream Deck once"
+    fi
+fi
+
+# ------------------------------------------------------------ Input group
+
+step "Keyboard input (uinput)"
+# Die udev-Regel oben gibt der Gruppe `input` Zugriff auf /dev/uinput. Wer
+# nicht in der Gruppe ist, hat davon nichts: Die virtuelle Tastatur hinter
+# „Tastenkombination" und „Text tippen" bleibt dann stumm. Das AUR-Paket
+# sagt das nach der Installation; hier stand es bisher nirgends.
+if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx input; then
+    ok "You are in the 'input' group"
+else
+    echo "  Hotkeys and 'type text' need /dev/uinput, which belongs to the"
+    echo "  'input' group. Without it those actions stay silent."
+    if ask "Add $(id -un) to the group now (needs sudo)? [Y/n]" y || [ ! -t 0 ]; then
+        sudo usermod -aG input "$(id -un)"
+        warn "Group added — takes effect after your next login"
+    else
+        warn "Skipped — hotkeys and 'type text' will not work yet"
+    fi
+fi
+
+# ----------------------------------------------------------------- Desktop
+
+step "Application menu"
+# Braucht kein sudo — Eintrag und Symbol landen unter ~/.local/share.
+sh "$REPO/scripts/install-desktop-entry.sh" >/dev/null
+ok "DECK//SWITCH is in the application menu"
+
+# Registriert streamdeck://-Adressen. Installiert wird davon nichts von
+# allein: Der Handler reicht die Anfrage ans Backend weiter, das sie in der
+# Oberfläche zur Bestätigung vorlegt.
+sh "$REPO/scripts/install-url-handler.sh" >/dev/null 2>&1 \
+    && ok "streamdeck:// links are registered" \
+    || warn "streamdeck:// could not be registered (xdg-utils missing?)"
+
+# ------------------------------------------------------------- Autostart
+
+step "Start at login"
+# Anders als alles davor ist das eine Geschmacksfrage, keine Voraussetzung —
+# deshalb ist die Vorgabe hier „nein". Dieselbe Unit legt auch der Schalter
+# in den Einstellungen an.
+if systemctl --user is-enabled deckswitch.service >/dev/null 2>&1; then
+    ok "Service is already set up"
+elif ! command -v systemctl >/dev/null 2>&1; then
+    warn "systemd not found — skipping"
+else
+    echo "  Starts the backend automatically when you log in."
+    if ask "Set that up now? [y/N]"; then
+        sh "$REPO/scripts/install-service.sh" >/dev/null
+        ok "Service installed and started"
+    else
+        echo "  Later with:  ./scripts/install-service.sh"
     fi
 fi
 
@@ -121,3 +205,5 @@ echo "  Start the backend:  ./scripts/start-backend.sh"
 echo "  GUI in a browser:   http://127.0.0.1:8770"
 echo "  GUI as a window:    ./scripts/start-gui.sh"
 echo "  Start at login:     ./scripts/install-service.sh"
+echo "  Menu entry away:    ./scripts/install-desktop-entry.sh --remove"
+echo "  URL handler away:   ./scripts/install-url-handler.sh --remove"

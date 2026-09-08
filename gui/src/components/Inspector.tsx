@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "../api/client";
+import { api, SYSTEM_ICONSET } from "../api/client";
 import { localized } from "../i18n";
 import { useStore } from "../store";
 import type { ActionDescriptor, IconRef, InputType, Slot, Step } from "../types";
@@ -42,9 +42,7 @@ export function Inspector() {
   const updateSlot = useStore((s) => s.updateSelectedSlot);
   const setSlot = useStore((s) => s.setSlot);
   const settings = useStore((s) => s.deckSettings());
-  const activeIconset = useStore(
-    (s) => s.config?.app.active_iconset ?? "iconset-tabler",
-  );
+  const activeIconset = SYSTEM_ICONSET;
 
   const [iconState, setIconState] = useState<string | null>(null);
   const [branch, setBranch] = useState<Branch>("press");

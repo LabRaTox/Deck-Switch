@@ -220,4 +220,9 @@ PRESETS: list[dict] = [
         "name": {"de": "Akzent", "en": "Accent"},
         "background": {"kind": "accent", "accent": None},
     },
+    {
+        "id": "image",
+        "name": {"de": "Eigenes Bild", "en": "Custom image"},
+        "background": {"kind": "image", "upload": None},
+    },
 ]

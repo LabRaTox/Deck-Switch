@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "../api/client";
+import { api, SYSTEM_ICONSET } from "../api/client";
 import { localized } from "../i18n";
 import { useStore } from "../store";
 import type { ActionDescriptor, PluginInfo } from "../types";
@@ -215,7 +215,7 @@ function ActionCard({
   action: ActionDescriptor;
 }) {
   const { t, i18n } = useTranslation();
-  const iconSet = useStore((s) => s.config?.app.active_iconset ?? "iconset-tabler");
+  const iconSet = SYSTEM_ICONSET;
 
   const onlyDial = action.inputs.length === 1 && action.inputs[0] === "dial";
   const onlyKey = action.inputs.length === 1 && action.inputs[0] === "key";

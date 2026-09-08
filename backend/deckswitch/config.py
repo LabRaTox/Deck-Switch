@@ -27,7 +27,19 @@ from . import paths
 
 log = logging.getLogger(__name__)
 
-#: So viele frühere Stände bleiben liegen (ein Eintrag je Stunde).
+#: Wie lange frühere Stände aufgehoben werden. Was älter ist, hilft beim
+#: Zurückholen einer verunglückten Belegung nicht mehr — dafür schaut man in
+#: Stunden oder Tagen zurück, nicht in Wochen.
+BACKUP_MAX_AGE_DAYS = 7
+
+#: So lange bleibt jeder einzelne Stand liegen. Danach wird ausgedünnt: von
+#: jedem älteren Tag bleibt nur noch der letzte. Ein Fehlgriff fällt meist
+#: sofort auf — dafür braucht es die feine Auflösung —, während von
+#: vorgestern ein Stand je Tag genügt.
+BACKUP_FULL_HOURS = 24
+
+#: Absolute Obergrenze, falls an einem einzigen Tag außergewöhnlich viel
+#: gespeichert wird.
 BACKUP_KEEP = 30
 
 CONFIG_VERSION = 1
@@ -491,8 +503,11 @@ class DeckBinding(BaseModel):
 
 class AppSettings(BaseModel):
     language: Literal["de", "en"] = "de"
-    #: Iconset-Plugin, aus dem Icons ohne expliziten Set-Verweis kommen.
-    active_iconset: str = "iconset-tabler"
+    # Hier stand bis zum 2026-09-08 ``active_iconset``. Die eingebauten
+    # Symbole gehören zum Programm und kommen jetzt fest aus
+    # ``services.icons.SYSTEM_ICONSET``; hochgeladene Sets sind für die
+    # Kacheln da und werden je Belegung gewählt. Ältere Konfigurationen
+    # tragen das Feld noch — Pydantic übergeht es beim Laden.
     host: str = "127.0.0.1"
     port: int = 8770
     #: Eigener Port für Netz-Decks. Bewusst getrennt vom Port oben: Der
@@ -660,18 +675,70 @@ class ConfigStore:
 
         stempel = time.strftime("%Y%m%d-%H", time.localtime())
         ziel = ordner / f"config-{stempel}.json"
-        if ziel.exists():
-            return  # für diese Stunde ist der Ausgangsstand schon gesichert
+        # Für diese Stunde ist der Ausgangsstand womöglich schon gesichert —
+        # aufgeräumt wird trotzdem, sonst bliebe ein alter Verlauf so lange
+        # liegen, bis zufällig eine neue Stunde beginnt.
+        if not ziel.exists():
+            try:
+                shutil.copy2(self.path, ziel)
+            except OSError:
+                log.warning("Sicherung der Config nicht möglich", exc_info=True)
 
-        try:
-            shutil.copy2(self.path, ziel)
-        except OSError:
-            log.warning("Sicherung der Config nicht möglich", exc_info=True)
+        self._prune_backups()
+
+    @staticmethod
+    def _prune_backups() -> None:
+        """Räumt den Verlauf auf: nach Alter, dann nach Dichte.
+
+        Drei Regeln, von grob nach fein:
+
+        1. Älter als ``BACKUP_MAX_AGE_DAYS`` — weg.
+        2. Älter als ``BACKUP_FULL_HOURS`` — je Tag bleibt nur der letzte
+           Stand. So bleibt der Verlauf über eine Woche überschaubar, statt
+           auf über hundert Dateien anzuwachsen.
+        3. Bleiben trotzdem mehr als ``BACKUP_KEEP`` übrig, gehen die
+           ältesten.
+
+        Der Zeitpunkt kommt aus dem Dateinamen (``config-JJJJMMTT-HH.json``)
+        und nur ersatzweise aus der Änderungszeit: Ein Kopiervorgang oder ein
+        Umzug des Datenverzeichnisses setzt Zeitstempel neu, den Namen nicht.
+        """
+        ordner = paths.BACKUP_DIR
+        if not ordner.is_dir():
             return
 
-        # Verlauf begrenzen: die jüngsten behalten, ältere gehen.
-        alle = sorted(ordner.glob("config-*.json"))
-        for veraltet in alle[:-BACKUP_KEEP]:
+        jetzt = time.time()
+        staende: list[tuple[float, str, Path]] = []
+        for datei in ordner.glob("config-*.json"):
+            stempel = datei.stem.removeprefix("config-")
+            try:
+                zeit = time.mktime(time.strptime(stempel, "%Y%m%d-%H"))
+                tag = stempel.split("-")[0]
+            except ValueError:
+                try:
+                    zeit = datei.stat().st_mtime
+                except OSError:
+                    continue
+                tag = time.strftime("%Y%m%d", time.localtime(zeit))
+            staende.append((zeit, tag, datei))
+
+        staende.sort(key=lambda eintrag: eintrag[0], reverse=True)
+
+        behalten: list[Path] = []
+        tage_gesehen: set[str] = set()
+        for zeit, tag, datei in staende:
+            alter = jetzt - zeit
+            if alter > BACKUP_MAX_AGE_DAYS * 86400:
+                datei.unlink(missing_ok=True)
+                continue
+            if alter > BACKUP_FULL_HOURS * 3600:
+                if tag in tage_gesehen:
+                    datei.unlink(missing_ok=True)
+                    continue
+                tage_gesehen.add(tag)
+            behalten.append(datei)
+
+        for veraltet in behalten[BACKUP_KEEP:]:
             veraltet.unlink(missing_ok=True)
 
     # -- Export/Import -----------------------------------------------------
