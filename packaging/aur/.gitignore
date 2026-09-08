@@ -4,4 +4,7 @@ src/
 pkg/
 *.tar.gz
 *.pkg.tar.zst
+# Die Prüfsumme daneben gehört zum Paket und entsteht mit ihm — sie wird
+# ans GitHub-Release gehängt, nicht ins Repo gelegt.
+*.pkg.tar.zst.sha256
 *.log
