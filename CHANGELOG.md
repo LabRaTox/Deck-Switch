@@ -24,6 +24,12 @@
 - The deck switcher in the top bar groups by kind. One deck of a kind stays
   a single switch, several of a kind share a dropdown
 
+### Fixed
+
+- Links to the outside open in the browser again. Since the app has its own
+  window, buttons like **Open review**, the GitHub sign-in for the store or
+  a plugin's source did nothing at all when clicked
+
 ## 1.3.0 — 8 September 2026
 
 ### New

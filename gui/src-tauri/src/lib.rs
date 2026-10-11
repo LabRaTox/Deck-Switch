@@ -20,6 +20,10 @@ pub fn run() {
         let _ = fenster.request_user_attention(Some(tauri::UserAttentionType::Informational));
       }
     }))
+    // Links nach draußen — Store, GitHub, Quelltext — öffnet das Fenster
+    // nicht selbst: WebKitGTK verwirft `target="_blank"` ohne Meldung. Der
+    // Opener reicht sie an den Standardbrowser weiter.
+    .plugin(tauri_plugin_opener::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
