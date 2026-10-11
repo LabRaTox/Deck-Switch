@@ -2,6 +2,7 @@
   "id": "spotify",
   "name": "Spotify",
   "version": "1.1.3",
+  "min_app_version": "1.3.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "music",
@@ -11,8 +12,8 @@
     "en": "Music control without switching windows: play, pause, skip tracks, shuffle, repeat and volume — straight from the deck."
   },
   "changelog": {
-    "de": "1.1.2 — Nur innen drin: Das Plugin holt seine Hilfsdatei jetzt relativ. Damit können zwei Plugins Dateien gleich benennen, ohne sich gegenseitig auszubremsen.",
-    "en": "1.1.2 — Under the hood only: the plugin now imports its helper file relatively, so two plugins can name files alike without getting in each other's way."
+    "de": "1.1.3 — Das Plugin las die Einstellung „Standard-Iconset“, die es seit DECK//SWITCH 1.3.0 nicht mehr gibt. Die Ersatzsymbole für Wiedergabe und Pause kommen jetzt aus den eingebauten Symbolen der App. Braucht DECK//SWITCH 1.3.0 oder neuer.",
+    "en": "1.1.3 — The plugin read the “default icon set” setting, which DECK//SWITCH no longer has since 1.3.0. The fallback symbols for play and pause now come from the app's built-in symbols. Needs DECK//SWITCH 1.3.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
