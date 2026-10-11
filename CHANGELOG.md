@@ -27,7 +27,7 @@
 ### Fixed
 
 - Links to the outside open in the browser again. Since the app has its own
-  window, buttons like **Open review**, the GitHub sign-in for the store or
+  window, buttons like **Go to review**, the GitHub sign-in for the store or
   a plugin's source did nothing at all when clicked
 
 ## 1.3.0 — 8 September 2026
