@@ -80,5 +80,5 @@ if [ ! -x "$REPO/gui/src-tauri/target/release/deckswitch" ]; then
     printf '\033[33m  ! Das Fenster ist noch nicht gebaut. Der erste Start aus dem\n    Menü baut es — das dauert Minuten ohne sichtbare Rückmeldung.\n    Besser vorher einmal: ./scripts/start-gui.sh\033[0m\n'
 fi
 if [ ! -f "$HOME/.config/systemd/user/deckswitch.service" ]; then
-    printf '\033[33m  ! Das Backend läuft nicht von allein. Entweder\n    ./scripts/install-service.sh oder vor jedem Start\n    ./scripts/start-backend.sh\033[0m\n'
+    printf '\033[33m  ! Das Fenster bringt das Backend mit, danach läuft es bis zur\n    Abmeldung. Damit es schon beim Anmelden da ist und nach einem\n    Absturz neu startet: ./scripts/install-service.sh\033[0m\n'
 fi

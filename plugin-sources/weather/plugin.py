@@ -247,7 +247,7 @@ class WeatherPlugin(ActionPlugin):
             ctx.appearance.icon_for_state("offline"),
             size=max(20, round(min(ctx.size) * 0.4)),
             fallback_name="cloud-off",
-            fallback_set=self.services.config.app.active_iconset,
+            fallback_set=self.services.icons.system_iconset,
             color="#6b7280",
         )
         image.alpha_composite(icon, ((ctx.size[0] - icon.width) // 2,
@@ -273,7 +273,7 @@ class WeatherPlugin(ActionPlugin):
             ctx.appearance.icon_for_state("ok"),
             size=max(24, round(min(ctx.size) * ctx.appearance.icon_size / 100 * 0.8)),
             fallback_name=icon_for(code, is_day),
-            fallback_set=self.services.config.app.active_iconset,
+            fallback_set=self.services.icons.system_iconset,
             color=ctx.appearance.label_color,
         )
         image.alpha_composite(icon, ((width - icon.width) // 2, 8))
@@ -329,7 +329,7 @@ class WeatherPlugin(ActionPlugin):
             None,
             size=max(28, height - 44),
             fallback_name=icon_for(code, _is_daytime(hourly["time"][index])),
-            fallback_set=self.services.config.app.active_iconset,
+            fallback_set=self.services.icons.system_iconset,
             color=ctx.appearance.label_color,
         )
         image.alpha_composite(icon, (10, (height - icon.height) // 2))
@@ -437,7 +437,7 @@ class WeatherPlugin(ActionPlugin):
             ctx.appearance.icon_for_state("ok"),
             size=max(22, round(min(ctx.size) * ctx.appearance.icon_size / 100 * 0.7)),
             fallback_name=icon_for(daily["weather_code"][index], True),
-            fallback_set=self.services.config.app.active_iconset,
+            fallback_set=self.services.icons.system_iconset,
             color=ctx.appearance.label_color,
         )
         image.alpha_composite(icon, ((width - icon.width) // 2, 20))
@@ -492,7 +492,7 @@ class WeatherPlugin(ActionPlugin):
             icon = self.services.icons.resolve(
                 None, size=22,
                 fallback_name=icon_for(daily["weather_code"][i], True),
-                fallback_set=self.services.config.app.active_iconset,
+                fallback_set=self.services.icons.system_iconset,
                 color=ctx.appearance.label_color,
             )
             image.alpha_composite(icon, (centre - icon.width // 2, 20))

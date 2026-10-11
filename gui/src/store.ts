@@ -88,6 +88,8 @@ interface StoreState {
       tile_size?: number;
       overlay_transparent?: boolean;
       hide_empty?: boolean;
+      /** Das Overlay schließt sich nach einem Klick auf eine Kachel. */
+      overlay_close_on_click?: boolean;
       /** Globaler Kurzbefehl fürs Overlay. Leerer Text nimmt ihn weg. */
       overlay_hotkey?: string;
       /** Nur bei Netz-Decks: ob sie im Netz angeboten werden. */

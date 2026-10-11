@@ -457,6 +457,10 @@ class DeckBinding(BaseModel):
     #: Taste sichtbar bleiben, ein Overlay darf dagegen genau so groß sein
     #: wie das, was darauf liegt.
     hide_empty: bool = False
+    #: Das Overlay verschwindet von selbst, sobald eine Kachel angeklickt
+    #: wurde — wie ein Menü, nicht wie ein Fenster. Wer länger drauf bleibt
+    #: (Push-to-Talk), trifft das erst beim Loslassen.
+    overlay_close_on_click: bool = False
     #: Wo das Overlay zuletzt abgelegt wurde. ``-1`` heißt „noch nie
     #: verschoben" — dann sucht sich der Overlay-Dienst eine Stelle. Die
     #: Position gehört zum Deck und nicht zur auslösenden Taste: Wer das

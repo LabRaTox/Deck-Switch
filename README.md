@@ -236,8 +236,11 @@ export WEBKIT_DISABLE_DMABUF_RENDERER=1
 ```
 
 Entry and icon go to `~/.local/share`, so no sudo is involved. The launcher
-runs `scripts/start-gui.sh`, which needs the backend running — the service
-below is the comfortable way. The AUR package ships the entry anyway.
+runs `scripts/start-gui.sh`, which brings the backend along if it isn't
+running yet. Started that way it keeps running after the window closes,
+until you log out. The service below also starts it at login, before any
+window, and restarts it after a crash. The AUR package ships the entry
+anyway.
 
 ### Start at login
 

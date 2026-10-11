@@ -367,7 +367,7 @@ class SpotifyPlugin(ActionPlugin):
             ctx.appearance.icon_for_state(state),
             size=max(24, min(height - 40, round(min(ctx.size) * ctx.appearance.icon_size / 100))),
             fallback_name="player-pause" if state == "playing" else "player-play",
-            fallback_set=self.services.config.app.active_iconset,
+            fallback_set=self.services.icons.system_iconset,
             color=ctx.appearance.label_color,
         )
         image.alpha_composite(icon, (10, (height - icon.height) // 2))

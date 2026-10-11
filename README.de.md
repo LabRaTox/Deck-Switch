@@ -241,9 +241,11 @@ export WEBKIT_DISABLE_DMABUF_RENDERER=1
 ```
 
 Eintrag und Symbol landen unter `~/.local/share`, dafür braucht es kein
-sudo. Der Starter ruft `scripts/start-gui.sh` auf, das Backend muss also
-laufen — am bequemsten über den Dienst weiter unten. Aus dem AUR-Paket
-kommt der Eintrag ohnehin mit.
+sudo. Der Starter ruft `scripts/start-gui.sh` auf, das das Backend mitbringt,
+falls es noch nicht läuft. So gestartet läuft es nach dem Schließen des
+Fensters weiter, bis zur Abmeldung. Der Dienst weiter unten startet es
+außerdem beim Anmelden, noch bevor ein Fenster aufgeht, und nach einem
+Absturz neu. Aus dem AUR-Paket kommt der Eintrag ohnehin mit.
 
 ### Beim Anmelden starten
 

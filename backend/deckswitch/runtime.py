@@ -541,6 +541,7 @@ class Runtime:
                 eintrag["overlay_available"] = self.overlay.available()[0]
                 eintrag["overlay_reason"] = self.overlay.available()[1]
                 eintrag["overlay_hotkey"] = deck.binding.overlay_hotkey
+                eintrag["overlay_close_on_click"] = deck.binding.overlay_close_on_click
                 # Warum der Kurzbefehl *nicht* wirkt, muss man sehen können —
                 # sonst belegt man eine Taste und wundert sich später.
                 eintrag["hotkey_reason"] = self.shortcuts.reason(deck.key)

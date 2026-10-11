@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.3.5 — 11 October 2026
+
+### New
+
+- Virtual decks can close themselves after a click on a tile. The switch
+  **Close deck after click** stands with the other overlay settings and
+  takes effect on release, so holding a key keeps working
+- The window brings the backend along. When it is not running, the launcher
+  starts it through the systemd unit if there is one, otherwise directly,
+  and waits for it briefly. Starting the app no longer ends at a note
+  telling you to start the backend first
+- Profile management picks programs from a dropdown of the installed ones.
+  The list comes from the desktop entries of the Free Desktop standard,
+  which every distribution fills the same way; names can still be entered
+  by hand
+
+### Changed
+
+- Profile management is a split view: the names on the left, the details of
+  the chosen one on the right, in a window of fixed height whose columns
+  scroll when there is too much
+- The deck switcher in the top bar groups by kind. One deck of a kind stays
+  a single switch, several of a kind share a dropdown
+
 ## 1.3.0 — 8 September 2026
 
 ### New

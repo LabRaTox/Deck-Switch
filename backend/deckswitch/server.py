@@ -43,7 +43,7 @@ from .config import Config, DeviceSettings, Page, Profile, Slot, TouchWallpaper
 from .plugins import installer
 from .runtime import Runtime
 from .virtualdeck import VirtualDevice
-from .services import autostart, backgrounds, backup, screensaver, store
+from .services import autostart, backgrounds, backup, programs, screensaver, store
 from .services import render as render_service
 
 log = logging.getLogger(__name__)
@@ -168,6 +168,8 @@ class DeckUpdate(BaseModel):
     tile_size: int | None = None
     overlay_transparent: bool | None = None
     hide_empty: bool | None = None
+    #: Das Overlay schließt sich nach einem Klick auf eine Kachel.
+    overlay_close_on_click: bool | None = None
     #: Nur bei Overlay-Decks: globaler Kurzbefehl zum Umschalten. Leer
     #: nimmt ihn wieder weg.
     overlay_hotkey: str | None = None
@@ -428,6 +430,10 @@ def create_app(
             data, media_type="image/png", headers={"Cache-Control": "no-store"}
         )
 
+    #: Ob die gerade gedrückte Taste blättert, je (Deck, Art, Platz) —
+    #: festgehalten beim Drücken, gebraucht beim Loslassen.
+    gedrueckt: dict[tuple[str, str, int], bool] = {}
+
     @app.post("/api/decks/{key}/input")
     async def deck_input(key: str, payload: DeckInput) -> dict[str, Any]:
         """Eine Eingabe aus dem Overlay — derselbe Weg wie am echten Gerät."""
@@ -438,16 +444,41 @@ def create_app(
 
         if payload.action == "rotate":
             device.rotate(payload.index, payload.delta or 1)
-        elif payload.action == "down":
+            return {"ok": True}
+
+        # Ob die Taste blättert, entscheidet die Belegung *vor* dem Druck.
+        # Hinterher auf die Seite zu schauen geht nicht: ``device.press``
+        # plant die Aktion nur ein, und mit Doppeldruck oder Halten läuft
+        # sie erst nach einem Timer. Beim Loslassen kann die Seite außerdem
+        # schon gewechselt haben — deshalb wird die Belegung beim Drücken
+        # gemerkt und beim Loslassen wieder geholt.
+        platz = (key, payload.input_type, payload.index)
+        if payload.action == "down":
+            gedrueckt[platz] = _blaettert(deck.slot_at(payload.input_type, payload.index))
             device.press(payload.input_type, payload.index, True)
-        elif payload.action == "up":
+            return {"ok": True}
+
+        if payload.action == "up":
+            blaettert = gedrueckt.pop(platz, None)
+            if blaettert is None:
+                blaettert = _blaettert(deck.slot_at(payload.input_type, payload.index))
             device.press(payload.input_type, payload.index, False)
         else:
+            blaettert = _blaettert(deck.slot_at(payload.input_type, payload.index))
             # Ein Klick ist Drücken und Loslassen — nur so greifen
             # Push-to-Talk und die Tastenlogik wie am Gerät.
             device.press(payload.input_type, payload.index, True)
             await asyncio.sleep(0.02)
             device.press(payload.input_type, payload.index, False)
+
+        # Der Klick ist damit abgeschlossen — Drücken und Loslassen, mehr
+        # gibt ein Klick nicht. Ab hier darf das Overlay zu, wie ein Menü
+        # nach dem Auswählen: erst nach dem Loslassen, damit Push-to-Talk
+        # noch seine Zeit hatte. Eine Taste, die blättert, ist dagegen kein
+        # Auswählen, sondern der Weg dorthin — dann bleibt das Overlay offen.
+        if deck.binding.overlay_close_on_click and not blaettert:
+            runtime.overlay.hide(key)
+            runtime.bus.publish(ev.EVT_DECKS_CHANGED, decks=runtime.decks_payload())
         return {"ok": True}
 
     @app.patch("/api/decks/{key}")
@@ -491,7 +522,7 @@ def create_app(
                 raise HTTPException(400, "Das Raster gilt nur für Decks ohne Gerät")
             setattr(deck.binding, innen, max(kleinster, min(groesster, int(wert))))
             geaendert = True
-        for schalter in ("overlay_transparent", "hide_empty"):
+        for schalter in ("overlay_transparent", "hide_empty", "overlay_close_on_click"):
             wert = getattr(payload, schalter)
             if wert is None:
                 continue
@@ -619,6 +650,16 @@ def create_app(
     @app.get("/api/profiles")
     async def list_profiles() -> dict[str, Any]:
         return {"profiles": _profil_liste()}
+
+    @app.get("/api/programs")
+    async def list_programs() -> dict[str, Any]:
+        """Installierte Programme, zur Auswahl in der Profil-Automatik.
+
+        Die Liste kommt aus den Menüeinträgen des Free-Desktop-Standards —
+        nicht aus dem Paketmanager, denn der ist auf jeder Distribution ein
+        anderer, die Einträge überall gleich.
+        """
+        return {"programs": programs.list_applications()}
 
     @app.post("/api/profiles")
     async def create_profile(payload: ProfileCreate) -> dict[str, Any]:
@@ -1922,6 +1963,29 @@ def create_app(
 # --------------------------------------------------------------------------
 # Hilfen
 # --------------------------------------------------------------------------
+
+
+#: Aktionen des Streamdeck-Plugins, die auf eine andere Seite führen. Wer
+#: sie im Overlay drückt, will danach die neue Seite sehen.
+_NAVIGATION = {"folder", "home", "back", "goto_page", "next_page", "prev_page", "profile"}
+
+
+def _blaettert(slot: Slot | None) -> bool:
+    """Ob eine Belegung auf eine andere Seite führen kann.
+
+    Geprüft werden alle Zweige — einfacher Druck, Halten, Doppeldruck und
+    die Schritte einer Multi-Aktion. Welcher davon auslöst, steht beim
+    Loslassen noch nicht fest; im Zweifel bleibt das Overlay offen.
+    """
+    if slot is None:
+        return False
+    zweige = [slot, slot.long_press, slot.double_press, *slot.steps, *slot.steps_off]
+    return any(
+        zweig is not None
+        and zweig.plugin_id == "streamdeck"
+        and zweig.action_id in _NAVIGATION
+        for zweig in zweige
+    )
 
 
 def _belegte_plaetze(deck) -> list[str]:

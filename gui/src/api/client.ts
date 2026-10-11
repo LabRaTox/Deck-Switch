@@ -19,6 +19,7 @@ import type {
   Page,
   PluginInfo,
   ProfileInfo,
+  ProgramInfo,
   ScreensaverEntry,
   SessionCapabilities,
   Slot,
@@ -182,6 +183,7 @@ export const api = {
       tile_size?: number;
       overlay_transparent?: boolean;
       hide_empty?: boolean;
+      overlay_close_on_click?: boolean;
     },
   ) =>
     request<DeckInfo>(`/api/decks/${encodeURIComponent(key)}`, {
@@ -196,6 +198,10 @@ export const api = {
 
   profiles: () =>
     request<{ profiles: ProfileInfo[] }>("/api/profiles").then((a) => a.profiles),
+
+  /** Installierte Programme, aus den Menüeinträgen des Systems. */
+  programs: () =>
+    request<{ programs: ProgramInfo[] }>("/api/programs").then((a) => a.programs),
 
   createProfile: (name: string, copyFrom = "") =>
     request<{ profile: { id: string; name: string } }>("/api/profiles", {

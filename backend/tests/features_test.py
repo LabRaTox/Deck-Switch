@@ -451,7 +451,8 @@ async def main():
 
     check("die Schalter fürs Overlay sind einstellbar",
           virtuell.binding.overlay_transparent is False
-          and virtuell.binding.hide_empty is False)
+          and virtuell.binding.hide_empty is False
+          and virtuell.binding.overlay_close_on_click is False)
 
     # Ein Deck ganz ohne Drehregler: Der Ersatzwert „dann eben vier" ließ die
     # Renderschleife vier Segmente der Größe 0×0 zeichnen und daran sterben —

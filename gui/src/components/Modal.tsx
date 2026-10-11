@@ -12,6 +12,7 @@ export function Modal({
   footer,
   className = "",
   width,
+  height,
 }: {
   title: string;
   onClose: () => void;
@@ -19,6 +20,8 @@ export function Modal({
   footer?: ReactNode;
   className?: string;
   width?: number;
+  /** Feste Höhe. Ohne sie wächst das Fenster mit dem Inhalt. */
+  height?: number;
 }) {
   const { t } = useTranslation();
 
@@ -39,7 +42,10 @@ export function Modal({
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className={`modal ${className}`}
-        style={width ? { width: `min(${width}px, 100%)` } : undefined}
+        style={{
+          ...(width ? { width: `min(${width}px, 100%)` } : {}),
+          ...(height ? { height: `min(${height}px, 100%)` } : {}),
+        }}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { useStore } from "../store";
-import type { ProfileInfo } from "../types";
+import type { ProfileInfo, ProgramInfo } from "../types";
 import { Modal } from "./Modal";
 import { UiIcon } from "./UiIcon";
 
@@ -58,16 +58,34 @@ export function ProfileBar() {
         <UiIcon name="adjustments" size={16} />
       </button>
 
-      {verwalten && <ProfileVerwaltung onClose={() => setVerwalten(false)} />}
+      {verwalten && (
+        <ProfileVerwaltung
+          anfangsProfil={aktuell}
+          onClose={() => setVerwalten(false)}
+        />
+      )}
     </div>
   );
 }
 
-/** Anlegen, kopieren, umbenennen, löschen — alles an einem Ort. */
-function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
+/**
+ * Verwaltung als geteilte Ansicht: links die Namen aller Profile, rechts das
+ * gewählte. Auf diese Weise bleibt die Liste auch bei vielen Profilen ein
+ * Griff breit, und die Details eines Profils haben Platz.
+ */
+function ProfileVerwaltung({
+  anfangsProfil,
+  onClose,
+}: {
+  /** Welches Profil anfangs gewählt ist — das des bearbeiteten Decks. */
+  anfangsProfil?: string;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const load = useStore((s) => s.load);
   const [liste, setListe] = useState<ProfileInfo[] | null>(null);
+  const [programme, setProgramme] = useState<ProgramInfo[]>([]);
+  const [gewaehlt, setGewaehlt] = useState(anfangsProfil ?? "");
   const [automatik, setAutomatik] = useState<{
     available: boolean;
     reason: string;
@@ -83,6 +101,7 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
     try {
       setListe(await api.profiles());
       setAutomatik(await api.smartProfileStatus());
+      setProgramme(await api.programs());
     } catch (exc) {
       setFehler(exc instanceof Error ? exc.message : String(exc));
     }
@@ -91,6 +110,14 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     void lade();
   }, []);
+
+  // Das gewählte Profil kann weg sein — gelöscht etwa. Dann zeigt die Liste
+  // eben das erste, still steht die Auswahl nie ins Leere.
+  useEffect(() => {
+    if (liste && liste.length > 0 && !liste.some((p) => p.id === gewaehlt)) {
+      setGewaehlt(liste[0].id);
+    }
+  }, [liste, gewaehlt]);
 
   async function fuehreAus(arbeit: () => Promise<unknown>) {
     setFehler("");
@@ -103,76 +130,49 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const gewaehltes = (liste ?? []).find((p) => p.id === gewaehlt) ?? null;
+
   return (
-    <Modal title={t("profiles.manage")} width={560} onClose={onClose}>
+    <Modal title={t("profiles.manage")} width={780} height={600} onClose={onClose}>
       {fehler && <p className="error-note">{fehler}</p>}
       {hinweis && <p className="hint">{hinweis}</p>}
+      <p className="hint">{t("profiles.intro")}</p>
 
-      <ul className="profilliste">
-        {(liste ?? []).map((p) => (
-          <li key={p.id}>
-            <input
-              defaultValue={p.name}
-              onBlur={(event) => {
-                const name = event.target.value.trim();
-                if (name && name !== p.name) void fuehreAus(() => api.renameProfile(p.id, name));
-              }}
-            />
-            <span className="hint">
-              {t("profiles.pages", { count: p.pages })}
-              {p.decks.length > 0 && ` · ${t("profiles.inUse", { decks: p.decks.join(", ") })}`}
-            </span>
-            <input
-              className="profil-apps"
-              defaultValue={p.auto_apps.join(", ")}
-              placeholder={t("profiles.autoPlaceholder")}
-              title={t("profiles.autoHelp")}
-              onBlur={(event) => {
-                const apps = event.target.value.split(",").map((m) => m.trim()).filter(Boolean);
-                if (apps.join("\u0000") !== p.auto_apps.join("\u0000")) {
-                  void fuehreAus(() => api.setProfileApps(p.id, apps));
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="btn small"
-              onClick={() => void fuehreAus(() => api.createProfile(`${p.name} (2)`, p.id))}
-            >
-              {t("profiles.duplicate")}
-            </button>
-            <a className="btn small" href={api.profileExportUrl(p.id)}>
-              {t("profiles.export")}
-            </a>
-            <button
-              type="button"
-              className="btn small danger"
-              disabled={(liste ?? []).length <= 1}
-              onClick={() => {
-                // Ein Profil zu löschen heißt, alle seine Seiten zu löschen.
-                // Das ist mehr, als der Knopf vermuten lässt.
-                const frage = p.decks.length
-                  ? t("profiles.deleteInUse", { name: p.name, decks: p.decks.join(", ") })
-                  : t("profiles.deleteConfirm", { name: p.name, count: p.pages });
-                if (window.confirm(frage)) void fuehreAus(() => api.deleteProfile(p.id));
-              }}
-            >
-              {t("profiles.delete")}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div className="profil-split">
+        <ul className="profil-liste" aria-label={t("profiles.selectProfile")}>
+          {(liste ?? []).map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className={p.id === gewaehlt ? "active" : ""}
+                aria-current={p.id === gewaehlt ? "true" : undefined}
+                onClick={() => setGewaehlt(p.id)}
+              >
+                <span>{p.name}</span>
+                <small title={t("profiles.pages", { count: p.pages })}>
+                  {p.pages}
+                </small>
+              </button>
+            </li>
+          ))}
+        </ul>
 
-      <p className="hint">
-        {t("profiles.autoHelp")}
-        {automatik && !automatik.available && automatik.reason
-          ? ` — ${t("profiles.autoOff", { reason: automatik.reason })}`
-          : ""}
-        {automatik?.available && automatik.window.app
-          ? ` — ${t("profiles.autoSeen", { app: automatik.window.app })}`
-          : ""}
-      </p>
+        {gewaehltes && (
+          <ProfilDetails
+            key={gewaehltes.id}
+            profil={gewaehltes}
+            programme={programme}
+            fenster={automatik?.window.app || ""}
+            automatikAus={
+              automatik && !automatik.available ? automatik.reason : ""
+            }
+            gesamt={(liste ?? []).length}
+            arbeite={fuehreAus}
+          />
+        )}
+      </div>
 
+      <h4 className="section-title">{t("profiles.newSection")}</h4>
       <div className="profil-neu">
         <button
           type="button"
@@ -189,11 +189,11 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
           accept="application/zip,.zip"
           hidden
           onChange={(event) => {
-            const gewaehlt = event.target.files?.[0];
+            const gewaehltDatei = event.target.files?.[0];
             event.target.value = "";
-            if (!gewaehlt) return;
+            if (!gewaehltDatei) return;
             void fuehreAus(async () => {
-              const neu = await api.importProfile(gewaehlt);
+              const neu = await api.importProfile(gewaehltDatei);
               setHinweis(t("profiles.importDone", { name: neu.name }));
             });
           }}
@@ -225,5 +225,185 @@ function ProfileVerwaltung({ onClose }: { onClose: () => void }) {
         </button>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Das gewählte Profil im rechten Teil: Name und Zahlen oben, darunter die
+ * Programme der Automatik, darunter die Tätigkeiten.
+ */
+function ProfilDetails({
+  profil,
+  programme,
+  fenster,
+  automatikAus,
+  gesamt,
+  arbeite,
+}: {
+  profil: ProfileInfo;
+  programme: ProgramInfo[];
+  /** Fensterklasse des gerade vorderen Fensters, leer ohne Automatik. */
+  fenster: string;
+  /** Warum die Automatik gerade nicht greift, leer wenn sie läuft. */
+  automatikAus: string;
+  /** Zahl aller Profile — das letzte lässt sich nicht löschen. */
+  gesamt: number;
+  arbeite: (arbeit: () => Promise<unknown>) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const [manuell, setManuell] = useState("");
+
+  const setzeApps = (apps: string[]) =>
+    arbeite(() => api.setProfileApps(profil.id, apps));
+
+  const fuegeHinzu = (name: string) => {
+    const wert = name.trim();
+    if (!wert) return;
+    if (!profil.auto_apps.some((app) => app.toLowerCase() === wert.toLowerCase())) {
+      setzeApps([...profil.auto_apps, wert]);
+    }
+  };
+
+  // Schon gewählte Programme verschwinden aus der Auswahl. Der Programmname
+  // steht mit am Eintrag, wenn er vom Anzeigenamen abweicht: Gewählt wird
+  // immer der Programmname, denn den vergleicht die Automatik.
+  const wahlbar = programme.filter(
+    (p) =>
+      !profil.auto_apps.some((app) => app.toLowerCase() === p.exec.toLowerCase()),
+  );
+
+  return (
+    <div className="profil-details">
+      <div className="profil-kopf">
+        <input
+          defaultValue={profil.name}
+          onBlur={(event) => {
+            const name = event.target.value.trim();
+            if (name && name !== profil.name) {
+              void arbeite(() => api.renameProfile(profil.id, name));
+            }
+          }}
+        />
+        <span className="hint">
+          {t("profiles.pages", { count: profil.pages })}
+          {profil.decks.length > 0 &&
+            ` · ${t("profiles.inUse", { decks: profil.decks.join(", ") })}`}
+        </span>
+      </div>
+
+      <div className="profil-auto">
+        <label>{t("profiles.autoTitle")}</label>
+
+        {profil.auto_apps.length > 0 && (
+          <div className="profil-chips">
+            {profil.auto_apps.map((app) => (
+              <span className="profil-chip" key={app}>
+                {app}
+                <button
+                  type="button"
+                  title={t("profiles.removeProgram")}
+                  onClick={() =>
+                    setzeApps(profil.auto_apps.filter((app2) => app2 !== app))
+                  }
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="profil-auswahl">
+          {wahlbar.length > 0 ? (
+            <select
+              value=""
+              title={t("profiles.addProgramHint")}
+              aria-label={t("profiles.addProgram")}
+              onChange={(event) => {
+                if (event.target.value) fuegeHinzu(event.target.value);
+              }}
+            >
+              <option value="">{t("profiles.addProgram")}</option>
+              {wahlbar.map((p) => {
+                const name =
+                  i18n.language.startsWith("de") && p.name_de ? p.name_de : p.name;
+                const anzeige =
+                  name.toLowerCase() === p.exec.toLowerCase()
+                    ? name
+                    : `${name} (${p.exec})`;
+                return (
+                  <option key={`${p.name}:${p.exec}`} value={p.exec}>
+                    {anzeige}
+                  </option>
+                );
+              })}
+            </select>
+          ) : (
+            <small className="help">{t("profiles.noPrograms")}</small>
+          )}
+          <input
+            value={manuell}
+            placeholder={t("profiles.programPlaceholder")}
+            title={t("profiles.autoHelp")}
+            onChange={(event) => setManuell(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                fuegeHinzu(manuell);
+                setManuell("");
+              }
+            }}
+          />
+          {fenster && (
+            <button
+              type="button"
+              className="btn small"
+              onClick={() => fuegeHinzu(fenster)}
+            >
+              {t("profiles.addCurrent", { app: fenster })}
+            </button>
+          )}
+        </div>
+        <small className="help">
+          {t("profiles.autoHelp")}
+          {automatikAus && ` ${t("profiles.autoOff", { reason: automatikAus })}`}
+        </small>
+      </div>
+
+      <div className="profil-aktionen">
+        <button
+          type="button"
+          className="btn small"
+          onClick={() =>
+            void arbeite(() => api.createProfile(`${profil.name} (2)`, profil.id))
+          }
+        >
+          {t("profiles.duplicate")}
+        </button>
+        <a className="btn small" href={api.profileExportUrl(profil.id)}>
+          {t("profiles.export")}
+        </a>
+        <button
+          type="button"
+          className="btn small danger"
+          disabled={gesamt <= 1}
+          onClick={() => {
+            // Ein Profil zu löschen heißt, alle seine Seiten zu löschen.
+            // Das ist mehr, als der Knopf vermuten lässt.
+            const frage = profil.decks.length
+              ? t("profiles.deleteInUse", {
+                  name: profil.name,
+                  decks: profil.decks.join(", "),
+                })
+              : t("profiles.deleteConfirm", {
+                  name: profil.name,
+                  count: profil.pages,
+                });
+            if (window.confirm(frage)) void arbeite(() => api.deleteProfile(profil.id));
+          }}
+        >
+          {t("profiles.delete")}
+        </button>
+      </div>
+    </div>
   );
 }

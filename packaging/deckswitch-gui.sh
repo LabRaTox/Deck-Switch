@@ -20,6 +20,11 @@
 # herauskam, landet mit einer Signatur des Systems in einer Notiz. Solange
 # Sitzungsart, Grafiktreiber und WebKit-Version dieselben sind, startet das
 # Fenster danach sofort richtig. Ändert sich eines davon, wird neu gemessen.
+#
+# Vor dem Fenster kommt das Backend mit hoch: Ohne eines zeigt das Fenster
+# nur den Hinweis „Backend nicht erreichbar“ — wer das Programm startet,
+# will aber das Programm und keine Anleitung, das Backend von Hand
+# nachzuschieben.
 
 set -eu
 BINARY="${DECKSWITCH_GUI_BINARY:-/usr/lib/deckswitch/deckswitch}"
@@ -28,6 +33,54 @@ NOTIZ="${XDG_CACHE_HOME:-$HOME/.cache}/deckswitch/fensterstart"
 if [ ! -x "$BINARY" ]; then
     printf 'Das Fenster fehlt: %s\n' "$BINARY" >&2
     exit 1
+fi
+
+# -------------------------------------------------------------- Backend
+
+REPO=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+BACKEND_URL='http://127.0.0.1:8770/api/device'
+
+erreichbar() {
+    curl -sf -o /dev/null --max-time 2 "$BACKEND_URL" 2>/dev/null
+}
+
+if ! erreichbar; then
+    # Die systemd-Unit ist der bessere Weg: Sie schreibt ins Journal und
+    # startet nach einem Absturz von selbst neu. Existiert sie, wird sie
+    # nur *gestartet* — „enable“ wäre eine Entscheidung des Benutzers, die
+    # hier niemand für ihn trifft.
+    angefasst=nein
+    if command -v systemctl >/dev/null 2>&1 \
+       && systemctl --user start deckswitch.service >/dev/null 2>&1; then
+        angefasst=ja
+    fi
+    if [ "$angefasst" = nein ]; then
+        # Paket: das Konsolenskript. Checkout: das venv neben diesem Skript.
+        # Die Reihenfolge zählt — auf einem Rechner mit beidem gewinnt das
+        # venv, denn wer aus dem Checkout startet, meint den Checkout.
+        if [ -x "$REPO/.venv/bin/python" ]; then
+            (
+                cd "$REPO" || exit 1
+                exec setsid "$REPO/.venv/bin/python" -m deckswitch \
+                    </dev/null >/dev/null 2>&1
+            ) &
+            angefasst=ja
+        elif [ -x /usr/bin/deckswitch ]; then
+            setsid /usr/bin/deckswitch </dev/null >/dev/null 2>&1 &
+            angefasst=ja
+        fi
+    fi
+    # Das Backend braucht einen Moment — das Fenster darf ruhig später
+    # aufgehen, nur nicht endlos: Nach 15 Sekunden öffnet es trotzdem und
+    # zeigt seinen Hinweis an, wenn nichts gekommen ist. Nichts angefasst,
+    # nichts zu erwarten — dann gleich auf.
+    if [ "$angefasst" = ja ]; then
+        gewartet=0
+        while [ "$gewartet" -lt 15 ] && ! erreichbar; do
+            sleep 1
+            gewartet=$((gewartet + 1))
+        done
+    fi
 fi
 
 # Wer den Schalter selbst setzt, behält das letzte Wort.

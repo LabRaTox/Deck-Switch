@@ -281,6 +281,20 @@ function VirtualDeckSection() {
       </label>
       <small className="help">{t("decks.hideEmptyHint")}</small>
 
+      {/* Wie ein Menü, nicht wie ein Fenster: Wer das Deck nur aufmacht,
+          um eine Taste zu drücken, braucht es danach nicht mehr. */}
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={deck.overlay_close_on_click ?? false}
+          onChange={(event) =>
+            void setGrid(deck.id, { overlay_close_on_click: event.target.checked })
+          }
+        />
+        <span>{t("decks.closeOnClick")}</span>
+      </label>
+      <small className="help">{t("decks.closeOnClickHint")}</small>
+
       {/* Ein Deck ohne Gehäuse hat keinen Griff: Wer nur ein virtuelles
           Deck hat, käme sonst nur über die Oberfläche daran. */}
       <div className="field">

@@ -1415,10 +1415,13 @@ input[type="checkbox"] {
   box-shadow: 0 24px 60px #000000aa;
 }
 
-/* Nur der Inhalt scrollt — Kopf- und Fußzeile bleiben stehen. */
+/* Nur der Inhalt scrollt — Kopf- und Fußzeile bleiben stehen. Fehlt eine
+   feste Höhe, ist ``flex: 1`` wirkungslos: Das Fenster ist dann so hoch wie
+   sein Inhalt. */
 .modal-body {
   overflow-y: auto;
   min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2534,33 +2537,145 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
-.profilliste {
+/* Geteilte Ansicht: links die Namen, rechts das gewählte Profil. Die
+   geteilte Fläche füllt den Raum, den ihr das feste Fenster lässt; werden
+   Liste oder Einzelheiten länger, scrollen sie in ihrer Spalte. */
+.profil-split {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.profil-liste {
   list-style: none;
-  margin: 0 0 16px;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.profil-liste button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
   gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-dim);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
 }
 
-.profilliste li {
+.profil-liste button:hover {
+  color: var(--text);
+}
+
+.profil-liste button.active {
+  background: var(--bg-raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.profil-liste small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.profil-details {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas:
-    "name kopieren loeschen"
-    "apps apps apps"
-    "hinweis hinweis hinweis";
-  gap: 6px 8px;
-  align-items: center;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  align-content: start;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  min-height: 0;
+  overflow-y: auto;
 }
 
-.profilliste li input { grid-area: name; }
-.profilliste li .hint { grid-area: hinweis; }
-.profilliste li .profil-apps {
-  grid-area: apps;
+/* Name groß darüber, die Zahlen und Decks darunter. */
+.profil-kopf {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.profil-kopf input {
+  font-size: 15px;
+  padding: 9px 10px;
+}
+
+.profil-auto {
+  display: grid;
+  gap: 6px;
+}
+
+.profil-auto > label {
   font-size: 12px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.profil-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.profil-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-sunken);
+  font-size: 12px;
+}
+
+.profil-chip button {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.profil-chip button:hover {
+  color: var(--text);
+}
+
+.profil-auswahl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.profil-auswahl select {
+  flex: 1;
+  min-width: 180px;
+}
+
+.profil-auswahl input {
+  width: 130px;
+}
+
+.profil-aktionen {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .profil-neu {
@@ -2669,6 +2784,22 @@ input[type="checkbox"] {
   background: var(--bg-raised);
   color: var(--text);
   box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+/* Mehrere Decks einer Art klappen auf: Der Auswähler trägt denselben Look
+   wie die Schalter daneben, die Liste öffnet das Betriebssystem. */
+.deck-select {
+  cursor: pointer;
+}
+
+.deck-select select {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
 }
 
 .deck-list {

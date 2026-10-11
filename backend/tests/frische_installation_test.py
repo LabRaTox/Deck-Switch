@@ -155,6 +155,86 @@ def main() -> int:
                   deck["id"])
         check("und keines hat einen leeren Schlüssel",
               all(deck["id"] for deck in decks), json.dumps([d["id"] for d in decks]))
+
+        # „Deck nach Klick schließen": Der Schalter muss sich setzen
+        # lassen — und ein Klick im Overlay nimmt das Deck dann mit.
+        virtuell = next(d for d in decks if d["kind"] == "virtual")
+        code, roh = client.ruf(f"/api/decks/{virtuell['id']}/input",
+                               daten={"input_type": "key", "index": 0, "action": "click"})
+        check("ein Klick geht durch, solange der Schalter aus ist", code == 200,
+              f"{code} {roh[:90].decode(errors='replace')}")
+        code, roh = client.ruf(f"/api/decks/{virtuell['id']}",
+                               daten={"overlay_close_on_click": True}, methode="PATCH")
+        check("der Schalter „nach Klick schließen\" lässt sich setzen",
+              code == 200, f"{code} {roh[:90].decode(errors='replace')}")
+        decks = json.loads(client.ruf("/api/decks")[1])
+        check("und er steht im gemeldeten Zustand",
+              next(d for d in decks if d["kind"] == "virtual")["overlay_close_on_click"]
+              is True)
+        versteckt: list[str] = []
+        echt_verstecken = runtime.overlay.hide
+
+        def verstecken(schluessel: str) -> None:
+            versteckt.append(schluessel)
+            echt_verstecken(schluessel)
+
+        runtime.overlay.hide = verstecken  # type: ignore[method-assign]
+        code, _ = client.ruf(f"/api/decks/{virtuell['id']}/input",
+                             daten={"input_type": "key", "index": 0, "action": "click"})
+        check("ein Klick schließt das Overlay",
+              code == 200 and versteckt == [virtuell["id"]], str(versteckt))
+        code, _ = client.ruf(f"/api/decks/{virtuell['id']}/input",
+                             daten={"input_type": "key", "index": 0, "action": "down"})
+        check("bloßes Drücken schließt noch nicht",
+              code == 200 and versteckt == [virtuell["id"]], str(versteckt))
+        client.ruf(f"/api/decks/{virtuell['id']}/input",
+                   daten={"input_type": "key", "index": 0, "action": "up"})
+
+        # Eine Taste, die blättert, ist der Weg zur Auswahl, nicht die
+        # Auswahl selbst: Das Overlay muss dafür offen bleiben.
+        versteckt.clear()
+        overlay_seite = runtime.decks[virtuell["id"]].current_page_id()
+        code, roh = client.ruf(
+            f"/api/pages/{overlay_seite}/slots/key/1?deck={virtuell['id']}",
+            daten={"slot": {"plugin_id": "streamdeck", "action_id": "back",
+                            "settings": {}, "appearance": {}}},
+            methode="PUT")
+        check("im Overlay liegt eine Taste „Zurück\"", code == 200,
+              f"{code} {roh[:90].decode(errors='replace')}")
+        client.ruf(f"/api/decks/{virtuell['id']}/input",
+                   daten={"input_type": "key", "index": 1, "action": "click"})
+        check("ein Klick auf eine blätternde Taste lässt das Overlay offen",
+              versteckt == [], str(versteckt))
+        client.ruf(f"/api/decks/{virtuell['id']}/input",
+                   daten={"input_type": "key", "index": 1, "action": "down"})
+        client.ruf(f"/api/decks/{virtuell['id']}/input",
+                   daten={"input_type": "key", "index": 1, "action": "up"})
+        check("Drücken und Loslassen darauf auch", versteckt == [], str(versteckt))
+
+        # Das Gegenstück: eine gewöhnliche Aktion mit „Zurück" nur als
+        # Doppeldruck. Welcher Zweig auslöst, steht beim Loslassen noch
+        # nicht fest — im Zweifel bleibt das Overlay offen.
+        code, _ = client.ruf(
+            f"/api/pages/{overlay_seite}/slots/key/2?deck={virtuell['id']}",
+            daten={"slot": {"plugin_id": "streamdeck", "action_id": "brightness",
+                            "settings": {}, "appearance": {},
+                            "double_press": {"plugin_id": "streamdeck",
+                                             "action_id": "back",
+                                             "settings": {}, "appearance": {}}}},
+            methode="PUT")
+        client.ruf(f"/api/decks/{virtuell['id']}/input",
+                   daten={"input_type": "key", "index": 2, "action": "click"})
+        check("auch wenn nur der Doppeldruck blättert", code == 200 and versteckt == [],
+              f"{code} {versteckt}")
+        code, _ = client.ruf(
+            f"/api/pages/{overlay_seite}/slots/key/3?deck={virtuell['id']}",
+            daten={"slot": {"plugin_id": "streamdeck", "action_id": "brightness",
+                            "settings": {}, "appearance": {}}},
+            methode="PUT")
+        client.ruf(f"/api/decks/{virtuell['id']}/input",
+                   daten={"input_type": "key", "index": 3, "action": "click"})
+        check("eine Taste ohne Blättern schließt weiterhin",
+              code == 200 and versteckt == [virtuell["id"]], f"{code} {versteckt}")
     finally:
         server.should_exit = True
         faden.join(timeout=10)

@@ -112,6 +112,14 @@ export interface ProfileInfo {
   auto_apps: string[];
 }
 
+/** Ein Programm mit Menüeintrag, wie es im Dropdown der Auswahl steht. */
+export interface ProgramInfo {
+  name: string;
+  name_de?: string;
+  /** Programmname — genau das, was die Automatik vergleicht. */
+  exec: string;
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -193,6 +201,8 @@ export interface DeckInfo extends DeviceInfo {
   overlay_transparent?: boolean;
   /** Unbelegte Kacheln gar nicht erst zeigen. */
   hide_empty?: boolean;
+  /** Das Overlay schließt sich, sobald eine Kachel angeklickt wurde. */
+  overlay_close_on_click?: boolean;
   /** Nur bei virtuellen Decks: ob das Overlay gerade zu sehen ist. */
   overlay_visible?: boolean;
   /** Nur bei Netz-Decks: ob ein Passwort gesetzt ist (nie das Passwort selbst). */
