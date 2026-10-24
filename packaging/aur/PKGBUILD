@@ -73,7 +73,7 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # Achtung beim Versionswechsel: Die Summe gilt für den Tarball des Tags und
 # lässt sich erst berechnen, wenn dieser auf GitHub liegt. Danach mit
 # `updpkgsums` erneuern und `makepkg --printsrcinfo > .SRCINFO` nachziehen.
-sha256sums=('5909e05e68a727067439d2397e92c48388271d2b14719754f9674038d6fd2665')
+sha256sums=('d0cecf2200a73c1599c65e730da200119728726874a0824ad73b83bab11321fb')
 
 _srcdir="Deck-Switch-$pkgver"
 
