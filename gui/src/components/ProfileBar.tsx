@@ -98,11 +98,22 @@ function ProfileVerwaltung({
   const [kopieVon, setKopieVon] = useState("");
 
   async function lade() {
-    try {
-      setListe(await api.profiles());
-      setAutomatik(await api.smartProfileStatus());
-      setProgramme(await api.programs());
-    } catch (exc) {
+    // Gleichzeitig und unabhängig: Die Programmliste braucht am längsten,
+    // und scheitert die Automatik, sollen Profile und Programme trotzdem
+    // stehen.
+    const [profile, automatik, programme] = await Promise.allSettled([
+      api.profiles(),
+      api.smartProfileStatus(),
+      api.programs(),
+    ]);
+    if (profile.status === "fulfilled") setListe(profile.value);
+    if (automatik.status === "fulfilled") setAutomatik(automatik.value);
+    if (programme.status === "fulfilled") setProgramme(programme.value);
+    const gescheitert = [profile, automatik, programme].find(
+      (ergebnis) => ergebnis.status === "rejected",
+    );
+    if (gescheitert) {
+      const exc = gescheitert.reason;
       setFehler(exc instanceof Error ? exc.message : String(exc));
     }
   }

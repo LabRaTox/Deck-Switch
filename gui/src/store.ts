@@ -45,6 +45,11 @@ interface StoreState {
   selection: Selection | null;
   /** Erhöht sich bei jeder Änderung und bricht damit den Bild-Cache auf. */
   previewVersion: number;
+  /**
+   * Stand je Kachel, Schlüssel ``seite|art|index``. Ändert sich nur eine
+   * Belegung, lädt nur deren Vorschau neu statt das ganze Raster.
+   */
+  kachelStand: Record<string, number>;
   view: "editor" | "plugins" | "settings";
   /**
    * Wer im Store angemeldet ist und was dort auf Prüfung wartet.
@@ -57,6 +62,10 @@ interface StoreState {
   storeKonto: StoreAccount | null;
 
   load: () => Promise<void>;
+  /** Neu laden, aber gebündelt: Mehrere Anlässe kurz hintereinander laden einmal. */
+  ladeBald: () => void;
+  /** Deckliste übernehmen, wie sie das Backend von sich aus meldet. */
+  setDecks: (decks: DeckInfo[]) => void;
   setOnline: (online: boolean) => void;
   selectDeck: (key: string) => Promise<void>;
   activeDeckInfo: () => DeckInfo | null;
@@ -101,12 +110,14 @@ interface StoreState {
   setView: (view: StoreState["view"]) => void;
   select: (selection: Selection | null) => void;
   bumpPreview: () => void;
+  bumpTile: (pageId: string, inputType: InputType, index: number) => void;
 
   currentPage: () => Page | null;
   slotAt: (selection: Selection | null) => Slot | null;
 
-  setSlot: (inputType: InputType, index: number, slot: Slot | null) => Promise<void>;
-  updateSelectedSlot: (mutate: (slot: Slot) => Slot) => Promise<void>;
+  /** ``false``, wenn das Backend die Belegung nicht angenommen hat. */
+  setSlot: (inputType: InputType, index: number, slot: Slot | null) => Promise<boolean>;
+  updateSelectedSlot: (mutate: (slot: Slot) => Slot) => Promise<boolean>;
   moveSlot: (from: Selection, to: Selection) => Promise<void>;
 
   /** Zwischenablage für Belegungen — überlebt Seiten- und Ansichtswechsel. */
@@ -118,7 +129,7 @@ interface StoreState {
   canPasteInto: (inputType: InputType) => boolean;
 
   navigate: (pageId: string) => Promise<void>;
-  createPage: (name: string, parentId: string | null) => Promise<Page>;
+  createPage: (name: string, parentId: string | null) => Promise<Page | null>;
   renamePage: (pageId: string, name: string) => Promise<void>;
   /** Hängt die Seite an ``parentId`` und setzt sie dort auf ``index``. */
   movePage: (pageId: string, parentId: string | null, index: number) => Promise<void>;
@@ -131,7 +142,7 @@ interface StoreState {
   patchTouchWallpaper: (pageId: string, patch: Partial<TouchWallpaper>) => Promise<void>;
   setPluginConfig: (pluginId: string, config: Record<string, unknown>) => Promise<void>;
   setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<void>;
-  reloadPlugins: () => Promise<void>;
+  reloadPlugins: () => Promise<{ neu: string[]; weg: string[]; geaendert: string[] }>;
   refreshStoreKonto: () => Promise<void>;
   setPluginOrder: (order: string[]) => Promise<void>;
   uninstallPlugin: (pluginId: string) => Promise<void>;
@@ -156,6 +167,142 @@ function activeProfile(config: Config, deckKey: string): Profile | undefined {
   return config.profiles[profileId] ?? config.profiles[config.active_profile_id];
 }
 
+// --------------------------------------------------------------------------
+// Schreiben ans Backend
+// --------------------------------------------------------------------------
+
+/**
+ * Eine Spur je Ziel (Kachel, Deck, Seite). Pro Spur ist höchstens ein
+ * Request unterwegs; was währenddessen kommt, ersetzt den Wartenden. So
+ * kommen die Werte in der richtigen Reihenfolge an, ein Regler erzeugt
+ * keine Flut, und der letzte Stand wird in jedem Fall geschickt.
+ */
+interface Spur {
+  naechste: (() => Promise<void>) | null;
+  wartende: { resolve: () => void; reject: (fehler: unknown) => void }[];
+  laeuft: boolean;
+  uhr: number | null;
+}
+
+const spuren = new Map<string, Spur>();
+
+/** Mindestabstand zwischen zwei Requests derselben Spur. */
+const SPUR_ABSTAND_MS = 80;
+
+/** Steigt mit jeder optimistischen Änderung an der lokalen Config. */
+let lokalerStand = 0;
+/** Ein Laden kam, während noch geschrieben wurde — danach nachholen. */
+let ladenNachSchreiben = false;
+let ladeNummer = 0;
+let ladeUhr: number | null = null;
+
+function geaendert(): void {
+  lokalerStand += 1;
+}
+
+function schreibtNoch(): boolean {
+  return spuren.size > 0;
+}
+
+function schreibe(schluessel: string, aufgabe: () => Promise<void>): Promise<void> {
+  let spur = spuren.get(schluessel);
+  if (!spur) {
+    spur = { naechste: null, wartende: [], laeuft: false, uhr: null };
+    spuren.set(schluessel, spur);
+  }
+  spur.naechste = aufgabe;
+  const fertig = new Promise<void>((resolve, reject) => {
+    spur.wartende.push({ resolve, reject });
+  });
+  if (!spur.laeuft && spur.uhr === null) {
+    const diese = spur;
+    diese.uhr = window.setTimeout(() => void abarbeiten(schluessel, diese), 0);
+  }
+  return fertig;
+}
+
+async function abarbeiten(schluessel: string, spur: Spur): Promise<void> {
+  spur.uhr = null;
+  if (spur.laeuft || !spur.naechste) return;
+  const aufgabe = spur.naechste;
+  const wartende = spur.wartende;
+  spur.naechste = null;
+  spur.wartende = [];
+  spur.laeuft = true;
+  try {
+    await aufgabe();
+    for (const w of wartende) w.resolve();
+  } catch (fehler) {
+    // Was jetzt lokal steht, stimmt womöglich nicht mehr. Statt einen alten
+    // Schnappschuss zurückzuspielen, wird nach dem Schreiben neu geladen.
+    ladenNachSchreiben = true;
+    for (const w of wartende) w.reject(fehler);
+  } finally {
+    spur.laeuft = false;
+    if (spur.naechste) {
+      spur.uhr = window.setTimeout(() => void abarbeiten(schluessel, spur), SPUR_ABSTAND_MS);
+    } else {
+      spuren.delete(schluessel);
+      if (!schreibtNoch() && ladenNachSchreiben) {
+        ladenNachSchreiben = false;
+        useStore.getState().ladeBald();
+      }
+    }
+  }
+}
+
+/**
+ * Eigene Änderungen, deren Meldung über den WebSocket noch aussteht.
+ *
+ * Das Backend meldet jede gespeicherte Belegung zurück. Für die eigene
+ * neu zu laden, wäre überflüssig und überschriebe, was gerade getippt wird.
+ */
+const erwarteteEchos = new Map<string, number>();
+
+function echoErwarten(schluessel: string): void {
+  erwarteteEchos.set(schluessel, (erwarteteEchos.get(schluessel) ?? 0) + 1);
+}
+
+function echoVergessen(schluessel: string): void {
+  const anzahl = (erwarteteEchos.get(schluessel) ?? 0) - 1;
+  if (anzahl > 0) erwarteteEchos.set(schluessel, anzahl);
+  else erwarteteEchos.delete(schluessel);
+}
+
+/** War diese Meldung die eigene? Zählt sie dabei ab. */
+export function istEigenesEcho(schluessel: string): boolean {
+  if (!erwarteteEchos.has(schluessel)) return false;
+  echoVergessen(schluessel);
+  return true;
+}
+
+/** Nach einem Verbindungsabriss kommen ausstehende Meldungen nie mehr an. */
+export function echosVergessen(): void {
+  erwarteteEchos.clear();
+}
+
+export function slotEcho(deck: string, pageId: string, inputType: string, index: number): string {
+  return `slot|${deck}|${pageId}|${inputType}|${index}`;
+}
+
+export function seitenEcho(pageId: string): string {
+  return `page|${pageId}`;
+}
+
+function kachelSchluessel(pageId: string, inputType: string, index: number): string {
+  return `${pageId}|${inputType}|${index}`;
+}
+
+/** Versionsangabe für eine Vorschau-Adresse: global plus je Kachel. */
+export function vorschauStand(
+  s: Pick<StoreState, "previewVersion" | "kachelStand">,
+  pageId: string,
+  inputType: string,
+  index: number,
+): string {
+  return `${s.previewVersion}.${s.kachelStand[kachelSchluessel(pageId, inputType, index)] ?? 0}`;
+}
+
 export const useStore = create<StoreState>((set, get) => ({
   ready: false,
   online: false,
@@ -170,11 +317,24 @@ export const useStore = create<StoreState>((set, get) => ({
   currentPageId: "",
   selection: null,
   previewVersion: 0,
+  kachelStand: {},
   view: "editor",
 
   load: async () => {
+    const nummer = ++ladeNummer;
+    const standVorher = lokalerStand;
     const state = await api.state();
+    // Ein späteres Laden ist schon unterwegs: Dessen Antwort ist die neuere.
+    if (nummer !== ladeNummer) return;
     const decks = state.decks ?? [];
+
+    // Die Config nur übernehmen, wenn lokal nichts Neueres steht. Sonst
+    // spränge ein Feld auf einen älteren Stand zurück, während man tippt.
+    const configSicher = standVorher === lokalerStand && !schreibtNoch();
+    if (!configSicher) {
+      if (schreibtNoch()) ladenNachSchreiben = true;
+      else get().ladeBald();
+    }
 
     // Das bearbeitete Deck beibehalten, solange es noch da ist — ein
     // Neuladen wegen einer Config-Änderung darf die Ansicht nicht
@@ -198,14 +358,36 @@ export const useStore = create<StoreState>((set, get) => ({
       device: activeInfo ?? state.device,
       decks,
       activeDeck: active,
-      config: state.config,
+      ...(configSicher || !get().config
+        ? { config: state.config, previewVersion: get().previewVersion + 1 }
+        : {}),
       version: state.version ?? "",
       plugins: state.plugins,
       errors: state.errors,
       backgroundPresets: state.backgrounds,
       currentPageId,
-      previewVersion: get().previewVersion + 1,
     });
+  },
+
+  ladeBald: () => {
+    if (ladeUhr !== null) window.clearTimeout(ladeUhr);
+    ladeUhr = window.setTimeout(() => {
+      ladeUhr = null;
+      void get()
+        .load()
+        .catch(() => undefined);
+    }, 150);
+  },
+
+  setDecks: (decks) => {
+    const { activeDeck, config } = get();
+    const aktiv = decks.find((deck) => deck.id === activeDeck);
+    set(aktiv ? { decks, device: aktiv } : { decks });
+    // Ein neues Deck bringt eine eigene Bindung samt Profil mit, ein
+    // verschwundenes nimmt die bearbeitete Ansicht mit: beides steht nur in
+    // der vollständigen Config.
+    const unbekannt = decks.some((deck) => !config?.decks?.[deck.id]);
+    if (!aktiv || unbekannt) get().ladeBald();
   },
 
   selectDeck: async (key) => {
@@ -250,15 +432,22 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!config || !current) return;
 
     const next = mutate(structuredClone(current));
-    // Optimistisch, damit Regler flüssig bleiben.
+    // Optimistisch, damit Regler flüssig bleiben. Die Geräteeinstellungen
+    // ändern kein Tastenbild, die Vorschau bleibt also stehen.
     const optimistic = structuredClone(config);
     optimistic.decks[activeDeck].device = next;
-    set({ config: optimistic, previewVersion: get().previewVersion + 1 });
+    geaendert();
+    set({ config: optimistic });
 
+    const deck = activeDeck;
     try {
-      await api.updateDeck(activeDeck, { device: next });
+      await schreibe(`deck|${deck}`, async () => {
+        // Geschickt wird, was beim Abschicken gilt: Bei einem Regler ist
+        // das der jüngste Wert, nicht der, der die Spur geöffnet hat.
+        const stand = get().config?.decks?.[deck]?.device ?? next;
+        await api.updateDeck(deck, { device: stand });
+      });
     } catch (error) {
-      set({ config });
       get().pushError(toError(error, "deck"));
     }
   },
@@ -330,6 +519,13 @@ export const useStore = create<StoreState>((set, get) => ({
   setView: (view) => set({ view }),
   select: (selection) => set({ selection }),
   bumpPreview: () => set((s) => ({ previewVersion: s.previewVersion + 1 })),
+  bumpTile: (pageId, inputType, index) =>
+    set((s) => {
+      const schluessel = kachelSchluessel(pageId, inputType, index);
+      return {
+        kachelStand: { ...s.kachelStand, [schluessel]: (s.kachelStand[schluessel] ?? 0) + 1 },
+      };
+    }),
 
   currentPage: () => {
     const { config, currentPageId } = get();
@@ -351,36 +547,50 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   setSlot: async (inputType, index, slot) => {
-    const { config } = get();
-    if (!config) return;
+    const { config, activeDeck } = get();
+    if (!config) return false;
 
     // Über ``currentPage()`` und nicht über die gemerkte ID: Nach einem
     // Deckwechsel kann die ID zu einem fremden Profil gehören — dann würde
     // hier ins Leere geschrieben.
     const page = get().currentPage();
-    if (!page) return;
-    const currentPageId = page.id;
+    if (!page) return false;
+    const pageId = page.id;
 
-    const previous = structuredClone(config);
     const mapping = inputType === "key" ? page.keys : page.dials;
     if (slot) mapping[String(index)] = slot;
     else delete mapping[String(index)];
-    set({ config: { ...config }, previewVersion: get().previewVersion + 1 });
+    geaendert();
+    set({ config: { ...config } });
 
+    // Deck und Seite stehen fest, bevor geschickt wird: Bis die Spur dran
+    // ist, kann der Editor schon woanders stehen.
+    const echo = slotEcho(activeDeck, pageId, inputType, index);
     try {
-      await api.putSlot(currentPageId, inputType, index, slot);
+      await schreibe(echo, async () => {
+        echoErwarten(echo);
+        try {
+          await api.putSlot(pageId, inputType, index, slot, activeDeck);
+        } catch (error) {
+          echoVergessen(echo);
+          throw error;
+        }
+        // Erst jetzt neu zeichnen lassen: Vorher lieferte das Backend
+        // noch das alte Bild.
+        get().bumpTile(pageId, inputType, index);
+      });
+      return true;
     } catch (error) {
-      set({ config: previous });
       get().pushError(toError(error, "slot"));
-      throw error;
+      return false;
     }
   },
 
   updateSelectedSlot: async (mutate) => {
     const { selection } = get();
     const slot = get().slotAt(selection);
-    if (!selection || !slot) return;
-    await get().setSlot(selection.inputType, selection.index, mutate(structuredClone(slot)));
+    if (!selection || !slot) return false;
+    return get().setSlot(selection.inputType, selection.index, mutate(structuredClone(slot)));
   },
 
   moveSlot: async (from, to) => {
@@ -390,8 +600,11 @@ export const useStore = create<StoreState>((set, get) => ({
     const target = get().slotAt(to);
 
     // Tauschen statt überschreiben — beim Umsortieren die freundlichere Geste.
-    await get().setSlot(to.inputType, to.index, source);
-    await get().setSlot(from.inputType, from.index, target);
+    // Scheitert eine Hälfte, lädt die Schreibspur den echten Stand nach.
+    await Promise.all([
+      get().setSlot(to.inputType, to.index, source),
+      get().setSlot(from.inputType, from.index, target),
+    ]);
     set({ selection: to });
   },
 
@@ -445,22 +658,35 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   createPage: async (name, parentId) => {
-    const page = await api.createPage(name, parentId);
+    let page: Page;
+    try {
+      page = await api.createPage(name, parentId);
+    } catch (error) {
+      get().pushError(toError(error, "pages"));
+      return null;
+    }
     const config = get().config;
     if (config) {
       const profile = activeProfile(config, get().activeDeck);
       if (profile) profile.pages[page.id] = page;
+      geaendert();
       set({ config: { ...config } });
     }
     return page;
   },
 
   renamePage: async (pageId, name) => {
-    await api.updatePage(pageId, { name });
+    try {
+      await api.updatePage(pageId, { name });
+    } catch (error) {
+      get().pushError(toError(error, "pages"));
+      return;
+    }
     const config = get().config;
     if (config) {
       const page = activeProfile(config, get().activeDeck)?.pages[pageId];
       if (page) page.name = name;
+      geaendert();
       set({ config: { ...config }, previewVersion: get().previewVersion + 1 });
     }
   },
@@ -485,6 +711,7 @@ export const useStore = create<StoreState>((set, get) => ({
     siblings.forEach((sibling, position) => {
       sibling.order = position;
     });
+    geaendert();
     set({ config });
 
     try {
@@ -493,20 +720,28 @@ export const useStore = create<StoreState>((set, get) => ({
       if (fresh) {
         const profileNow = activeProfile(fresh, get().activeDeck);
         if (profileNow) profileNow.pages = pages;
+        geaendert();
         set({ config: { ...fresh }, previewVersion: get().previewVersion + 1 });
       }
     } catch (error) {
-      set({ config: previous });
       get().pushError(toError(error, "pages"));
+      get().ladeBald();
     }
   },
 
   deletePage: async (pageId) => {
-    const { deleted } = await api.deletePage(pageId);
+    let deleted: string[];
+    try {
+      ({ deleted } = await api.deletePage(pageId));
+    } catch (error) {
+      get().pushError(toError(error, "pages"));
+      return;
+    }
     const config = get().config;
     if (config) {
       const profile = activeProfile(config, get().activeDeck);
       for (const id of deleted) delete profile?.pages[id];
+      geaendert();
       set({ config: { ...config } });
     }
     if (deleted.includes(get().currentPageId) && config) {
@@ -519,12 +754,13 @@ export const useStore = create<StoreState>((set, get) => ({
     const config = get().config;
     if (!config) return;
     const next = mutate(structuredClone(config));
+    geaendert();
     set({ config: next, previewVersion: get().previewVersion + 1 });
     try {
       await api.putConfig(next);
     } catch (error) {
-      set({ config });
       get().pushError(toError(error, "config"));
+      get().ladeBald();
     }
   },
 
@@ -533,12 +769,13 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!config) return;
     const optimistic = structuredClone(config);
     Object.assign(optimistic.app, patch);
+    geaendert();
     set({ config: optimistic, previewVersion: get().previewVersion + 1 });
     try {
       await api.patchAppSettings(patch);
     } catch (error) {
-      set({ config });
       get().pushError(toError(error, "config"));
+      get().ladeBald();
     }
   },
 
@@ -551,14 +788,24 @@ export const useStore = create<StoreState>((set, get) => ({
 
     const next = { ...page.touch_wallpaper, ...patch };
     const optimistic = structuredClone(config);
-    const target = activeProfile(optimistic, get().activeDeck)?.pages[pageId];
+    const deck = get().activeDeck;
+    const target = activeProfile(optimistic, deck)?.pages[pageId];
     if (target) target.touch_wallpaper = next;
+    geaendert();
     set({ config: optimistic, previewVersion: get().previewVersion + 1 });
 
+    const echo = seitenEcho(pageId);
     try {
-      await api.updatePage(pageId, { touch_wallpaper: next });
+      await schreibe(echo, async () => {
+        echoErwarten(echo);
+        try {
+          await api.updatePage(pageId, { touch_wallpaper: next }, deck);
+        } catch (error) {
+          echoVergessen(echo);
+          throw error;
+        }
+      });
     } catch (error) {
-      set({ config });
       get().pushError(toError(error, "pages"));
     }
   },
@@ -574,13 +821,18 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   setPluginEnabled: async (pluginId, enabled) => {
-    await api.setPluginEnabled(pluginId, enabled);
-    await get().load();
+    try {
+      await api.setPluginEnabled(pluginId, enabled);
+      await get().load();
+    } catch (error) {
+      get().pushError(toError(error, "plugins"));
+    }
   },
 
   reloadPlugins: async () => {
-    await api.reloadPlugins();
+    const ergebnis = await api.reloadPlugins();
     await get().load();
+    return ergebnis;
   },
 
   storeKonto: null,
@@ -663,8 +915,12 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   clearErrors: async () => {
-    await api.clearErrors();
-    set({ errors: [] });
+    try {
+      await api.clearErrors();
+      set({ errors: [] });
+    } catch (error) {
+      get().pushError(toError(error, "errors"));
+    }
   },
 
   pushError: (error) =>

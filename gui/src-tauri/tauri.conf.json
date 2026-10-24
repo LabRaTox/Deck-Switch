@@ -35,7 +35,7 @@
     ],
     "category": "Utility",
     "shortDescription": "Control software for the Elgato Stream Deck+",
-    "longDescription": "DECK//SWITCH — standalone control software for the Elgato Stream Deck+ on CachyOS and Arch Linux, with its own plugin system.",
+    "longDescription": "DECK//SWITCH. Standalone control software for the Elgato Stream Deck+ on CachyOS and Arch Linux, with its own plugin system.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

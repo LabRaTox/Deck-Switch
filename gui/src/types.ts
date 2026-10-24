@@ -331,6 +331,8 @@ export interface Manifest {
   version: string;
   type: "action" | "iconset" | "screensaver" | "wallpaper";
   description: LocalizedText;
+  /** Ein Satz für die Übersicht; fehlt er, wird die Beschreibung gekürzt. */
+  summary?: LocalizedText;
   author: string;
   accent: string;
   /** Wohin das Plugin in der Übersicht gehört. */
@@ -487,6 +489,12 @@ export interface StoreVersion {
   sha256: string;
   size: number;
   changelog: string | null;
+  /** Die Änderungen in allen Sprachen des Manifests. */
+  changelog_i18n?: LocalizedText | null;
+  /** Zahl der Aktionen; nur bei Plugins vom Typ `action`. */
+  actions?: number | null;
+  /** Ob eine der Aktionen auf einem Dial liegen kann; nur bei `action`. */
+  dials?: boolean | null;
   min_app_version: string | null;
   downloads: number;
   released_at: string;
@@ -513,6 +521,12 @@ export interface StorePlugin {
   source_url: string | null;
   rating: { up: number; down: number };
   latest: StoreVersion;
+  /** Name, Kurzsatz und Beschreibung in allen Sprachen des Manifests. */
+  i18n?: {
+    name?: LocalizedText | null;
+    summary?: LocalizedText | null;
+    description?: LocalizedText | null;
+  };
   /** Nur in der Einzelansicht. */
   description?: string | null;
   versions?: StoreVersion[];
@@ -552,6 +566,8 @@ export interface StoreBewertung {
   mine: number | null;
   comment: string | null;
   comments: StoreKommentar[];
+  /** Fragt der Autor selbst? Dann gibt es keine Knöpfe. Ältere Stores liefern das nicht. */
+  own?: boolean;
 }
 
 /** Wer im Store angemeldet ist. */
@@ -599,7 +615,10 @@ export interface StoreMinePlugin {
   name: string;
   kind: string;
   visibility: string;
+  /** Gesetzt, wenn der Store das ganze Plugin gesperrt hat. */
   removedAt: string | null;
+  /** Warum gesperrt. Fehlt bei Stores, die das Feld noch nicht liefern. */
+  removedReason?: string | null;
   versions: StoreMineVersion[];
 }
 

@@ -177,7 +177,7 @@ export function KeyCreator({ appearance, onClose, onApply }: Props) {
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/png"),
       );
-      if (!blob) throw new Error("PNG konnte nicht erzeugt werden");
+      if (!blob) throw new Error(t("creator.pngFailed"));
       const file = new File([blob], `tastenbild-${Date.now()}.png`, {
         type: "image/png",
       });
@@ -231,7 +231,7 @@ export function KeyCreator({ appearance, onClose, onApply }: Props) {
                     });
                   }}
                 >
-                  <option value="">—</option>
+                  <option value="">---</option>
                   {uploads.map((entry) => (
                     <option key={entry.filename} value={entry.filename}>
                       {entry.filename}

@@ -185,7 +185,7 @@ export function ActionLibrary() {
                 <span
                   className="status-dot offline"
                   title={`${t("plugins.disconnected")}${
-                    plugin.status.detail ? ` — ${plugin.status.detail}` : ""
+                    plugin.status.detail ? ` · ${plugin.status.detail}` : ""
                   }`}
                 />
               )}

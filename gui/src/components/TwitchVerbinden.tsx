@@ -39,6 +39,10 @@ export function TwitchVerbinden({ vorher }: { vorher?: () => Promise<void> }) {
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState("");
   const uhr = useRef<number | null>(null);
+  // Zählt jede Anmelderunde. Eine Nachfrage, die noch unterwegs war, als
+  // abgebrochen wurde, erkennt daran, dass sie nicht mehr gemeint ist, und
+  // stellt sich nicht neu.
+  const runde = useRef(0);
 
   useEffect(() => {
     api
@@ -48,16 +52,20 @@ export function TwitchVerbinden({ vorher }: { vorher?: () => Promise<void> }) {
     // Ohne dieses Aufräumen liefe die Nachfrage weiter, wenn das Fenster
     // zugeht — und schriebe in eine Ansicht, die es nicht mehr gibt.
     return () => {
+      runde.current += 1;
       if (uhr.current) window.clearTimeout(uhr.current);
     };
   }, []);
 
   function beende() {
+    runde.current += 1;
     if (uhr.current) window.clearTimeout(uhr.current);
     uhr.current = null;
   }
 
   async function verbinden() {
+    beende();
+    const diese = runde.current;
     setFehler("");
     setLaeuft(true);
     try {
@@ -67,20 +75,23 @@ export function TwitchVerbinden({ vorher }: { vorher?: () => Promise<void> }) {
       // Benutzer vor sich sieht — und das ist nicht zu erklären.
       await vorher?.();
       const gestartet = (await api.pluginCommand("twitch", "verbinden")) as unknown as Code;
+      if (diese !== runde.current) return;
       setCode(gestartet);
-      frage(Math.max(3, gestartet.interval || 5));
+      frage(Math.max(3, gestartet.interval || 5), diese);
     } catch (exc: unknown) {
+      if (diese !== runde.current) return;
       setFehler(exc instanceof Error ? exc.message : String(exc));
       setLaeuft(false);
     }
   }
 
-  function frage(sekunden: number) {
+  function frage(sekunden: number, diese: number) {
     uhr.current = window.setTimeout(async () => {
       try {
         const antwort = (await api.pluginCommand("twitch", "nachfragen")) as unknown as Stand & {
           wartet?: boolean;
         };
+        if (diese !== runde.current) return;
         if (antwort.angemeldet) {
           beende();
           setCode(null);
@@ -89,8 +100,9 @@ export function TwitchVerbinden({ vorher }: { vorher?: () => Promise<void> }) {
           void ladePluginListe();
           return;
         }
-        frage(sekunden);
+        frage(sekunden, diese);
       } catch (exc: unknown) {
+        if (diese !== runde.current) return;
         beende();
         setLaeuft(false);
         setCode(null);

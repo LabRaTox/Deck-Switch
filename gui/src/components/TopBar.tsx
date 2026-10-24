@@ -155,12 +155,13 @@ export function TopBar() {
             disabled={!connected || virtuell}
             onChange={(event) => {
               const value = Number(event.target.value);
-              // Optimistisch setzen, damit der Regler flüssig bleibt.
+              // Optimistisch setzen, damit der Regler flüssig bleibt. Die
+              // Schreibspur bündelt das Ziehen; das Deck übernimmt die
+              // Helligkeit mit den Geräteeinstellungen.
               void patchDeckSettings((current) => ({ ...current, brightness: value }));
-              void api.setBrightness(value).catch(() => undefined);
             }}
           />
-          <output>{virtuell ? "—" : `${brightness}%`}</output>
+          <output>{virtuell ? "---" : `${brightness}%`}</output>
         </label>
 
         <div

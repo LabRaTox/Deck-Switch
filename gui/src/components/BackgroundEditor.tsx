@@ -143,7 +143,7 @@ export function BackgroundEditor({ value, onChange }: Props) {
               value={value.upload ?? ""}
               onChange={(event) => patch({ upload: event.target.value || null })}
             >
-              <option value="">—</option>
+              <option value="">---</option>
               {uploads.map((entry) => (
                 <option key={entry.filename} value={entry.filename}>
                   {entry.filename}

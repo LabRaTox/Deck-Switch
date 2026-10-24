@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useStore } from "../store";
 import type { StoreLoginStart, StorePlugin, StoreWarnung } from "../types";
+import { storeKurz, storeName } from "./storeTexte";
 
 /**
  * Die Teile, die der Store zur Plugin-Ansicht beisteuert.
@@ -29,7 +30,7 @@ export function StoreKarte({
   onInstallieren: () => void;
   onOeffnen: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <div className="plugin-card store">
@@ -40,7 +41,7 @@ export function StoreKarte({
               Detailansicht — und nicht die ganze Karte, in der ein Knopf
               zum Installieren steckt. */}
           <button type="button" className="plugin-name" onClick={onOeffnen}>
-            {plugin.name}
+            {storeName(plugin, i18n.language)}
           </button>
           <span className="plugin-meta">
             {plugin.latest.version} · {t("store.byAuthor", { author: plugin.author })}
@@ -49,11 +50,7 @@ export function StoreKarte({
         <span className="tag-store">{t("store.tag")}</span>
       </div>
 
-      <p className="plugin-card-summary">{plugin.summary}</p>
-      <p className="hint">
-        {plugin.latest.downloads} ×{plugin.rating.up > 0 && ` · ♥ ${plugin.rating.up}`}
-        {plugin.license && ` · ${plugin.license}`}
-      </p>
+      <p className="plugin-card-summary">{storeKurz(plugin, i18n.language)}</p>
 
       {/* Vor der Installation, nicht danach: Was ein Plugin tut, soll man
           wissen, bevor es auf dem Rechner liegt. */}
@@ -68,11 +65,6 @@ export function StoreKarte({
         >
           {laeuft ? t("store.installing") : t("store.install")}
         </button>
-        {plugin.source_url && (
-          <a className="btn" href={plugin.source_url} target="_blank" rel="noreferrer noopener">
-            {t("store.source")}
-          </a>
-        )}
       </div>
     </div>
   );
@@ -91,7 +83,7 @@ function StoreIcon({ plugin }: { plugin: StorePlugin }) {
   if (!plugin.latest.icon_url || fehlt) {
     return (
       <span className="plugin-icon placeholder" aria-hidden="true">
-        {plugin.name.slice(0, 1).toUpperCase()}
+        {storeName(plugin).slice(0, 1).toUpperCase()}
       </span>
     );
   }
@@ -168,18 +160,23 @@ export function StoreAnmeldung() {
   const [start, setStart] = useState<StoreLoginStart | null>(null);
   const [fehler, setFehler] = useState("");
   const abfrage = useRef<number | null>(null);
+  // Jede Anmeldung bekommt eine Nummer. Eine Nachfrage, die beim Abbrechen
+  // noch unterwegs war, stellt sich danach nicht wieder neu.
+  const runde = useRef(0);
 
   // Ohne dieses Aufräumen liefe die Nachfrage weiter, wenn die Ansicht
   // gewechselt wird — und schriebe irgendwann in eine Komponente, die es
   // nicht mehr gibt.
   useEffect(
     () => () => {
+      runde.current += 1;
       if (abfrage.current) window.clearTimeout(abfrage.current);
     },
     [],
   );
 
   function beende() {
+    runde.current += 1;
     if (abfrage.current) window.clearTimeout(abfrage.current);
     abfrage.current = null;
   }
@@ -187,8 +184,10 @@ export function StoreAnmeldung() {
   async function anmelden() {
     setFehler("");
     beende();
+    const diese = runde.current;
     try {
       const begonnen = await api.storeLogin();
+      if (diese !== runde.current) return;
       setStart(begonnen);
 
       // Kein festes Intervall, sondern ein Kreislauf, der sich selbst neu
@@ -201,6 +200,7 @@ export function StoreAnmeldung() {
       const nachfragen = async () => {
         try {
           const antwort = await api.storeLoginPoll(begonnen.device_code);
+          if (diese !== runde.current) return;
           if (antwort.status === "ok") {
             beende();
             setStart(null);
@@ -212,6 +212,7 @@ export function StoreAnmeldung() {
           }
           abfrage.current = window.setTimeout(() => void nachfragen(), abstand);
         } catch (exc) {
+          if (diese !== runde.current) return;
           beende();
           setStart(null);
           setFehler(exc instanceof Error ? exc.message : String(exc));
@@ -220,13 +221,18 @@ export function StoreAnmeldung() {
 
       abfrage.current = window.setTimeout(() => void nachfragen(), abstand);
     } catch (exc) {
+      if (diese !== runde.current) return;
       setFehler(exc instanceof Error ? exc.message : String(exc));
     }
   }
 
   async function abmelden() {
-    await api.storeLogout();
-    await ladeKonto();
+    try {
+      await api.storeLogout();
+      await ladeKonto();
+    } catch (exc) {
+      setFehler(exc instanceof Error ? exc.message : String(exc));
+    }
   }
 
   if (start) {
@@ -237,6 +243,16 @@ export function StoreAnmeldung() {
         <a className="btn" href={start.verification_uri} target="_blank" rel="noreferrer noopener">
           {t("store.openGithub")}
         </a>
+        <button
+          type="button"
+          className="btn small"
+          onClick={() => {
+            beende();
+            setStart(null);
+          }}
+        >
+          {t("common.cancel")}
+        </button>
       </div>
     );
   }

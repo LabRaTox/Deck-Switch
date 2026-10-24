@@ -5,6 +5,8 @@ import { api } from "../api/client";
 import { localized } from "../i18n";
 import type { PluginInfo, StorePlugin } from "../types";
 import { Bewertung } from "./Bewertung";
+import { type Angaben, DetailAngaben } from "./DetailAngaben";
+import { PfadText } from "./PfadText";
 import { UiIcon } from "./UiIcon";
 
 /**
@@ -45,33 +47,28 @@ export function PluginDetail({
   /** Kann das Plugin Dials? Steht in den Aktionen, nicht im Manifestkopf. */
   const mitDials = manifest.actions.some((a) => a.inputs.includes("dial"));
 
-  const angaben: { schluessel: string; wert: string | null }[] = [
-    { schluessel: "type", wert: t(`plugins.types.${manifest.type}`) },
-    {
-      schluessel: "category",
-      wert: t(`plugins.categories.${manifest.category ?? "other"}`),
-    },
-    { schluessel: "version", wert: manifest.version },
-    { schluessel: "author", wert: manifest.author || null },
-    { schluessel: "license", wert: manifest.license || null },
-    {
-      schluessel: "downloads",
-      wert: storeEintrag ? String(storeEintrag.latest.downloads) : null,
-    },
-    {
-      schluessel: "actions",
-      // Bei einem Schoner stünde hier dauerhaft „0 Aktionen".
-      // Nur die Zahl: Die Zeile heißt schon „Aktionen", und „15 Aktionen"
-      // daneben sagt dasselbe zweimal.
-      wert: manifest.type === "action" ? String(manifest.actions.length) : null,
-    },
-    {
-      schluessel: "dials",
-      wert:
-        manifest.type === "action" ? t(mitDials ? "common.yes" : "common.no") : null,
-    },
-    { schluessel: "source", wert: t(plugin.builtin ? "plugins.builtin" : "plugins.installed") },
-  ];
+  // Größe, Datum und Mindestversion kennt nur der Store. Übernommen werden
+  // sie nur, wenn dort genau die installierte Fassung liegt; sonst stünden
+  // hier Angaben einer anderen Fassung.
+  const imStore = storeEintrag?.latest.version === manifest.version ? storeEintrag.latest : null;
+
+  const angaben: Angaben = {
+    type: t(`plugins.types.${manifest.type}`),
+    category: t(`plugins.categories.${manifest.category ?? "other"}`),
+    version: manifest.version,
+    author: manifest.author || null,
+    license: manifest.license || null,
+    downloads: storeEintrag ? String(storeEintrag.latest.downloads) : null,
+    released: imStore ? new Date(imStore.released_at).toLocaleDateString() : null,
+    size: imStore ? `${Math.max(1, Math.round(imStore.size / 1024))} KB` : null,
+    minApp: imStore?.min_app_version ?? null,
+    // Bei einem Schoner stünde hier dauerhaft „0“. Nur die Zahl: Die Zeile
+    // heißt schon „Aktionen“.
+    actions: manifest.type === "action" ? String(manifest.actions.length) : null,
+    dials: manifest.type === "action" ? t(mitDials ? "common.yes" : "common.no") : null,
+    source: t(plugin.builtin ? "plugins.builtin" : "plugins.installed"),
+    support: manifest.support || null,
+  };
 
   return (
     <div className="plugin-detail">
@@ -137,7 +134,9 @@ export function PluginDetail({
           )}
 
           <h3>{t("plugins.overview")}</h3>
-          <p className="detail-text">{beschreibung || t("plugins.noDescription")}</p>
+          <p className="detail-text">
+            {beschreibung ? <PfadText text={beschreibung} /> : t("plugins.noDescription")}
+          </p>
 
           {changelog && (
             <>
@@ -151,29 +150,7 @@ export function PluginDetail({
 
         <aside className="detail-angaben">
           <h3>{t("plugins.details")}</h3>
-          <dl>
-            {angaben
-              .filter((eintrag) => eintrag.wert)
-              .map((eintrag) => (
-                <div key={eintrag.schluessel} className="detail-zeile">
-                  <dt>{t(`plugins.detail.${eintrag.schluessel}`)}</dt>
-                  <dd>{eintrag.wert}</dd>
-                </div>
-              ))}
-            {manifest.support && (
-              <div className="detail-zeile">
-                <dt>{t("plugins.detail.support")}</dt>
-                <dd>
-                  {/* Eine fremde Adresse aus einem Manifest: neues Fenster,
-                      und ohne Zugriff auf das aufrufende — sonst könnte die
-                      Zielseite hierher zurückgreifen. */}
-                  <a href={manifest.support} target="_blank" rel="noreferrer noopener">
-                    {t("plugins.detail.openSupport")}
-                  </a>
-                </dd>
-              </div>
-            )}
-          </dl>
+          <DetailAngaben angaben={angaben} />
           {storeEintrag && <Bewertung slug={storeEintrag.slug} />}
         </aside>
       </div>

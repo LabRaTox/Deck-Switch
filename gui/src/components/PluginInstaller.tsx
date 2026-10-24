@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { useAblegefeld } from "../lib/abgelegt";
 import { useStore } from "../store";
 
 /**
@@ -21,8 +22,16 @@ export function PluginInstaller({ onInstalled }: { onInstalled?: () => void } = 
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(
     null,
   );
-  const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Wer den Dialog vorher selbst schließt, soll nicht 1,2 s später noch
+  // einmal ``onInstalled`` abbekommen.
+  const schliessUhr = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (schliessUhr.current) window.clearTimeout(schliessUhr.current);
+    },
+    [],
+  );
 
   const run = async (task: () => Promise<{ installed: string }>) => {
     setBusy(true);
@@ -32,7 +41,10 @@ export function PluginInstaller({ onInstalled }: { onInstalled?: () => void } = 
       await load();
       setMessage({ kind: "ok", text: t("plugins.installed", { name: result.installed }) });
       setUrl("");
-      if (onInstalled) window.setTimeout(onInstalled, 1200);
+      if (onInstalled) {
+        if (schliessUhr.current) window.clearTimeout(schliessUhr.current);
+        schliessUhr.current = window.setTimeout(onInstalled, 1200);
+      }
     } catch (error) {
       setMessage({
         kind: "error",
@@ -42,6 +54,13 @@ export function PluginInstaller({ onInstalled }: { onInstalled?: () => void } = 
       setBusy(false);
     }
   };
+
+  const ablegen = useAblegefeld({
+    onDateien: ([file]) => {
+      if (file) void run(() => api.installPlugin(file));
+    },
+    onFehler: (text) => setMessage({ kind: "error", text }),
+  });
 
   return (
     <section className="installer">
@@ -72,19 +91,10 @@ export function PluginInstaller({ onInstalled }: { onInstalled?: () => void } = 
       </div>
 
       <div
-        className={dragging ? "dropzone dragging" : "dropzone"}
+        ref={ablegen.ref}
+        className={ablegen.ueber ? "dropzone dragging" : "dropzone"}
         onClick={() => fileInput.current?.click()}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragging(false);
-          const file = event.dataTransfer.files?.[0];
-          if (file) void run(() => api.installPlugin(file));
-        }}
+        {...ablegen.props}
       >
         {busy ? t("plugins.installing") : t("plugins.dropArchive")}
         <input

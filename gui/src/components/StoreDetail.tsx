@@ -4,6 +4,9 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { StorePlugin } from "../types";
 import { Bewertung } from "./Bewertung";
+import { type Angaben, DetailAngaben } from "./DetailAngaben";
+import { PfadText } from "./PfadText";
+import { storeAenderungen, storeBeschreibung, storeName } from "./storeTexte";
 import { UiIcon } from "./UiIcon";
 import { Warnungen } from "./StoreView";
 
@@ -34,7 +37,7 @@ export function StoreDetail({
   onInstallieren: (plugin: StorePlugin) => void;
   onBack: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [plugin, setPlugin] = useState<StorePlugin | null>(bekannt);
   const [fehler, setFehler] = useState("");
   const [grosses, setGrosses] = useState(0);
@@ -74,17 +77,23 @@ export function StoreDetail({
   const bilder = neueste.screenshot_urls ?? [];
   const fassungen = plugin.versions ?? [];
 
-  const angaben: { schluessel: string; wert: string | null }[] = [
-    { schluessel: "type", wert: t(`plugins.types.${plugin.kind}`) },
-    { schluessel: "category", wert: t(`plugins.categories.${plugin.category}`) },
-    { schluessel: "version", wert: neueste.version },
-    { schluessel: "author", wert: plugin.author },
-    { schluessel: "license", wert: plugin.license },
-    { schluessel: "downloads", wert: String(neueste.downloads) },
-    { schluessel: "size", wert: `${Math.max(1, Math.round(neueste.size / 1024))} KB` },
-    { schluessel: "released", wert: new Date(neueste.released_at).toLocaleDateString() },
-    { schluessel: "minApp", wert: neueste.min_app_version },
-  ];
+  const angaben: Angaben = {
+    type: t(`plugins.types.${plugin.kind}`),
+    category: t(`plugins.categories.${plugin.category}`),
+    version: neueste.version,
+    author: plugin.author,
+    license: plugin.license,
+    downloads: String(neueste.downloads),
+    released: new Date(neueste.released_at).toLocaleDateString(),
+    size: `${Math.max(1, Math.round(neueste.size / 1024))} KB`,
+    minApp: neueste.min_app_version,
+    // Ältere Stores liefern beides nicht, dann fällt die Zeile weg.
+    actions: neueste.actions != null ? String(neueste.actions) : null,
+    dials: neueste.dials != null ? t(neueste.dials ? "common.yes" : "common.no") : null,
+    source: t("store.tag"),
+    // Der Store legt das Feld `support` aus dem Manifest als `source_url` ab.
+    support: plugin.source_url,
+  };
 
   return (
     <div className="plugin-detail">
@@ -98,11 +107,13 @@ export function StoreDetail({
             alt=""
           />
         ) : (
-          <span className="detail-icon platzhalter">{plugin.name.slice(0, 1).toUpperCase()}</span>
+          <span className="detail-icon platzhalter">
+            {storeName(plugin, i18n.language).slice(0, 1).toUpperCase()}
+          </span>
         )}
         <div>
           <small className="detail-kategorie">{t(`plugins.categories.${plugin.category}`)}</small>
-          <h2>{plugin.name}</h2>
+          <h2>{storeName(plugin, i18n.language)}</h2>
           <small className="detail-autor">{t("plugins.by", { author: plugin.author })}</small>
         </div>
         <div className="detail-kopf-knoepfe">
@@ -114,16 +125,6 @@ export function StoreDetail({
           >
             {laeuft ? t("store.installing") : t("store.install")}
           </button>
-          {plugin.source_url && (
-            <a
-              className="btn"
-              href={plugin.source_url}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              {t("store.source")}
-            </a>
-          )}
         </div>
       </header>
 
@@ -161,16 +162,18 @@ export function StoreDetail({
           <h3>{t("plugins.overview")}</h3>
           {/* Die lange Beschreibung steht nur in der Einzelansicht; bis sie
               da ist, steht die eine Zeile aus der Liste. */}
-          <p className="detail-text">{plugin.description || plugin.summary}</p>
+          <p className="detail-text">
+            <PfadText text={storeBeschreibung(plugin, i18n.language)} />
+          </p>
 
           {/* Vor der Installation, nicht danach: Was ein Plugin tut, soll man
               wissen, bevor es auf dem Rechner liegt. */}
           {neueste.warnings.length > 0 && <Warnungen warnungen={neueste.warnings} />}
 
-          {neueste.changelog && (
+          {storeAenderungen(neueste, i18n.language) && (
             <>
               <h3>{t("plugins.whatsNew")}</h3>
-              <p className="detail-text">{neueste.changelog}</p>
+              <p className="detail-text">{storeAenderungen(neueste, i18n.language)}</p>
             </>
           )}
 
@@ -189,7 +192,7 @@ export function StoreDetail({
                         ? ` · ${t(`store.status.${v.state}`)}`
                         : ""}
                     </span>
-                    {v.note && <span className="hint"> — {v.note}</span>}
+                    {v.note && <span className="hint"> · {v.note}</span>}
                   </li>
                 ))}
               </ul>
@@ -199,16 +202,7 @@ export function StoreDetail({
 
         <aside className="detail-angaben">
           <h3>{t("plugins.details")}</h3>
-          <dl>
-            {angaben
-              .filter((eintrag) => eintrag.wert)
-              .map((eintrag) => (
-                <div key={eintrag.schluessel} className="detail-zeile">
-                  <dt>{t(`plugins.detail.${eintrag.schluessel}`)}</dt>
-                  <dd>{eintrag.wert}</dd>
-                </div>
-              ))}
-          </dl>
+          <DetailAngaben angaben={angaben} />
           <Bewertung slug={plugin.slug} />
         </aside>
       </div>

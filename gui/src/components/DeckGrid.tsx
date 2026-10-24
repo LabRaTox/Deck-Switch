@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { localized } from "../i18n";
-import { useStore } from "../store";
+import { useStore, vorschauStand } from "../store";
 import type { ActionDescriptor, InputType, PluginInfo, Slot } from "../types";
 import { DRAG_MIME, type ActionDragPayload } from "./ActionLibrary";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
@@ -152,8 +152,10 @@ function SlotTile({
   const [dropActive, setDropActive] = useState(false);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
 
-  const pageId = useStore((s) => s.currentPageId);
-  const previewVersion = useStore((s) => s.previewVersion);
+  // Die Seite, die auch ``slotAt`` zeigt: Steht die gemerkte ID nicht im
+  // Profil, fällt beides auf die Startseite zurück, statt auseinanderzulaufen.
+  const pageId = useStore((s) => s.currentPage()?.id ?? s.currentPageId);
+  const previewVersion = useStore((s) => vorschauStand(s, pageId, inputType, index));
   const selection = useStore((s) => s.selection);
   const select = useStore((s) => s.select);
   const plugins = useStore((s) => s.plugins);

@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { localized } from "../i18n";
 import { useStore } from "../store";
 import type { ScreensaverEntry } from "../types";
+import { NumberField } from "./NumberField";
 
 /**
  * Bildschirmschoner-Einstellungen.
@@ -185,41 +186,5 @@ export function ScreensaverCard() {
         <p className={message.kind === "ok" ? "saved-hint" : "error-text"}>{message.text}</p>
       )}
     </section>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  help,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  help?: string;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="field">
-      <label>{label}</label>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(event) => {
-          const next = Number(event.target.value);
-          if (!Number.isNaN(next)) onChange(Math.min(max, Math.max(min, next)));
-        }}
-      />
-      {help && <small className="help">{help}</small>}
-    </div>
   );
 }

@@ -35,6 +35,7 @@ import type {
   TouchWallpaper,
   WallpaperEntry,
 } from "../types";
+import i18n from "../i18n";
 
 const DEFAULT_BASE = "http://127.0.0.1:8770";
 
@@ -85,11 +86,16 @@ export function getActiveDeck(): string {
   return activeDeck;
 }
 
-/** Hängt das aktive Deck an eine Adresse — als erster oder weiterer Parameter. */
-function withDeck(path: string): string {
-  if (!activeDeck) return path;
+/**
+ * Hängt ein Deck an eine Adresse — als erster oder weiterer Parameter.
+ *
+ * Ohne Angabe das aktive. Wer erst später schickt, gibt das Deck mit: Bis
+ * dahin kann der Editor schon auf ein anderes umgeschaltet haben.
+ */
+function withDeck(path: string, deck: string = activeDeck): string {
+  if (!deck) return path;
   const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}deck=${encodeURIComponent(activeDeck)}`;
+  return `${path}${separator}deck=${encodeURIComponent(deck)}`;
 }
 
 export class ApiError extends Error {
@@ -118,7 +124,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     });
   } catch {
-    throw new ApiError(`Backend nicht erreichbar (${API_BASE})`, 0);
+    throw new ApiError(i18n.t("errors.backendUnreachable", { url: API_BASE }), 0);
   }
 
   if (!response.ok) {
@@ -343,8 +349,9 @@ export const api = {
   updatePage: (
     pageId: string,
     patch: { name?: string; parent_id?: string; touch_wallpaper?: TouchWallpaper },
+    deck?: string,
   ) =>
-    request<Page>(withDeck(`/api/pages/${pageId}`), {
+    request<Page>(withDeck(`/api/pages/${pageId}`, deck), {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
@@ -368,9 +375,15 @@ export const api = {
 
   // -- Belegungen ---------------------------------------------------------
 
-  putSlot: (pageId: string, inputType: string, index: number, slot: Slot | null) =>
+  putSlot: (
+    pageId: string,
+    inputType: string,
+    index: number,
+    slot: Slot | null,
+    deck?: string,
+  ) =>
     request<{ ok: boolean }>(
-      withDeck(`/api/pages/${pageId}/slots/${inputType}/${index}`),
+      withDeck(`/api/pages/${pageId}/slots/${inputType}/${index}`, deck),
       {
         method: "PUT",
         body: JSON.stringify({ slot }),
@@ -487,7 +500,7 @@ export const api = {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new ApiError(body?.detail ?? "Installation fehlgeschlagen", response.status);
+      throw new ApiError(body?.detail ?? i18n.t("errors.installFailed"), response.status);
     }
     return (await response.json()) as { installed: string; version: string };
   },
@@ -504,8 +517,11 @@ export const api = {
       body: JSON.stringify({ order }),
     }),
 
+  /** Nachsehen, was auf der Platte neu, anders oder weg ist — je Kennung. */
   reloadPlugins: () =>
-    request<{ plugins: PluginInfo[] }>("/api/plugins/reload", { method: "POST" }),
+    request<{ neu: string[]; weg: string[]; geaendert: string[] }>("/api/plugins/reload", {
+      method: "POST",
+    }),
 
   // -- Plugin-Store ---------------------------------------------------------
 
@@ -644,7 +660,7 @@ export const api = {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new ApiError(body?.detail ?? "Upload fehlgeschlagen", response.status);
+      throw new ApiError(body?.detail ?? i18n.t("errors.uploadFailed"), response.status);
     }
     return (await response.json()) as { filename: string; url: string };
   },
@@ -656,7 +672,7 @@ export const api = {
     pageId: string,
     inputType: string,
     index: number,
-    version = 0,
+    version: number | string = 0,
     /** Bei einem Dial-Stack: welcher Eintrag gezeigt werden soll. */
     entry?: number,
   ) =>
@@ -783,8 +799,10 @@ export function connectEvents(
       }
     };
     socket.onclose = () => {
-      onStatus?.(false);
+      // Nach dem Abmelden meldet die alte Verbindung nichts mehr: Sonst
+      // stünde „offline" da, obwohl längst eine neue offen ist.
       if (closed) return;
+      onStatus?.(false);
       timer = window.setTimeout(open, delay);
       delay = Math.min(delay * 2, 15000);
     };

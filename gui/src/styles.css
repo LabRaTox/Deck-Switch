@@ -1597,6 +1597,14 @@ input[type="checkbox"] {
   line-height: 1.5;
 }
 
+.plugin-description.gekuerzt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
 .plugin-config {
   border-top: 1px solid var(--border);
   padding-top: 10px;
@@ -3408,33 +3416,7 @@ input[type="checkbox"] {
   font-size: 13px;
 }
 
-/* Einreichen und die eigenen Einreichungen. */
-.store-einreichen,
-.store-meine {
-  list-style: none;
-  margin: 8px 0 20px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.store-einreichen li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.store-meine li {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-}
-
+/* Kopf der Fassungsansicht beim Einreichen. */
 .store-meine-kopf {
   display: flex;
   align-items: baseline;
@@ -3497,13 +3479,122 @@ input[type="checkbox"] {
   font-size: 13px;
 }
 
+/* Eigene Einreichungen: links die Plugins, rechts die Fassungen des gewählten. */
+.einreichen-raster {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+.einreichen-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.einreichen-eintrag {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.einreichen-eintrag:hover {
+  border-color: var(--border-strong);
+}
+
+.einreichen-eintrag.aktiv {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.einreichen-eintrag-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.einreichen-eintrag-name .hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.einreichen-eintrag-stand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.einreichen-detail {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  min-height: 160px;
+}
+
+/* Feste Spalten: Datum und Downloads stehen bei jeder Fassung gleich. */
+.store-fassungen.fest {
+  table-layout: fixed;
+}
+
+.store-fassungen.fest th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.store-fassungen.fest tbody + tbody tr:first-child td {
+  border-top: 1px solid var(--border);
+}
+
+.store-fassungen.fest td {
+  padding: 6px 8px 6px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.store-fassung-notiz td {
+  padding-top: 0;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 700px) {
+  .einreichen-raster {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Das Feld zum Einreichen. Ziehen oder klicken — beides führt zum selben. */
 .ablegefeld {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 28px 16px;
+  padding: 16px;
   margin: 8px 0;
   border: 2px dashed var(--border-strong);
   border-radius: var(--radius);

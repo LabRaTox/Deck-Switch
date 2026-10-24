@@ -13,8 +13,8 @@ import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { Wordmark } from "./components/Wordmark";
 import i18n from "./i18n";
-import { useStore } from "./store";
-import type { BackendError, DeviceInfo } from "./types";
+import { echosVergessen, istEigenesEcho, seitenEcho, slotEcho, useStore } from "./store";
+import type { BackendError, DeckInfo, DeviceInfo } from "./types";
 
 export default function App() {
   const { t } = useTranslation();
@@ -24,7 +24,10 @@ export default function App() {
   const language = useStore((s) => s.config?.app.language);
 
   useEffect(() => {
-    void useStore.getState().load();
+    void useStore
+      .getState()
+      .load()
+      .catch(() => undefined);
     // Einmal beim Start und dann alle fünf Minuten: Eine wartende Einreichung
     // ist nichts, was auf die Sekunde ankommt — aber sie soll auffallen, ohne
     // dass jemand die App neu startet.
@@ -52,17 +55,31 @@ export default function App() {
             // Decks gleichzeitig aufgefallen.
             const info = event.data as unknown as DeviceInfo;
             const gemeint = String((info as { id?: string }).id ?? "");
+            // Der Zustand gehört in jedem Fall in die Deckliste, damit
+            // Verbindungspunkte und Namen stimmen.
+            const decks = gemeint
+              ? store.decks.map((deck) => (deck.id === gemeint ? { ...deck, ...info } : deck))
+              : store.decks;
             if (gemeint && gemeint !== store.activeDeck) {
-              // Fremdes Deck: Der Zustand gehört trotzdem in die Deckliste,
-              // damit Verbindungspunkte und Namen stimmen.
-              useStore.setState({
-                decks: store.decks.map((deck) =>
-                  deck.id === gemeint ? { ...deck, ...info } : deck,
-                ),
-              });
+              useStore.setState({ decks });
               break;
             }
-            useStore.setState({ device: info });
+            useStore.setState({ decks, device: info });
+            break;
+          }
+          case "decks_changed":
+            // Deck angesteckt oder vergessen, Overlay per Kurzbefehl
+            // umgeschaltet: Das kommt nur hier an, nicht als Config-Änderung.
+            if (Array.isArray(event.data.decks)) {
+              store.setDecks(event.data.decks as DeckInfo[]);
+            }
+            break;
+          case "deck_state": {
+            // Ein Dial-Stack hat am Gerät weitergeschaltet.
+            if (String(event.data.deck ?? "") !== store.activeDeck) break;
+            const seite = String(event.data.page_id ?? "");
+            const dial = Number(event.data.dial);
+            if (seite && Number.isInteger(dial)) store.bumpTile(seite, "dial", dial);
             break;
           }
           case "page_changed": {
@@ -72,10 +89,7 @@ export default function App() {
             // suchen: Dessen Seiten-ID gibt es im bearbeiteten Profil gar
             // nicht, und die Ansicht stünde vor einer leeren Seite.
             const gemeint = String(event.data.deck ?? "");
-            if (gemeint && gemeint !== store.activeDeck) {
-              store.bumpPreview();
-              break;
-            }
+            if (gemeint && gemeint !== store.activeDeck) break;
             useStore.setState({
               currentPageId: String(event.data.page_id ?? ""),
               selection: null,
@@ -83,9 +97,29 @@ export default function App() {
             store.bumpPreview();
             break;
           }
-          case "config_changed":
-            void store.load();
+          case "config_changed": {
+            // Die eigenen Änderungen meldet das Backend auch zurück. Die
+            // stehen lokal schon, ein Neuladen brächte nur Last und könnte
+            // überschreiben, was gerade getippt wird.
+            const grund = String(event.data.reason ?? "");
+            const seite = String(event.data.page_id ?? "");
+            if (
+              grund === "slot_changed" &&
+              istEigenesEcho(
+                slotEcho(
+                  String(event.data.deck ?? ""),
+                  seite,
+                  String(event.data.input_type ?? ""),
+                  Number(event.data.index),
+                ),
+              )
+            ) {
+              break;
+            }
+            if (grund === "page_updated" && istEigenesEcho(seitenEcho(seite))) break;
+            store.ladeBald();
             break;
+          }
           case "plugin_error":
             if (event.data.cleared) useStore.setState({ errors: [] });
             else store.pushError(event.data as unknown as BackendError);
@@ -110,7 +144,14 @@ export default function App() {
       },
       (isOnline) => {
         useStore.getState().setOnline(isOnline);
-        if (isOnline) void useStore.getState().load();
+        if (isOnline) {
+          // Was vor dem Abriss unterwegs war, wird nie mehr gemeldet.
+          echosVergessen();
+          void useStore
+            .getState()
+            .load()
+            .catch(() => undefined);
+        }
       },
     );
     return () => {

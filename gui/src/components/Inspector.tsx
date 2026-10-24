@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api, SYSTEM_ICONSET } from "../api/client";
 import { localized } from "../i18n";
-import { useStore } from "../store";
+import { useStore, vorschauStand } from "../store";
 import type { ActionDescriptor, IconRef, InputType, Slot, Step } from "../types";
 import { ActionPicker, defaultAction } from "./ActionPicker";
 import { BackgroundEditor } from "./BackgroundEditor";
@@ -37,8 +37,10 @@ export function Inspector() {
   const selection = useStore((s) => s.selection);
   const slot = useStore((s) => s.slotAt(s.selection));
   const plugins = useStore((s) => s.plugins);
-  const pageId = useStore((s) => s.currentPageId);
-  const previewVersion = useStore((s) => s.previewVersion);
+  const pageId = useStore((s) => s.currentPage()?.id ?? s.currentPageId);
+  const previewVersion = useStore((s) =>
+    s.selection ? vorschauStand(s, pageId, s.selection.inputType, s.selection.index) : "",
+  );
   const updateSlot = useStore((s) => s.updateSelectedSlot);
   const setSlot = useStore((s) => s.setSlot);
   const settings = useStore((s) => s.deckSettings());
@@ -75,7 +77,9 @@ export function Inspector() {
         <div className="panel-head">
           <h2>{t("inspector.title")}</h2>
           <span className="badge">
-            {selection.inputType === "key" ? "Taste" : "Dial"} {selection.index + 1}
+            {t(selection.inputType === "key" ? "inspector.badgeKey" : "inspector.badgeDial", {
+              number: selection.index + 1,
+            })}
           </span>
         </div>
         <p className="empty-note">{t("inspector.empty")}</p>
@@ -149,7 +153,9 @@ export function Inspector() {
       <div className="panel-head">
         <h2>{t("inspector.title")}</h2>
         <span className="badge">
-          {inputType === "key" ? "Taste" : "Dial"} {selection.index + 1}
+          {t(inputType === "key" ? "inspector.badgeKey" : "inspector.badgeDial", {
+            number: selection.index + 1,
+          })}
         </span>
       </div>
 
@@ -737,7 +743,7 @@ function StackSection({
 }) {
   const { t, i18n } = useTranslation();
   const plugins = useStore((s) => s.plugins);
-  const bumpPreview = useStore((s) => s.bumpPreview);
+  const bumpTile = useStore((s) => s.bumpTile);
 
   const name = (entry: Slot) => {
     const plugin = plugins.find((p) => p.id === entry.plugin_id);
@@ -814,7 +820,7 @@ function StackSection({
             onClick={() => {
               void api
                 .cycleStack(pageId, index)
-                .then(() => bumpPreview())
+                .then(() => bumpTile(pageId, "dial", index))
                 .catch(() => undefined);
             }}
           >

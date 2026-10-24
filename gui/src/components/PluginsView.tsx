@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
@@ -18,6 +18,7 @@ import { YouTubeVerbinden } from "./YouTubeVerbinden";
 import { UiIcon } from "./UiIcon";
 import { StoreEinreichen } from "./StoreEinreichen";
 import { StoreAnmeldung, StoreKarte, StoreHinweis } from "./StoreView";
+import { storeName } from "./storeTexte";
 
 /**
  * Ein Eintrag der Liste: entweder etwas Installiertes oder etwas aus dem
@@ -70,16 +71,24 @@ export function PluginsView() {
 
   useEffect(() => {
     void (async () => {
-      try {
-        const antwort = await api.storeCatalog("", "");
-        setKatalog(antwort.plugins);
-      } catch (exc) {
-        setKatalog([]);
-        setStoreFehler(exc instanceof Error ? exc.message : String(exc));
-      }
+      await ladeKatalog();
       await ladeUpdates();
     })();
   }, []);
+
+  /** Der Katalog des Stores. Zurück kommt er auch, für den Vergleich danach. */
+  async function ladeKatalog(): Promise<StorePlugin[]> {
+    try {
+      const antwort = await api.storeCatalog("", "");
+      setKatalog(antwort.plugins);
+      setStoreFehler("");
+      return antwort.plugins;
+    } catch (exc) {
+      setKatalog([]);
+      setStoreFehler(exc instanceof Error ? exc.message : String(exc));
+      return [];
+    }
+  }
 
   /**
    * Was im Store neuer vorliegt, rechnet das Backend aus.
@@ -88,13 +97,51 @@ export function PluginsView() {
    * richtigen Antwort, und die soll an einer Stelle stehen und geprüft
    * sein. Die Oberfläche stellt nur dar, was dabei herauskommt.
    */
-  async function ladeUpdates() {
+  async function ladeUpdates(): Promise<StoreUpdate[]> {
     try {
       const antwort = await api.storeUpdates();
       setUpdates(antwort.updates);
+      return antwort.updates;
     } catch {
       setUpdates([]);
+      return [];
     }
+  }
+
+  /**
+   * „Nach neuen Plugins sehen“: die Platte, der Katalog und die Updates.
+   *
+   * Bis zum 2026-10-11 sah der Knopf nur auf der Platte nach. Das Backend
+   * leerte dabei zwar den Katalog-Zwischenspeicher, die Oberfläche holte
+   * den Katalog aber nie neu — ein frisch freigegebenes Plugin oder Update
+   * erschien erst, wenn man die Ansicht verließ. Und weil der Knopf nichts
+   * meldete, sah ein Klick aus wie keiner.
+   */
+  async function seheNach() {
+    setLaeuft("__nachsehen");
+    setMeldung("");
+    const vorher = new Set((katalog ?? []).map((p) => p.slug));
+    const teile: string[] = [];
+    try {
+      const platte = await reloadPlugins();
+      if (platte.neu.length) teile.push(t("plugins.checkNew", { names: platte.neu.join(", ") }));
+      if (platte.geaendert.length) {
+        teile.push(t("plugins.checkChanged", { names: platte.geaendert.join(", ") }));
+      }
+      if (platte.weg.length) teile.push(t("plugins.checkGone", { names: platte.weg.join(", ") }));
+    } catch (exc) {
+      setStoreFehler(exc instanceof Error ? exc.message : String(exc));
+    }
+    const nachher = await ladeKatalog();
+    const neuImStore = nachher.filter((p) => !vorher.has(p.slug));
+    // Beim allerersten Laden war der Katalog leer — dann ist nicht alles „neu“.
+    if (katalog !== null && neuImStore.length) {
+      teile.push(t("plugins.checkStore", { names: neuImStore.map((p) => p.name).join(", ") }));
+    }
+    const offen = await ladeUpdates();
+    if (offen.length) teile.push(t("plugins.checkUpdates", { count: offen.length }));
+    setMeldung(teile.length ? teile.join(" · ") : t("plugins.checkNothing"));
+    setLaeuft("");
   }
 
   async function installiere(eintrag: StorePlugin) {
@@ -104,7 +151,7 @@ export function PluginsView() {
     try {
       const ergebnis = await api.storeInstall(eintrag.slug);
       await reloadPlugins();
-      setMeldung(t("store.installed", { name: eintrag.name, version: ergebnis.version }));
+      setMeldung(t("store.installed", { name: storeName(eintrag), version: ergebnis.version }));
       // Aus der Store-Detailansicht heraus zurück in die Liste: Das Plugin
       // liegt jetzt auf dem Rechner, die Seite zeigte aber weiter den
       // Katalogeintrag samt Knopf „Installieren" — als wäre nichts geschehen.
@@ -237,9 +284,10 @@ export function PluginsView() {
             type="button"
             className="btn"
             title={t("plugins.reloadHint")}
-            onClick={() => void reloadPlugins()}
+            disabled={laeuft === "__nachsehen"}
+            onClick={() => void seheNach()}
           >
-            {t("plugins.reload")}
+            {laeuft === "__nachsehen" ? t("plugins.checking") : t("plugins.reload")}
           </button>
           <button
             type="button"
@@ -255,7 +303,7 @@ export function PluginsView() {
         <div className="update-balken">
           <span>
             {t("store.updatesAvailable", { count: updates.length })}
-            {" — "}
+            {": "}
             {updates.map((u) => `${u.name} ${u.installed} → ${u.available}`).join(", ")}
           </span>
           {updates.some((u) => !u.usable) && (
@@ -452,7 +500,7 @@ function ConnectionDot({ status }: { status: PluginInfo["status"] }) {
     <span
       className={status.connected ? "status-dot online" : "status-dot offline"}
       title={`${status.connected ? t("plugins.connected") : t("plugins.disconnected")}${
-        status.detail ? ` — ${status.detail}` : ""
+        status.detail ? ` · ${status.detail}` : ""
       }`}
     />
   );
@@ -494,14 +542,35 @@ function PluginCard({
     await setPluginConfig(plugin.id, draft);
     setDirty(false);
     setSaved(true);
+    setSpeicherFehler("");
+  }
+
+  /** Speichern mit Meldung im Dialog. ``false``, wenn es nicht geklappt hat. */
+  async function speichere(): Promise<boolean> {
+    try {
+      await uebernimm();
+      return true;
+    } catch (error) {
+      setSaved(false);
+      setSpeicherFehler(error instanceof Error ? error.message : String(error));
+      return false;
+    }
   }
   const [dirty, setDirty] = useState(false);
   const [open, setOpen] = useState(false);
+  const [speicherFehler, setSpeicherFehler] = useState("");
+  // Für den Effekt darunter: Er soll nur zurücksetzen, solange nichts
+  // Ungespeichertes im Formular steht.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
 
   // Vorgabewerte aus dem Schema mit übernehmen: im Formular stehen sie
   // ohnehin sichtbar drin, also sollen sie auch so gespeichert werden — sonst
   // hängt das Verhalten an Fallbacks tief im Plugin.
+  // Die Plugin-Liste kommt bei jedem Statuswechsel neu, ``plugin.config``
+  // ist dann ein neues Objekt. Was gerade eingetippt wird, bleibt stehen.
   useEffect(() => {
+    if (dirtyRef.current) return;
     const withDefaults: Record<string, unknown> = {};
     for (const field of plugin.manifest.config_schema) {
       if (field.default !== null && field.default !== undefined) {
@@ -598,9 +667,18 @@ function PluginCard({
         </label>
       </div>
 
-      <p className="plugin-description">
-        {localized(plugin.manifest.description, i18n.language)}
-      </p>
+      {/* Die Übersicht bekommt nur den Kurzsatz. Die volle Beschreibung
+          steht in der Detailansicht; ohne Kurzsatz kürzt das CSS sie auf
+          zwei Zeilen. */}
+      {plugin.manifest.summary ? (
+        <p className="plugin-description">
+          <PfadText text={localized(plugin.manifest.summary, i18n.language)} />
+        </p>
+      ) : (
+        <p className="plugin-description gekuerzt">
+          <PfadText text={localized(plugin.manifest.description, i18n.language)} />
+        </p>
+      )}
 
       {plugin.error && <p className="error-text">{plugin.error}</p>}
 
@@ -612,7 +690,7 @@ function PluginCard({
 
       {open && (
         <Modal
-          title={`${localized(plugin.manifest.name, i18n.language)} — ${t("plugins.config")}`}
+          title={`${localized(plugin.manifest.name, i18n.language)} · ${t("plugins.config")}`}
           width={560}
           onClose={async () => {
             // Ungespeichertes still wegzuwerfen wäre unhöflich. Gefragt wird
@@ -620,12 +698,15 @@ function PluginCard({
             // „Verwerfen?", wo ein Wegklicken die Arbeit vernichtet.
             if (dirty) {
               if (window.confirm(t("plugins.saveOnClose"))) {
-                await setPluginConfig(plugin.id, draft);
+                // Scheitert das Speichern, bleibt der Dialog offen und sagt
+                // warum. Sonst wäre die Eingabe still verloren.
+                if (!(await speichere())) return;
               } else {
                 setDraft(plugin.config);
               }
             }
             setDirty(false);
+            setSpeicherFehler("");
             setOpen(false);
           }}
           footer={
@@ -634,6 +715,7 @@ function PluginCard({
             plugin.manifest.config_schema.length > 0 ? (
               <>
                 {saved && <span className="saved-hint">{t("plugins.saved")}</span>}
+                {speicherFehler && <span className="error-text">{speicherFehler}</span>}
                 {/* Nicht ausgegraut, wenn nichts „geändert" ist. Ob eine
                     Eingabe als Änderung durchkommt, hängt daran, ob das Feld
                     ein Ereignis geschickt hat — beim Einfügen aus einem
@@ -644,11 +726,7 @@ function PluginCard({
                 <button
                   type="button"
                   className="btn primary"
-                  onClick={async () => {
-                    await setPluginConfig(plugin.id, draft);
-                    setDirty(false);
-                    setSaved(true);
-                  }}
+                  onClick={() => void speichere()}
                 >
                   {t("plugins.save")}
                 </button>
@@ -734,7 +812,14 @@ function DiscordConnect() {
       <button
         type="button"
         className="btn small"
-        onClick={() => void api.pluginCommand("discord", "forget").then(() => setStatus({}))}
+        onClick={() =>
+          void api
+            .pluginCommand("discord", "forget")
+            .then(() => setStatus({}))
+            .catch((error) =>
+              setStatus({ error: error instanceof Error ? error.message : String(error) }),
+            )
+        }
       >
         {t("plugins.discordForget")}
       </button>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api, SYSTEM_ICONSET } from "../api/client";
+import { useAblegefeld } from "../lib/abgelegt";
 import type { IconRef } from "../types";
 import { IconGlyph } from "./IconGlyph";
 import { Modal } from "./Modal";
@@ -77,7 +78,7 @@ export function IconPicker({ value, onChange, onClose, title }: Props) {
     onClose();
   };
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleFiles = async (files: ArrayLike<File> | null) => {
     if (!files?.length) return;
     setUploadError("");
     try {
@@ -92,6 +93,11 @@ export function IconPicker({ value, onChange, onClose, title }: Props) {
       );
     }
   };
+
+  const ablegen = useAblegefeld({
+    onDateien: (dateien) => void handleFiles(dateien),
+    onFehler: (text) => setUploadError(t("icons.uploadFailed", { error: text })),
+  });
 
   return (
     <Modal title={title ?? t("icons.title")} onClose={onClose} className="icon-picker" width={880}>
@@ -155,13 +161,10 @@ export function IconPicker({ value, onChange, onClose, title }: Props) {
       <section className="uploads">
         <h3>{t("icons.uploads")}</h3>
         <div
-          className="dropzone"
+          ref={ablegen.ref}
+          className={ablegen.ueber ? "dropzone dragging" : "dropzone"}
           onClick={() => fileInput.current?.click()}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            event.preventDefault();
-            void handleFiles(event.dataTransfer.files);
-          }}
+          {...ablegen.props}
         >
           {t("icons.dropOrClick")}
           <input

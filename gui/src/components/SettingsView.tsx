@@ -7,6 +7,7 @@ import { useStore } from "../store";
 import { ScreensaverCard } from "./ScreensaverCard";
 import { Wordmark } from "./Wordmark";
 import type { AutostartStatus, SessionCapabilities } from "../types";
+import { NumberField } from "./NumberField";
 
 /** App- und Geräteeinstellungen sowie Export/Import der Belegung. */
 export function SettingsView() {
@@ -144,10 +145,7 @@ export function SettingsView() {
             value={device.brightness}
             min={5}
             max={100}
-            onChange={(value) => {
-              void patchDeck((draft) => ({ ...draft, brightness: value }));
-              void api.setBrightness(value).catch(() => undefined);
-            }}
+            onChange={(value) => void patchDeck((draft) => ({ ...draft, brightness: value }))}
           />
         )}
 
@@ -527,7 +525,7 @@ function DecksCard() {
                   ? t("decks.virtual")
                   : imNetz
                     ? t("decks.network")
-                    : deck.deck_type || "—"}
+                    : deck.deck_type || "---"}
                 {!ohneGeraet && deck.serial ? ` · ${deck.serial}` : ""}
                 {ohneGeraet || deck.connected ? "" : ` · ${t("decks.notConnected")}`}
                 {/* Ohne Passwort steht das Deck still — das gehört in die
@@ -659,41 +657,5 @@ function AutostartField() {
       </small>
       {error && <p className="error-text">{error}</p>}
     </>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  help,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  help?: string;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="field">
-      <label>{label}</label>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(event) => {
-          const next = Number(event.target.value);
-          if (!Number.isNaN(next)) onChange(Math.min(max, Math.max(min, next)));
-        }}
-      />
-      {help && <small className="help">{help}</small>}
-    </div>
   );
 }

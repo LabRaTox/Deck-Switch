@@ -59,7 +59,7 @@ export function ActionPicker({
             if (plugin && first) onChange(plugin.id, first.id);
           }}
         >
-          {!selectedPlugin && <option value={pluginId}>{pluginId || "—"}</option>}
+          {!selectedPlugin && <option value={pluginId}>{pluginId || "---"}</option>}
           {usable.map((plugin) => (
             <option key={plugin.id} value={plugin.id}>
               {localized(plugin.manifest.name, i18n.language)}
@@ -75,7 +75,7 @@ export function ActionPicker({
           onChange={(event) => onChange(pluginId, event.target.value)}
         >
           {!actions.some((action) => action.id === actionId) && (
-            <option value={actionId}>{actionId || "—"}</option>
+            <option value={actionId}>{actionId || "---"}</option>
           )}
           {actions.map((action) => (
             <option key={action.id} value={action.id}>

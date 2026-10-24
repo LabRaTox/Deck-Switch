@@ -139,7 +139,7 @@ function Field({
             onChange(picked ? picked.value : event.target.value);
           }}
         >
-          <option value="">{loadingOptions ? "…" : "—"}</option>
+          <option value="">{loadingOptions ? "…" : "---"}</option>
           {options
             // Was diese Sitzung nicht hergibt, gehört nicht zur Auswahl.
             // Die *gewählte* bleibt aber stehen, auch wenn sie hier nichts
