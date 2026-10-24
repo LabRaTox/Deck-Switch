@@ -28,7 +28,6 @@ backend/
 gui/                     Tauri + Vite/React
 packaging/               udev-Regeln, systemd-Unit, URL-Handler
   overlay/               das virtuelle Deck als QML-Overlay
-plugin-sources/          Quellen der nachinstallierbaren Plugins
 scripts/                 Setup und Start (POSIX sh)
 docs/                    diese Dokumentation
 ```

@@ -16,6 +16,8 @@ _wache.sichere_umgebung()
 import asyncio, json, pathlib, stat, sys, threading, time
 
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources" / "discord"
+import _pluginlader  # noqa: E402
+_pluginlader.ueberspringe_ohne(PLUGIN_DIR)
 from deckswitch.plugins.base import Manifest, Services
 from deckswitch.config import default_config
 from _pluginlader import lade

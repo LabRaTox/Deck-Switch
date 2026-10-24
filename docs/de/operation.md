@@ -167,7 +167,6 @@ Beide nehmen entweder ein hochgeladenes Bild oder ein Plugin. Plugins dafür
 tragen `"type": "screensaver"` oder `"type": "wallpaper"` im Manifest, erben
 von `CanvasPlugin` und bekommen nur eine Leinwand. Wie das Ergebnis auf
 Tasten und Segmente verteilt wird, macht die App.
-`plugin-sources/clock-saver/` ist ein vollständiges Beispiel.
 
 ## Symbol in der Leiste
 

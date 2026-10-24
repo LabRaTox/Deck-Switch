@@ -25,6 +25,24 @@ from pathlib import Path
 from types import ModuleType
 
 
+def quelle_da(ordner: Path) -> bool:
+    """Ob die Quelle eines Store-Plugins neben dem Backend liegt.
+
+    Die Quellen der Store-Plugins gehören nicht zum Repository. Wer es nur
+    geklont hat, hat sie nicht; deren Prüfungen fallen dann weg.
+    """
+    if Path(ordner).is_dir():
+        return True
+    print(f"Übersprungen: {Path(ordner).name} liegt nicht vor ({ordner}).")
+    return False
+
+
+def ueberspringe_ohne(ordner: Path) -> None:
+    """Beendet die Suite ohne Fehler, wenn die Plugin-Quelle fehlt."""
+    if not quelle_da(ordner):
+        sys.exit(0)
+
+
 def lade(ordner: Path, *, name: str | None = None) -> ModuleType:
     """Die ``plugin.py`` aus ``ordner``, geladen als Paket."""
     ordner = Path(ordner).resolve()

@@ -86,8 +86,7 @@ safety net.
 
 ## Plugins to install afterwards
 
-These nine do not ship with the app. Their sources are in
-[plugin-sources/](../../plugin-sources/) though.
+These nine do not ship with the app. They come from the store.
 
 | Plugin | Actions |
 | --- | --- |

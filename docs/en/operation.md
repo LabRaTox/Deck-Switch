@@ -156,8 +156,7 @@ of it is 200 × 100, the same number Elgato's SDK gives.
 Both take either an uploaded image or a plugin. Plugins for this carry
 `"type": "screensaver"` or `"type": "wallpaper"` in the manifest, inherit
 from `CanvasPlugin` and get nothing but a canvas. How the result is spread
-across keys and segments is the app's job. `plugin-sources/clock-saver/` is a
-complete example.
+across keys and segments is the app's job.
 
 ## The tray icon
 

@@ -30,6 +30,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources" / "youtube"
+import _pluginlader  # noqa: E402
+_pluginlader.ueberspringe_ohne(PLUGIN_DIR)
 
 from _pluginlader import lade, nachbar  # noqa: E402
 

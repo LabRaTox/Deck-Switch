@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources" / "clocks"
+import _pluginlader  # noqa: E402
+_pluginlader.ueberspringe_ohne(PLUGIN_DIR)
 
 from PIL import Image  # noqa: E402
 

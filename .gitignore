@@ -23,14 +23,9 @@ gui/src-tauri/gen/schemas/
 # Lokale Laufzeitdaten
 *.log
 
-# Interne Planungsdokumente. Beide beschreiben Absichten, nicht den Stand
-# der Software — für Außenstehende wären sie eher irreführend als hilfreich.
-# Bleiben lokal.
-streamdeck-app-spec.md
-docs/marketplace-plan.md
+# Interne Unterlagen, die nicht veröffentlicht werden.
+intern/
 
-# Arbeitsunterlagen für den Entwickler: Spezifikation, Berichte, Ideen.
-# Sie nennen interne Abläufe und offene Punkte und bleiben deshalb lokal.
-AI-Usage-Integration*.md
-Bugsuche *.md
-Plugin-Ideen*.md
+# Quellen der Store-Plugins. Sie werden über den Store verteilt und gehören
+# nicht in dieses Repository.
+plugin-sources/

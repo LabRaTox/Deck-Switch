@@ -295,10 +295,14 @@ async def nachfragen_nach_fehler():
 def main() -> int:
     systemwerte()
     helligkeit()
-    wecker_unsichtbar()
-    wecker_restzeit()
-    fremde_player()
-    asyncio.run(nachfragen_nach_fehler())
+    # Die übrigen Fälle prüfen Store-Plugins, deren Quellen nicht zum
+    # Repository gehören.
+    from _pluginlader import quelle_da
+    if quelle_da(SOURCES):
+        wecker_unsichtbar()
+        wecker_restzeit()
+        fremde_player()
+        asyncio.run(nachfragen_nach_fehler())
     print()
     if FAILS:
         print(f"FEHLGESCHLAGEN: {len(FAILS)}: {', '.join(FAILS)}")

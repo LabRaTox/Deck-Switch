@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4.0 (not released yet)
+## 1.4.0 · 24 October 2026
 
 ### New
 

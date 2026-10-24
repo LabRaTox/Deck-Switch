@@ -137,17 +137,19 @@ def main() -> int:
 
         print("\n== Und die echten Plugins des Projekts ==")
         quellen = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources"
-        registry3 = lade(quellen)
-        mit_nachbarn = [
-            ordner.name for ordner in sorted(quellen.iterdir())
-            if ordner.is_dir()
-            and any(p.stem not in ("plugin", "screenshots") for p in ordner.glob("*.py"))
-        ]
-        check("die mit Hilfsdateien laden alle",
-              all(name in registry3.plugins for name in mit_nachbarn),
-              f"{mit_nachbarn} → {sorted(registry3.plugins)}")
-        check("ohne einen einzigen Ladefehler", not registry3.errors,
-              json.dumps([f"{e.plugin_id}: {e.message[:80]}" for e in registry3.errors]))
+        import _pluginlader
+        if _pluginlader.quelle_da(quellen):
+            registry3 = lade(quellen)
+            mit_nachbarn = [
+                ordner.name for ordner in sorted(quellen.iterdir())
+                if ordner.is_dir()
+                and any(p.stem not in ("plugin", "screenshots") for p in ordner.glob("*.py"))
+            ]
+            check("die mit Hilfsdateien laden alle",
+                  all(name in registry3.plugins for name in mit_nachbarn),
+                  f"{mit_nachbarn} → {sorted(registry3.plugins)}")
+            check("ohne einen einzigen Ladefehler", not registry3.errors,
+                  json.dumps([f"{e.plugin_id}: {e.message[:80]}" for e in registry3.errors]))
 
     print()
     if FAILS:

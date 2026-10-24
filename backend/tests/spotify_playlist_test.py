@@ -16,6 +16,8 @@ _wache.sichere_umgebung()
 import asyncio, importlib.util, pathlib, sys, types
 
 SPOTIFY = pathlib.Path(__file__).resolve().parent.parent.parent / "plugin-sources" / "spotify"
+import _pluginlader  # noqa: E402
+_pluginlader.ueberspringe_ohne(SPOTIFY)
 sys.path.insert(0, str(SPOTIFY))
 
 FAILS = []

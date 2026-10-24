@@ -17,6 +17,8 @@ import asyncio, json, pathlib, sys, tempfile
 # Discord ist kein eingebautes Plugin mehr, sondern eines zum Nachinstallieren:
 # Die Quelle liegt seit 2026-08-23 unter ``plugin-sources/`` neben dem Backend.
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources" / "discord"
+import _pluginlader  # noqa: E402
+_pluginlader.ueberspringe_ohne(PLUGIN_DIR)
 from PIL import Image
 from deckswitch.plugins.base import Manifest, Services, SlotContext
 from deckswitch.config import Appearance, IconRef, Slot, default_config

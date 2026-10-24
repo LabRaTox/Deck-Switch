@@ -31,6 +31,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources" / "twitch"
+import _pluginlader  # noqa: E402
+_pluginlader.ueberspringe_ohne(PLUGIN_DIR)
 
 from deckswitch.config import Appearance, Slot, default_config  # noqa: E402
 from deckswitch.plugins.base import Manifest, Services, SlotContext  # noqa: E402

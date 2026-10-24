@@ -89,8 +89,7 @@ nur das Sicherheitsnetz.
 
 ## Nachinstallierbare Plugins
 
-Diese neun gehören nicht zum Lieferumfang. Ihre Quellen liegen aber in
-[plugin-sources/](../../plugin-sources/).
+Diese neun gehören nicht zum Lieferumfang. Sie kommen über den Store.
 
 | Plugin | Aktionen |
 | --- | --- |

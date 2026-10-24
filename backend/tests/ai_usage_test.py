@@ -32,6 +32,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources" / "ai-usage"
+import _pluginlader  # noqa: E402
+_pluginlader.ueberspringe_ohne(PLUGIN_DIR)
 DATEN = pathlib.Path(__file__).resolve().parent / "daten" / "ai-usage"
 
 from PIL import Image  # noqa: E402
