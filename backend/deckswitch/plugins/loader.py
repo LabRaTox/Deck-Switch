@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import logging
+import os
 import sys
 import traceback
 from dataclasses import dataclass, field
@@ -22,6 +23,7 @@ from pydantic import ValidationError
 
 from .. import paths
 from .base import ActionPlugin, CanvasPlugin, Manifest, Services
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -89,12 +91,25 @@ def _kollision(directory: Path) -> str:
         belegt = sys.modules.get(name)
         anderer = getattr(belegt, "__file__", None) if belegt is not None else None
         if anderer and Path(anderer).resolve() != datei.resolve():
-            return (
-                f" — Hinweis: Der Modulname '{name}' war schon von {anderer} "
-                f"belegt. Importiere die Nachbardatei relativ "
-                f"('from .{name} import …'), dann kann das nicht passieren."
-            )
+            return ". " + texte.t("loader.hinweis_modulname_belegt", name=name, anderer=anderer)
     return ""
+
+
+def _vergiss_module(module_name: str, directory: Path) -> None:
+    """Wirft geladene Module dieses Plugins aus ``sys.modules``.
+
+    Erfasst das Paket samt Untermodulen und auch Nachbardateien, die über
+    den kurzen Namen importiert wurden (``from api import …``): Die liegen
+    unter ihrem eigenen Namen, aber im Ordner des Plugins.
+    """
+    praefixe = tuple({str(directory) + os.sep, str(directory.resolve()) + os.sep})
+    for name, modul in list(sys.modules.items()):
+        if name == module_name or name.startswith(module_name + "."):
+            sys.modules.pop(name, None)
+            continue
+        datei = getattr(modul, "__file__", None)
+        if isinstance(datei, str) and datei.startswith(praefixe):
+            sys.modules.pop(name, None)
 
 
 class PluginRegistry:
@@ -200,15 +215,14 @@ class PluginRegistry:
                 json.loads(manifest_file.read_text(encoding="utf-8"))
             )
         except (json.JSONDecodeError, ValidationError) as exc:
-            self._fail(directory.name, directory, f"Manifest ungültig: {exc}")
+            self._fail(directory.name, directory, texte.t("loader.manifest_ungueltig", exc=exc))
             return
 
         if manifest.id in self.plugins:
             self._fail(
                 manifest.id,
                 directory,
-                f"Plugin-ID '{manifest.id}' doppelt vergeben — "
-                f"{self.plugins[manifest.id].directory} gewinnt.",
+                texte.t("loader.plugin_id_doppelt_vergeben", id=manifest.id, directory=self.plugins[manifest.id].directory),
             )
             return
 
@@ -221,7 +235,7 @@ class PluginRegistry:
 
         if manifest.type == "iconset":
             if not loaded.icons_path.is_dir():
-                loaded.error = f"Icon-Ordner fehlt: {loaded.icons_path}"
+                loaded.error = texte.t("loader.icon_ordner_fehlt", icons_path=loaded.icons_path)
                 self._fail(manifest.id, directory, loaded.error)
             self.plugins[manifest.id] = loaded
             return
@@ -242,12 +256,12 @@ class PluginRegistry:
     ) -> ActionPlugin:
         if not manifest.entry or not manifest.plugin_class:
             raise ValueError(
-                f"{manifest.type}-Plugin braucht 'entry' und 'class' im Manifest"
+                texte.t("installer.plugin_braucht_entry_class", type=manifest.type)
             )
 
         entry = directory / manifest.entry
         if not entry.is_file():
-            raise FileNotFoundError(f"Entry-Datei fehlt: {entry}")
+            raise FileNotFoundError(texte.t("loader.entry_datei_fehlt", entry=entry))
 
         module_name = f"streamdeck_plugin_{manifest.id.replace('-', '_')}"
         # ``submodule_search_locations`` macht aus dem Modul ein Paket: Damit
@@ -258,7 +272,14 @@ class PluginRegistry:
             module_name, entry, submodule_search_locations=[str(directory)]
         )
         if spec is None or spec.loader is None:
-            raise ImportError(f"Kann {entry} nicht laden")
+            raise ImportError(texte.t("loader.kann_nicht_laden", entry=entry))
+
+        # Eine frühere Fassung desselben Plugins räumen. Sonst holte ein
+        # ``from .api import …`` der neuen Fassung das alte Hilfsmodul aus
+        # dem Zwischenspeicher, und alte und neue Fassung liefen gemischt.
+        _vergiss_module(module_name, directory)
+        texte.vergiss(directory / "locales")
+        importlib.invalidate_caches()
 
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
@@ -281,13 +302,12 @@ class PluginRegistry:
         klass = getattr(module, manifest.plugin_class, None)
         if klass is None:
             raise AttributeError(
-                f"Klasse '{manifest.plugin_class}' nicht in {manifest.entry} gefunden"
+                texte.t("loader.klasse_nicht_gefunden", plugin_class=manifest.plugin_class, entry=manifest.entry)
             )
         expected = CanvasPlugin if manifest.type in CANVAS_TYPES else ActionPlugin
         if not issubclass(klass, expected):
             raise TypeError(
-                f"'{manifest.plugin_class}' erbt nicht von {expected.__name__} "
-                f"(type='{manifest.type}' im Manifest)"
+                texte.t("loader.erbt_nicht_type_manifest", plugin_class=manifest.plugin_class, basis=expected.__name__, type=manifest.type)
             )
 
         return klass(manifest, services)

@@ -38,6 +38,7 @@ import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -136,7 +137,8 @@ class Capability:
             "id": self.id,
             "available": self.available,
             "provider": self.provider,
-            "reason": self.reason,
+            # Entsteht beim Start, ausgeliefert wird in der Sprache von jetzt.
+            "reason": texte.aktuell(self.reason),
         }
 
 
@@ -222,7 +224,7 @@ class SessionCapabilities:
                 ", ".join(fehlend),
             )
         else:
-            log.info("Sitzung erkannt — alle Fähigkeiten vorhanden")
+            log.info("Sitzung erkannt, alle Fähigkeiten vorhanden")
 
     def _set(self, cap_id: str, available: bool, provider: str = "", reason: str = "") -> None:
         cap = self.caps[cap_id]
@@ -252,21 +254,21 @@ class SessionCapabilities:
                 SCREEN_POWER,
                 False,
                 reason=(
-                    "'kscreen-doctor' ist zwar da, wirkt aber nur unter KDE Plasma"
+                    texte.t("session.kscreen_doctor_zwar_da")
                 ),
             )
         else:
             self._set(
                 SCREEN_POWER,
                 False,
-                reason="Kein Weg, die Bildschirme zu schalten (kscreen-doctor, Sway oder Hyprland)",
+                reason=texte.t("session.kein_weg_bildschirme_schalten"),
             )
 
         # -- DDC -----------------------------------------------------------
         if shutil.which("ddcutil"):
             self._set(DDC, True, "ddcutil")
         else:
-            self._set(DDC, False, reason="'ddcutil' ist nicht installiert")
+            self._set(DDC, False, reason=texte.t("session.ddcutil_nicht_installiert"))
 
         # -- Ton -----------------------------------------------------------
         if shutil.which("wpctl") or shutil.which("pactl"):
@@ -282,20 +284,20 @@ class SessionCapabilities:
             self._set(
                 SOUND_PLAYBACK,
                 False,
-                reason="Kein Abspielprogramm gefunden (pw-play, mpv oder ffplay)",
+                reason=texte.t("session.kein_abspielprogramm_gefunden_pw"),
             )
 
         # -- Öffnen und Prozesse -------------------------------------------
         if shutil.which("xdg-open"):
             self._set(OPEN_URI, True, "xdg-open")
         else:
-            self._set(OPEN_URI, False, reason="'xdg-open' ist nicht installiert")
+            self._set(OPEN_URI, False, reason=texte.t("session.xdg_open_nicht_installiert"))
 
         if shutil.which("pgrep"):
             self._set(PROCESS_CONTROL, True, "pgrep")
         else:
             self._set(
-                PROCESS_CONTROL, False, reason="'pgrep' ist nicht installiert (procps)"
+                PROCESS_CONTROL, False, reason=texte.t("session.pgrep_nicht_installiert_procps")
             )
 
         # -- Sitzung beenden -----------------------------------------------
@@ -336,13 +338,13 @@ class SessionCapabilities:
         Das Programm selbst ist in beiden Fällen dasselbe.
         """
         if shutil.which("qml6") is None:
-            self._set(OVERLAY, False, reason="'qml6' fehlt (Paket qt6-declarative)")
+            self._set(OVERLAY, False, reason=texte.t("session.qml6_fehlt_paket_qt6"))
             return
 
         # Der Import von LayerShellQt steht in der QML-Datei und wird auch
         # unter X11 aufgelöst — ohne das Paket startet das Overlay nirgends.
         if not Path("/usr/lib/qt6/qml/org/kde/layershell/qmldir").exists():
-            self._set(OVERLAY, False, reason="LayerShellQt fehlt (Paket layer-shell-qt)")
+            self._set(OVERLAY, False, reason=texte.t("session.layershellqt_fehlt_paket_layer"))
             return
 
         if self.info.display_server == "x11":
@@ -358,8 +360,7 @@ class SessionCapabilities:
                 OVERLAY,
                 False,
                 reason=(
-                    f"Der Compositor von {self.info.desktop.upper()} unterstützt "
-                    "zwlr_layer_shell_v1 nicht"
+                    texte.t("session.compositor_unterstuetzt_zwlr_layer", desktop=self.info.desktop.upper())
                 ),
             )
             return
@@ -383,7 +384,7 @@ class SessionCapabilities:
                 WINDOW_CONTROL, GLOBAL_SHORTCUTS, TRAY, SCREENSHOT, SESSION_MANAGER
             ):
                 self._set(
-                    cap_id, False, reason="Kein Sitzungsbus erreichbar (D-Bus)"
+                    cap_id, False, reason=texte.t("session.kein_sitzungsbus_erreichbar_d")
                 )
             return
 
@@ -407,8 +408,7 @@ class SessionCapabilities:
                 WINDOW_CONTROL,
                 False,
                 reason=(
-                    "Fenster steuern geht nur über eine eigene Schnittstelle des "
-                    "Compositors — Plasma, Hyprland und Sway haben eine, GNOME nicht"
+                    texte.t("session.fenster_steuern_geht_ueber")
                 ),
             )
 
@@ -436,7 +436,7 @@ class SessionCapabilities:
             self._set(
                 GLOBAL_SHORTCUTS,
                 False,
-                reason="Weder xdg-desktop-portal noch kglobalaccel erreichbar",
+                reason=texte.t("session.weder_xdg_desktop_portal"),
             )
 
         # -- Abmelden und Rückfragen ---------------------------------------
@@ -451,8 +451,7 @@ class SessionCapabilities:
                 SESSION_MANAGER,
                 False,
                 reason=(
-                    "Abmelden und die Rückfrage davor gibt es nur über Plasmas "
-                    "Sitzungsverwaltung"
+                    texte.t("session.abmelden_rueckfrage_davor_gibt")
                 ),
             )
 
@@ -473,7 +472,7 @@ class SessionCapabilities:
             self._set(
                 SCREENSHOT,
                 False,
-                reason="Weder Spectacle noch xdg-desktop-portal gefunden",
+                reason=texte.t("session.weder_spectacle_xdg_desktop"),
             )
 
         # -- Tray ----------------------------------------------------------
@@ -484,9 +483,7 @@ class SessionCapabilities:
                 TRAY,
                 False,
                 reason=(
-                    "Kein StatusNotifierWatcher am Bus — eine Kontrollleiste mit "
-                    "Systemabschnitt fehlt (unter GNOME die Erweiterung "
-                    "'AppIndicator Support', auf wlroots etwa waybar)"
+                    texte.t("session.kein_statusnotifierwatcher_bus_kontrollleiste")
                 ),
             )
 
@@ -595,17 +592,16 @@ def _uinput_usable() -> tuple[bool, str]:
     """
     knoten = Path("/dev/uinput")
     if not knoten.exists():
-        return False, "/dev/uinput fehlt — das Kernel-Modul 'uinput' ist nicht geladen"
+        return False, texte.t("session.dev_uinput_fehlt_kernel")
     try:
         with open(knoten, "wb"):
             pass
     except PermissionError:
         return False, (
-            "Kein Schreibrecht auf /dev/uinput — der Benutzer muss in der Gruppe "
-            "'input' sein (danach ab- und wieder anmelden)"
+            texte.t("input.kein_schreibrecht_dev_uinput")
         )
     except OSError as exc:
-        return False, f"/dev/uinput nicht nutzbar: {exc}"
+        return False, texte.t("input.dev_uinput_nicht_nutzbar", exc=exc)
     return True, ""
 
 

@@ -54,6 +54,9 @@ Anwendung bittet. Nach dem Bestätigen ist die Verbindung fertig. Das
 Zugriffstoken landet in `~/.config/deckswitch/discord-token.json` mit den
 Rechten 0600 und wird von da an automatisch verwendet.
 
+Discord stellt das Token für 7 Tage aus. Einen Tag vor Ablauf holt das
+Plugin selbst ein neues, ohne dass der Dialog noch einmal erscheint.
+
 Das Token liegt mit Absicht nicht in der `config.json`. Die lässt sich
 exportieren und weitergeben, und das Token soll dabei nicht mitwandern.
 

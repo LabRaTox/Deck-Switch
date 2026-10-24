@@ -28,6 +28,7 @@ import hmac
 import logging
 import secrets
 import time
+from . import texte
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def hash_passwort(passwort: str) -> str:
     Passwörter ungültig werden.
     """
     if not passwort:
-        raise ValueError("Leeres Passwort")
+        raise ValueError(texte.t("netauth.leeres_passwort"))
     salz = secrets.token_bytes(SALT_BYTES)
     schluessel = hashlib.pbkdf2_hmac("sha256", passwort.encode("utf-8"), salz, ITERATIONEN)
     return "$".join((
@@ -84,11 +85,12 @@ def pruefe_passwort(passwort: str, gespeichert: str) -> bool:
             return False
         salz = base64.b64decode(salz_b64)
         erwartet = base64.b64decode(schluessel_b64)
+        runden_zahl = int(runden)
     except (ValueError, TypeError):
-        log.warning("Gespeichertes Passwort ist unlesbar — Zugang bleibt zu")
+        log.warning("Gespeichertes Passwort ist unlesbar, der Zugang bleibt zu")
         return False
 
-    versuch = hashlib.pbkdf2_hmac("sha256", passwort.encode("utf-8"), salz, int(runden))
+    versuch = hashlib.pbkdf2_hmac("sha256", passwort.encode("utf-8"), salz, runden_zahl)
     return hmac.compare_digest(versuch, erwartet)
 
 

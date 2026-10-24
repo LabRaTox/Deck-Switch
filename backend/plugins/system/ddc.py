@@ -24,6 +24,9 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
+
+from deckswitch.plugins.base import plugin_text
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +59,17 @@ class DdcController:
         self._timers: dict[int, threading.Timer] = {}
         self._lock = threading.Lock()
         self._available: bool | None = None
-        self.last_error: str | None = None
+        #: Letzter Fehler, entweder als Schlüssel samt Werten oder als
+        #: Rohtext von ``ddcutil``. Übersetzt wird erst beim Lesen.
+        self._error: tuple[str, dict] | str | None = None
+
+    @property
+    def last_error(self) -> str | None:
+        """Der letzte Fehler in der Sprache, die gerade gilt."""
+        if isinstance(self._error, tuple):
+            schluessel, werte = self._error
+            return _t(schluessel, **werte)
+        return self._error
 
     # -- Geräte ------------------------------------------------------------
 
@@ -66,8 +79,12 @@ class DdcController:
 
             self._available = shutil.which("ddcutil") is not None
             if not self._available:
-                self.last_error = "ddcutil ist nicht installiert"
+                self._error = ("ddc.nicht_installiert", {})
         return self._available
+
+    def known_displays(self) -> list[Display] | None:
+        """Die schon ermittelten Monitore, ohne zu suchen. ``None``: noch nie gesucht."""
+        return self._displays
 
     def displays(self, refresh: bool = False) -> list[Display]:
         """Erkannte Monitore. Wird einmal ermittelt und dann behalten."""
@@ -85,7 +102,7 @@ class DdcController:
                 timeout=DETECT_TIMEOUT_S,
             )
         except (OSError, subprocess.SubprocessError) as exc:
-            self.last_error = f"ddcutil detect: {exc}"
+            self._error = f"ddcutil detect: {exc}"
             self._displays = []
             return self._displays
 
@@ -98,10 +115,7 @@ class DdcController:
 
         self._displays = displays
         if not displays:
-            self.last_error = (
-                "Kein Monitor über DDC/CI erreichbar — viele Geräte müssen das "
-                "im Menü erst freischalten, und über DisplayPort-Hubs geht es oft gar nicht"
-            )
+            self._error = ("ddc.kein_monitor", {})
         return displays
 
     # -- Helligkeit --------------------------------------------------------
@@ -122,13 +136,15 @@ class DdcController:
                 timeout=COMMAND_TIMEOUT_S,
             )
         except (OSError, subprocess.SubprocessError) as exc:
-            self.last_error = f"getvcp: {exc}"
+            self._error = f"getvcp: {exc}"
             return None
 
         # Format: "VCP 10 C <aktuell> <maximum>"
         parts = result.stdout.split()
         if len(parts) < 5 or parts[0] != "VCP":
-            self.last_error = (result.stderr or result.stdout).strip()[:120] or "getvcp fehlgeschlagen"
+            self._error = (result.stderr or result.stdout).strip()[:120] or (
+                "ddc.getvcp_fehlgeschlagen", {}
+            )
             return None
         try:
             value = int(parts[3])
@@ -192,16 +208,16 @@ class DdcController:
                 timeout=COMMAND_TIMEOUT_S,
             )
         except (OSError, subprocess.SubprocessError) as exc:
-            self.last_error = f"setvcp: {exc}"
+            self._error = f"setvcp: {exc}"
             log.warning("Helligkeit für Monitor %s nicht gesetzt: %s", number, exc)
             return
 
         if result.returncode != 0:
-            self.last_error = (result.stderr or "").strip()[:120] or "setvcp fehlgeschlagen"
+            self._error = (result.stderr or "").strip()[:120] or ("ddc.setvcp_fehlgeschlagen", {})
             log.warning("setvcp %s → %s: %s", number, value, self.last_error)
             return
 
-        self.last_error = None
+        self._error = None
         log.debug("Monitor %s auf %d %% (%.2f s)", number, value, time.monotonic() - started)
 
     def shutdown(self) -> None:
@@ -210,6 +226,10 @@ class DdcController:
             for timer in self._timers.values():
                 timer.cancel()
             self._timers.clear()
+
+
+def _t(schluessel: str, **werte) -> str:
+    return plugin_text(Path(__file__).resolve().parent, "system", schluessel, werte)
 
 
 def _pretty(raw: str) -> str:

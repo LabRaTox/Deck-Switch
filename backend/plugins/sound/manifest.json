@@ -11,8 +11,8 @@
   "accent": "#f97316",
   "category": "audio",
   "description": {
-    "de": "Klänge auf Knopfdruck — wahlweise auf einem eigenen Ausgabegerät.",
-    "en": "Sounds at the push of a key — optionally on a separate output device."
+    "de": "Klänge auf Knopfdruck, wahlweise auf einem eigenen Ausgabegerät.",
+    "en": "Sounds at the push of a key, optionally on a separate output device."
   },
   "actions": [
     {

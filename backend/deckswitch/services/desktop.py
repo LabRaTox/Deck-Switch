@@ -32,6 +32,7 @@ from pathlib import Path
 
 from dbus_next import BusType, Message, MessageType
 from dbus_next.aio import MessageBus
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -67,34 +68,40 @@ _SHELL_COMMANDS = {
 #: meldet sich als Fehler der Aktion und bleibt nicht stumm.
 _WLROOTS_WINDOW_COMMANDS = {
     "hyprland": [
-        ("fullscreen, 0", "Vollbild"),
-        ("fullscreen, 1", "Maximieren"),
-        ("killactive", "Fenster schließen"),
-        ("togglefloating", "Schwebend umschalten"),
-        ("pin", "Anheften (nur schwebende Fenster)"),
-        ("centerwindow", "Mittig setzen (nur schwebende Fenster)"),
-        ("movewindow, l", "Fenster nach links"),
-        ("movewindow, r", "Fenster nach rechts"),
-        ("movewindow, u", "Fenster nach oben"),
-        ("movewindow, d", "Fenster nach unten"),
-        ("movecurrentworkspacetomonitor, +1", "Arbeitsfläche auf nächsten Bildschirm"),
-        *[(f"workspace, {i}", f"Zur Arbeitsfläche {i}") for i in range(1, 11)],
-        *[(f"movetoworkspace, {i}", f"Fenster auf Arbeitsfläche {i}") for i in range(1, 11)],
+        ("fullscreen, 0", "desktop.fenster.vollbild", {}),
+        ("fullscreen, 1", "desktop.fenster.maximieren", {}),
+        ("killactive", "desktop.fenster.schliessen", {}),
+        ("togglefloating", "desktop.fenster.schwebend", {}),
+        ("pin", "desktop.fenster.anheften_schwebend", {}),
+        ("centerwindow", "desktop.fenster.mittig_schwebend", {}),
+        ("movewindow, l", "desktop.fenster.nach_links", {}),
+        ("movewindow, r", "desktop.fenster.nach_rechts", {}),
+        ("movewindow, u", "desktop.fenster.nach_oben", {}),
+        ("movewindow, d", "desktop.fenster.nach_unten", {}),
+        ("movecurrentworkspacetomonitor, +1", "desktop.fenster.arbeitsflaeche_naechster_bildschirm", {}),
+        *[(f"workspace, {i}", "desktop.fenster.zur_arbeitsflaeche", {"nummer": i}) for i in range(1, 11)],
+        *[
+            (f"movetoworkspace, {i}", "desktop.fenster.auf_arbeitsflaeche", {"nummer": i})
+            for i in range(1, 11)
+        ],
     ],
     "sway": [
-        ("fullscreen toggle", "Vollbild"),
-        ("kill", "Fenster schließen"),
-        ("floating toggle", "Schwebend umschalten"),
-        ("sticky toggle", "Auf allen Arbeitsflächen anheften"),
-        ("layout toggle split", "Aufteilung umschalten"),
-        ("move left", "Fenster nach links"),
-        ("move right", "Fenster nach rechts"),
-        ("move up", "Fenster nach oben"),
-        ("move down", "Fenster nach unten"),
-        ("move window to output right", "Fenster auf nächsten Bildschirm"),
-        *[(f"workspace number {i}", f"Zur Arbeitsfläche {i}") for i in range(1, 11)],
+        ("fullscreen toggle", "desktop.fenster.vollbild", {}),
+        ("kill", "desktop.fenster.schliessen", {}),
+        ("floating toggle", "desktop.fenster.schwebend", {}),
+        ("sticky toggle", "desktop.fenster.auf_allen_arbeitsflaechen", {}),
+        ("layout toggle split", "desktop.fenster.aufteilung", {}),
+        ("move left", "desktop.fenster.nach_links", {}),
+        ("move right", "desktop.fenster.nach_rechts", {}),
+        ("move up", "desktop.fenster.nach_oben", {}),
+        ("move down", "desktop.fenster.nach_unten", {}),
+        ("move window to output right", "desktop.fenster.naechster_bildschirm", {}),
         *[
-            (f"move container to workspace number {i}", f"Fenster auf Arbeitsfläche {i}")
+            (f"workspace number {i}", "desktop.fenster.zur_arbeitsflaeche", {"nummer": i})
+            for i in range(1, 11)
+        ],
+        *[
+            (f"move container to workspace number {i}", "desktop.fenster.auf_arbeitsflaeche", {"nummer": i})
             for i in range(1, 11)
         ],
     ],
@@ -142,8 +149,11 @@ _KDE_COMMANDS = {
 #: wenn der Desktop weg ist.
 MIN_PATTERN_LENGTH = 3
 
-#: Mehr Treffer als das gilt als Fehlgriff, nicht als Absicht. Nachfragen
-#: kann eine Taste nicht, also wird lieber nichts getan und gemeldet.
+#: Mehr getroffene Programme als das gilt als Fehlgriff, nicht als Absicht.
+#: Nachfragen kann eine Taste nicht, also wird lieber nichts getan und
+#: gemeldet. Gezählt werden Programme, nicht Prozesse: Discord, Steam oder
+#: ein Chromium-Browser bringen allein schon zehn bis vierzig Kindprozesse
+#: mit, die alle auf das Muster passen.
 MAX_MATCHES = 8
 
 #: Bildschirmfoto-Arten → Spectacle-Schalter.
@@ -247,9 +257,10 @@ class DesktopService:
         """Die Kurzbefehle einer Komponente, mit lesbaren Namen."""
         weg = self._fenster_weg()
         if weg in _WLROOTS_WINDOW_COMMANDS:
+            # Übersetzt wird erst hier, damit die Liste der Sprache folgt.
             return [
-                {"value": befehl, "label": beschriftung}
-                for befehl, beschriftung in _WLROOTS_WINDOW_COMMANDS[weg]
+                {"value": befehl, "label": texte.t(schluessel, **werte)}
+                for befehl, schluessel, werte in _WLROOTS_WINDOW_COMMANDS[weg]
             ]
         if not weg:
             return []
@@ -277,12 +288,12 @@ class DesktopService:
     async def invoke_shortcut(self, component: str, shortcut: str) -> None:
         """Löst einen globalen Kurzbefehl aus."""
         if not shortcut:
-            raise DesktopError("Kein Kurzbefehl ausgewählt")
+            raise DesktopError(texte.t("desktop.kein_kurzbefehl_ausgewaehlt"))
 
         weg = self._fenster_weg()
         if not weg:
             raise DesktopError(
-                "Diese Sitzung erlaubt es nicht, Fenster von außen zu steuern"
+                texte.t("desktop.diese_sitzung_erlaubt_nicht")
             )
         if weg in _WLROOTS_ARGV:
             await self._wlroots_befehl(weg, shortcut)
@@ -298,8 +309,7 @@ class DesktopService:
         )
         if reply is None:
             raise DesktopError(
-                f"Kurzbefehl '{shortcut}' ließ sich nicht auslösen — "
-                f"kennt '{component}' ihn noch?"
+                texte.t("desktop.kurzbefehl_liess_nicht_ausloesen", shortcut=shortcut, component=component)
             )
 
     async def _wlroots_befehl(self, weg: str, befehl: str) -> None:
@@ -313,7 +323,7 @@ class DesktopService:
         """
         argv = _WLROOTS_ARGV[weg](befehl)
         if shutil.which(argv[0]) is None:
-            raise DesktopError(f"'{argv[0]}' ist nicht installiert")
+            raise DesktopError(texte.t("desktop.nicht_installiert", programm=argv[0]))
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, lambda: _run(argv))
@@ -324,7 +334,7 @@ class DesktopService:
 
         ausgabe = (result.stdout or "").strip()
         if weg == "hyprland" and ausgabe and ausgabe.lower() != "ok":
-            raise DesktopError(f"hyprctl hat abgelehnt: {ausgabe}")
+            raise DesktopError(texte.t("desktop.hyprctl_hat_abgelehnt", ausgabe=ausgabe))
 
         if weg == "sway" and ausgabe:
             # ``swaymsg`` antwortet mit JSON: ``[{"success": true}]``. Nach
@@ -340,7 +350,7 @@ class DesktopService:
             for antwort in antworten if isinstance(antworten, list) else []:
                 if isinstance(antwort, dict) and antwort.get("success") is False:
                     grund = antwort.get("error") or "ohne Angabe"
-                    raise DesktopError(f"swaymsg hat abgelehnt: {grund}")
+                    raise DesktopError(texte.t("desktop.swaymsg_hat_abgelehnt", grund=grund))
 
     async def _component_property(self, path: str, name: str) -> str:
         reply = await self._send(
@@ -366,7 +376,7 @@ class DesktopService:
                 destination=destination, path=path, interface=interface, member=member
             )
             if reply is None:
-                raise DesktopError(f"Plasma hat '{command}' nicht angenommen")
+                raise DesktopError(texte.t("desktop.plasma_hat_nicht_angenommen", command=command))
             return
 
         # Bildschirme schalten geht auf wlroots-Compositoren über deren
@@ -379,15 +389,15 @@ class DesktopService:
 
         argv = _SHELL_COMMANDS.get(command)
         if argv is None:
-            raise DesktopError(f"Unbekanntes Systemkommando: {command}")
+            raise DesktopError(texte.t("desktop.unbekanntes_systemkommando", command=command))
         if shutil.which(argv[0]) is None:
-            raise DesktopError(f"'{argv[0]}' ist nicht installiert")
+            raise DesktopError(texte.t("desktop.nicht_installiert", programm=argv[0]))
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, lambda: _run(argv))
         if result.returncode != 0:
             raise DesktopError(
-                f"{argv[0]} meldet Fehler: {result.stderr.strip() or result.returncode}"
+                texte.t("desktop.meldet_fehler", programm=argv[0], meldung=result.stderr.strip() or result.returncode)
             )
 
     # -- Bildschirmfoto ----------------------------------------------------
@@ -406,11 +416,11 @@ class DesktopService:
                 return self._screenshot_ueber_portal(
                     mode, directory=directory, to_clipboard=to_clipboard, delay_ms=delay_ms
                 )
-            raise DesktopError("Spectacle ist nicht installiert")
+            raise DesktopError(texte.t("desktop.spectacle_nicht_installiert"))
 
         switch = SCREENSHOT_MODES.get(mode)
         if switch is None:
-            raise DesktopError(f"Unbekannte Bildschirmfoto-Art: {mode}")
+            raise DesktopError(texte.t("desktop.unbekannte_bildschirmfoto_art", mode=mode))
 
         argv = ["spectacle", "--background", "--nonotify", switch]
         if delay_ms > 0:
@@ -430,7 +440,7 @@ class DesktopService:
         result = _run(argv, timeout=timeout)
         if result.returncode != 0:
             raise DesktopError(
-                f"Spectacle meldet Fehler: {result.stderr.strip() or result.returncode}"
+                texte.t("desktop.spectacle_meldet_fehler", meldung=result.stderr.strip() or result.returncode)
             )
         return target
 
@@ -450,11 +460,10 @@ class DesktopService:
         from .portal import PortalError, ScreenshotPortal
 
         if mode not in SCREENSHOT_MODES:
-            raise DesktopError(f"Unbekannte Bildschirmfoto-Art: {mode}")
+            raise DesktopError(texte.t("desktop.unbekannte_bildschirmfoto_art", mode=mode))
         if to_clipboard:
             raise DesktopError(
-                "In die Zwischenablage geht nur mit Spectacle — ohne das legt "
-                "das Bildschirmfoto eine Datei an"
+                texte.t("desktop.zwischenablage_geht_spectacle_ohne")
             )
 
         # Die Verzögerung kennt das Portal nicht; hier im Arbeitsthread zu
@@ -474,14 +483,15 @@ class DesktopService:
         aufgabe = asyncio.run_coroutine_threadsafe(
             self._screenshot_portal.capture(mode, ziel), self._loop
         )
-        zeit = 200 if mode in ScreenshotPortal.INTERAKTIV else 30
+        # Auch ohne Auswahl kann beim ersten Mal ein Erlaubnisdialog kommen.
+        zeit = 200
         try:
             return aufgabe.result(timeout=zeit)
         except PortalError as exc:
             raise DesktopError(str(exc)) from exc
         except FuturesTimeout as exc:
             aufgabe.cancel()
-            raise DesktopError("Das Portal hat nicht rechtzeitig geantwortet") from exc
+            raise DesktopError(texte.t("desktop.portal_hat_nicht_rechtzeitig")) from exc
 
     # -- Programme ---------------------------------------------------------
 
@@ -500,20 +510,20 @@ class DesktopService:
         """
         pattern = pattern.strip()
         if not pattern:
-            raise DesktopError("Kein Programm angegeben")
+            raise DesktopError(texte.t("desktop.kein_programm_angegeben"))
         if len(pattern) < MIN_PATTERN_LENGTH:
             raise DesktopError(
-                f"Muster '{pattern}' ist zu kurz (mindestens {MIN_PATTERN_LENGTH} "
-                "Zeichen) — es würde zu viele Prozesse treffen"
+                texte.t("desktop.muster_kurz_mindestens_zeichen", pattern=pattern, MIN_PATTERN_LENGTH=MIN_PATTERN_LENGTH)
             )
         if shutil.which("pgrep") is None:
-            raise DesktopError("'pgrep' ist nicht installiert (Paket procps-ng)")
+            raise DesktopError(texte.t("desktop.pgrep_nicht_installiert_paket"))
 
         # -f: auch auf die Kommandozeile schauen, sonst findet man Programme
         # nicht, die über einen Interpreter laufen (Electron, Python).
-        result = _run(["pgrep", "-f", pattern])
+        # ``--``: Ein Muster, das mit „-" beginnt, ist kein Schalter.
+        result = _run(["pgrep", "-f", "--", pattern])
         if result.returncode not in (0, 1):
-            raise DesktopError(f"pgrep meldet Fehler: {result.returncode}")
+            raise DesktopError(texte.t("desktop.pgrep_meldet_fehler", returncode=result.returncode))
 
         own = {os.getpid(), os.getppid()}
         pids = [
@@ -523,10 +533,10 @@ class DesktopService:
         ]
         if not pids:
             return 0
-        if len(pids) > MAX_MATCHES:
+        programme = _wurzeln(pids)
+        if len(programme) > MAX_MATCHES:
             raise DesktopError(
-                f"Muster '{pattern}' trifft {len(pids)} Prozesse — das sieht nach "
-                "einem Versehen aus. Bitte genauer angeben."
+                texte.t("desktop.muster_trifft_programme", pattern=pattern, anzahl=len(programme))
             )
 
         signal_number = signal.SIGKILL if force else signal.SIGTERM
@@ -544,9 +554,12 @@ class DesktopService:
     # -- D-Bus -------------------------------------------------------------
 
     async def _connect(self) -> MessageBus | None:
-        if self._bus is not None:
+        if self._bus is not None and self._bus.connected:
             return self._bus
         async with self._lock:
+            if self._bus is not None and not self._bus.connected:
+                # Abgerissene Verbindung neu aufbauen statt dauerhaft scheitern.
+                self._bus = None
             if self._bus is None:
                 try:
                     self._bus = await MessageBus(bus_type=BusType.SESSION).connect()
@@ -598,9 +611,31 @@ def _run(argv: list[str], timeout: int = 15) -> subprocess.CompletedProcess:
             argv, capture_output=True, text=True, timeout=timeout, check=False
         )
     except subprocess.TimeoutExpired as exc:
-        raise DesktopError(f"'{argv[0]}' hat nicht geantwortet") from exc
+        raise DesktopError(texte.t("desktop.hat_nicht_geantwortet", programm=argv[0])) from exc
     except OSError as exc:
-        raise DesktopError(f"'{argv[0]}' ließ sich nicht starten: {exc}") from exc
+        raise DesktopError(texte.t("desktop.liess_nicht_starten", programm=argv[0], exc=exc)) from exc
+
+
+def _wurzeln(pids: list[int]) -> list[int]:
+    """Die Treffer, deren Elternprozess nicht selbst ein Treffer ist.
+
+    Jede Wurzel steht für ein Programm samt seinen Kindprozessen.
+    """
+    treffer = set(pids)
+    return [pid for pid in pids if _elternprozess(pid) not in treffer]
+
+
+def _elternprozess(pid: int) -> int:
+    """PPID aus ``/proc/<pid>/stat``, ``0``, wenn der Prozess weg ist.
+
+    Der Programmname in Klammern darf selbst Klammern und Leerzeichen
+    enthalten; deshalb wird erst hinter der letzten ``)`` gezählt.
+    """
+    try:
+        text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+        return int(text.rsplit(")", 1)[1].split()[1])
+    except (OSError, IndexError, ValueError):
+        return 0
 
 
 def _pictures_dir() -> Path:

@@ -60,6 +60,36 @@ alt.mkdir()
 installer.uninstall("altmodisch")
 check("werden trotzdem gefunden und entfernt", not alt.exists())
 
+print("\nArchive, die je nach Leser anders aussehen")
+def abgelehnt(daten, **kw):
+    try:
+        installer.install_archive(daten, **kw)
+    except installer.InstallError:
+        return True
+    return False
+
+puffer = io.BytesIO()
+with zipfile.ZipFile(puffer, "w") as z:
+    for pid in ("harmlos", "boese"):
+        z.writestr(f"{pid}/manifest.json", json.dumps({
+            "id": pid, "name": pid, "version": "1.0.0", "type": "action",
+            "entry": "plugin.py", "class": "P"}))
+        z.writestr(f"{pid}/plugin.py", "class P:\n    pass\n")
+check("zwei Plugin-Ordner werden abgelehnt", abgelehnt(puffer.getvalue()))
+
+puffer = io.BytesIO()
+with zipfile.ZipFile(puffer, "w") as z:
+    z.writestr("x/manifest.json", json.dumps({
+        "id": "x", "name": "x", "version": "1.0.0", "type": "action",
+        "entry": "plugin.py", "class": "P"}))
+    z.writestr("x\\plugin.py", "class P:\n    pass\n")
+check("ein Backslash im Namen wird abgelehnt", abgelehnt(puffer.getvalue()))
+
+check("eine fremde ID wird abgelehnt", abgelehnt(archiv("lampen", "3.0.0"), expected_id="wetter"))
+m = json.loads((paths.USER_PLUGINS_DIR / "0002" / "manifest.json").read_text())
+check("und das andere Plugin bleibt unberührt", m["version"] == "1.0.0", m["version"])
+check("die passende ID geht durch", not abgelehnt(archiv("wetter", "3.0.0"), expected_id="wetter"))
+
 print()
 if FAILS:
     print("FEHLGESCHLAGEN: " + ", ".join(FAILS)); sys.exit(1)

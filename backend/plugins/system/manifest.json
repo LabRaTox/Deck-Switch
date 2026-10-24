@@ -219,8 +219,8 @@
         "en": "System monitor"
       },
       "description": {
-        "de": "Zeigt CPU, RAM, GPU, Temperaturen oder Netzdurchsatz — auf einem Dial mit Balken.",
-        "en": "Shows CPU, RAM, GPU, temperatures or network throughput — with a bar on a dial."
+        "de": "Zeigt CPU, RAM, GPU, Temperaturen oder Netzdurchsatz, auf einem Dial mit Balken.",
+        "en": "Shows CPU, RAM, GPU, temperatures or network throughput, with a bar on a dial."
       },
       "inputs": [
         "dial",
@@ -405,8 +405,8 @@
           },
           "options_source": "displays",
           "help": {
-            "de": "Nicht jeder Monitor lässt DDC/CI zu — viele muss man im Bildschirmmenü erst freischalten.",
-            "en": "Not every monitor allows DDC/CI — many need it enabled in their on-screen menu first."
+            "de": "Nicht jeder Monitor lässt DDC/CI zu. Bei vielen muss man es im Bildschirmmenü erst freischalten.",
+            "en": "Not every monitor allows DDC/CI. Many need it enabled in their on-screen menu first."
           }
         },
         {
@@ -552,7 +552,7 @@
         "en": "Hotkey switch"
       },
       "description": {
-        "de": "Zwei Kombinationen im Wechsel — hin und zurück.",
+        "de": "Zwei Kombinationen im Wechsel, hin und zurück.",
         "en": "Two combinations, alternating."
       },
       "inputs": [
@@ -605,8 +605,8 @@
         "en": "Type text"
       },
       "description": {
-        "de": "Tippt einen hinterlegten Text — Textbaustein auf Knopfdruck.",
-        "en": "Types a stored text — a snippet at the push of a key."
+        "de": "Tippt einen hinterlegten Text, einen Textbaustein auf Knopfdruck.",
+        "en": "Types a stored text, a snippet at the push of a key."
       },
       "inputs": [
         "key",
@@ -914,8 +914,8 @@
           },
           "default": true,
           "help": {
-            "de": "Der erste Druck macht nur scharf — gegen Fehlgriffe.",
-            "en": "The first press only arms the key — against mishaps."
+            "de": "Der erste Druck macht die Taste nur scharf. Das schützt vor Fehlgriffen.",
+            "en": "The first press only arms the key. This guards against mishaps."
           }
         }
       ],
@@ -1056,8 +1056,8 @@
           },
           "default": false,
           "help": {
-            "de": "Ohne Nachfrage und ohne Speichern — nur im Notfall.",
-            "en": "No prompt and no saving — for emergencies only."
+            "de": "Ohne Nachfrage und ohne Speichern. Nur für den Notfall.",
+            "en": "No prompt and no saving. For emergencies only."
           }
         }
       ],
@@ -1072,8 +1072,8 @@
         "en": "Window & desktop"
       },
       "description": {
-        "de": "Löst einen globalen Kurzbefehl von KDE aus — maximieren, anordnen, Arbeitsfläche wechseln.",
-        "en": "Triggers a KDE global shortcut — maximise, tile, switch desktop."
+        "de": "Löst einen globalen Kurzbefehl von KDE aus, etwa Maximieren, Anordnen oder Arbeitsfläche wechseln.",
+        "en": "Triggers a KDE global shortcut, such as maximise, tile or switch desktop."
       },
       "inputs": [
         "key",

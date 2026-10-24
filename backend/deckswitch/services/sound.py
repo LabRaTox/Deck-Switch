@@ -18,6 +18,7 @@ import subprocess
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ class SoundService:
 
     def available(self) -> tuple[bool, str]:
         if shutil.which("pw-play") is None:
-            return False, "'pw-play' fehlt (Paket pipewire-audio)"
+            return False, texte.t("sound.pw_play_fehlt_paket")
         return True, ""
 
     def is_playing(self, owner: str) -> bool:
@@ -79,9 +80,9 @@ class SoundService:
         """Spielt eine Datei ab. Läuft dieselbe Belegung schon, wird ersetzt."""
         file = Path(path).expanduser()
         if not file.is_file():
-            raise SoundError(f"Datei nicht gefunden: {path}")
+            raise SoundError(texte.t("sound.datei_nicht_gefunden", path=path))
         if file.suffix.lower() not in PLAYABLE_SUFFIXES:
-            raise SoundError(f"Nicht unterstütztes Format: {file.suffix}")
+            raise SoundError(texte.t("sound.nicht_unterstuetztes_format", suffix=file.suffix))
 
         self.stop(owner)
         process = self._spawn(file, sink=sink, volume=volume)
@@ -146,27 +147,36 @@ class SoundService:
                 argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
             )
         except OSError as exc:
-            raise SoundError(f"pw-play ließ sich nicht starten: {exc}") from exc
+            raise SoundError(texte.t("sound.pw_play_liess_nicht", exc=exc)) from exc
 
     def _watch(self, entry: Playback, file: Path, sink: str, volume: int) -> None:
+        # Der Zweitweg wird pro Wiedergabe höchstens einmal versucht. Ohne
+        # diese Grenze startete eine kaputte Datei die Player endlos neu.
+        fallback_tried = False
         while True:
             _, stderr = entry.process.communicate()
             if entry.cancelled:
                 return
 
+            ok = entry.process.returncode == 0
             if entry.process.returncode not in (0, -15, -9):
                 message = (stderr or b"").decode(errors="replace").strip()
-                # pw-play kann manche Formate nicht — dann den Zweitweg
+                # pw-play kann manche Formate nicht. Dann den Zweitweg
                 # versuchen, statt die Taste stumm scheitern zu lassen.
-                fallback = self._spawn_fallback(file, sink)
+                fallback = None if fallback_tried else self._spawn_fallback(file, sink)
+                fallback_tried = True
                 if fallback is not None:
-                    entry.process = fallback
+                    if not self._replace_process(entry, fallback):
+                        return
                     continue
                 log.warning("Wiedergabe von '%s' fehlgeschlagen: %s", file, message)
 
-            if entry.loop and not entry.cancelled:
+            # Neu starten nur nach einem sauberen Durchlauf. Scheitert die
+            # Wiedergabe, bringt ein weiterer Versuch nichts.
+            if entry.loop and ok and not entry.cancelled:
                 try:
-                    entry.process = self._spawn(file, sink=sink, volume=volume)
+                    if not self._replace_process(entry, self._respawn(entry, file, sink, volume, fallback_tried)):
+                        return
                     continue
                 except SoundError:
                     pass
@@ -181,6 +191,26 @@ class SoundService:
                 callback(entry.owner)
             except Exception:
                 log.exception("Rückmeldung nach Wiedergabeende hat geworfen")
+
+    def _respawn(
+        self, entry: Playback, file: Path, sink: str, volume: int, via_fallback: bool
+    ) -> subprocess.Popen:
+        """Der nächste Durchlauf einer Schleife, mit dem Player, der zuletzt lief."""
+        if via_fallback:
+            process = self._spawn_fallback(file, sink)
+            if process is None:
+                raise SoundError(str(file))
+            return process
+        return self._spawn(file, sink=sink, volume=volume)
+
+    @staticmethod
+    def _replace_process(entry: Playback, process: subprocess.Popen) -> bool:
+        """Setzt den neuen Prozess ein. Kam ``stop`` dazwischen, endet er gleich wieder."""
+        entry.process = process
+        if entry.cancelled:
+            _terminate(process)
+            return False
+        return True
 
     @staticmethod
     def _spawn_fallback(file: Path, sink: str) -> subprocess.Popen | None:

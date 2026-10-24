@@ -1,0 +1,7 @@
+{
+  "kein_ausgabegeraet": "Kein Ausgabegerät in den Einstellungen gewählt",
+  "option.geraet_standard": "{name} (Standard)",
+  "option.standard_mikrofon": "Standard-Mikrofon",
+  "option.standardgeraet": "Standardgerät",
+  "wechsel_fehlgeschlagen": "Wechsel zu '{geraet}' fehlgeschlagen"
+}

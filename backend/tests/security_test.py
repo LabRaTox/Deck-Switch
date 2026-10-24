@@ -255,8 +255,12 @@ async def main():
     # Der eigentliche Zweck: ein anderes Archiv unter derselben Adresse.
     grund = lehnt_ab(untergeschoben, summe)
     check("ein untergeschobenes Archiv wird abgelehnt", bool(grund), grund[:60])
+    # Geprüft werden die Summen selbst, nicht die Wörter drumherum: Die
+    # Meldung kommt in der eingestellten Sprache, und weiter oben stellt
+    # diese Suite auf Englisch um.
+    tatsaechlich = hashlib.sha256(untergeschoben).hexdigest()
     check("und die Meldung nennt beide Summen",
-          "erwartet" in grund and "geladen" in grund)
+          summe[:12] in grund and tatsaechlich[:12] in grund, grund)
 
     check("ein gekipptes Bit fällt auf",
           bool(lehnt_ab(echt[:-1] + bytes([echt[-1] ^ 1]), summe)))

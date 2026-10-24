@@ -1,0 +1,17 @@
+[
+  {
+    "provider": "claude",
+    "source": "local",
+    "provenance": "listPriceEstimate",
+    "currencyCode": "USD",
+    "sessionCostUSD": 11.1632778,
+    "last30DaysCostUSD": 448.1762378000002,
+    "reportingPeriod": "rolling:30",
+    "historyLabel": "Last 30 days",
+    "totals": {
+      "provenance": "listPriceEstimate",
+      "totalCost": 448.1762378000002,
+      "totalTokens": 1358083949
+    }
+  }
+]

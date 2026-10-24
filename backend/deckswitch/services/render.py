@@ -108,7 +108,7 @@ def load_font(
             log.warning("Schrift '%s' nicht ladbar: %s", path, exc)
 
     log.warning(
-        "Keine TrueType-Schrift gefunden — Beschriftungen bleiben winzig. "
+        "Keine TrueType-Schrift gefunden, Beschriftungen bleiben winzig. "
         "Abhilfe: ein Schriftpaket installieren (z. B. noto-fonts)."
     )
     return ImageFont.load_default()
@@ -503,22 +503,28 @@ class RenderService:
         """Wortweiser Umbruch; überlange Wörter werden hart getrennt."""
         if not text:
             return []
+        def fits(part: str) -> bool:
+            return draw.textlength(part, font=font) <= max_width
+
         lines: list[str] = []
         for paragraph in text.split("\n"):
             current = ""
             for word in paragraph.split(" "):
                 candidate = f"{current} {word}".strip()
-                if draw.textlength(candidate, font=font) <= max_width or not current:
+                if fits(candidate):
                     current = candidate
-                else:
+                    continue
+                if current:
                     lines.append(current)
-                    current = word
-            while draw.textlength(current, font=font) > max_width and len(current) > 1:
-                cut = len(current) - 1
-                while cut > 1 and draw.textlength(current[:cut], font=font) > max_width:
-                    cut -= 1
-                lines.append(current[:cut])
-                current = current[cut:]
+                # Ein Wort, das allein nicht passt, wird hart getrennt, egal
+                # wo im Text es steht. Der Rest beginnt die nächste Zeile.
+                while not fits(word) and len(word) > 1:
+                    cut = len(word) - 1
+                    while cut > 1 and not fits(word[:cut]):
+                        cut -= 1
+                    lines.append(word[:cut])
+                    word = word[cut:]
+                current = word
             if current:
                 lines.append(current)
         return lines[:3]

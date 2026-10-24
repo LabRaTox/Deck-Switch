@@ -35,8 +35,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import __version__
+from . import __version__, texte
 from . import events as ev
 from . import paths
 from .config import Config, DeviceSettings, Page, Profile, Slot, TouchWallpaper
@@ -211,6 +212,35 @@ def _allowed_origins(host: str, port: int, dev: bool = False) -> set[str]:
     return origins
 
 
+def _allowed_hosts(host: str) -> set[str]:
+    """Namen, unter denen der Server angesprochen werden darf.
+
+    Gegen DNS-Rebinding: Eine fremde Seite kann ihren eigenen Namen auf
+    127.0.0.1 zeigen lassen und ist dann für den Browser „dieselbe
+    Herkunft“. Ein GET trägt dabei kein ``Origin``, wohl aber den fremden
+    Namen im ``Host``. Der Port spielt keine Rolle, nur der Name.
+    """
+    return {_host_name(host), "127.0.0.1", "localhost", "::1"}
+
+
+def _host_name(wert: str) -> str:
+    """Der Name aus einem ``Host``-Kopf, ohne Port und Klammern."""
+    wert = wert.strip().lower()
+    if wert.startswith("["):
+        wert = wert[1:].split("]", 1)[0]
+    elif wert.count(":") == 1:
+        wert = wert.split(":", 1)[0]
+    return wert.rstrip(".")
+
+
+def _host_erlaubt(kopf: str | None, erlaubt: set[str]) -> bool:
+    # Ohne ``Host`` kommt die Anfrage nicht aus einem Browser, und nur gegen
+    # den richtet sich die Prüfung.
+    if not kopf:
+        return True
+    return _host_name(kopf) in erlaubt
+
+
 #: HTTP-Methoden, die etwas verändern — nur die brauchen den Origin-Riegel.
 _UNSAFE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
@@ -224,6 +254,7 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="DECK//SWITCH", version=__version__, docs_url="/api/docs")
     allowed_origins = _allowed_origins(host, port, dev)
+    allowed_hosts = _allowed_hosts(host)
 
     # CORS auf die bekannten Herkünfte einschränken. Damit blockt der Browser
     # das *Lesen* fremder Antworten und lässt vorab geprüfte Anfragen (JSON,
@@ -234,6 +265,21 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _fehler_mit_code(_request, exc: StarletteHTTPException):
+        """Wie FastAPIs eigene Antwort, nur mit dem Schlüssel des Texts dabei.
+
+        ``detail`` bleibt der übersetzte Text, den die Oberfläche anzeigt.
+        ``code`` ist der feste Schlüssel aus ``locales/*.json``, auf den sie
+        reagieren kann, ohne den Wortlaut zu vergleichen. Kommt der Text aus
+        einem gefangenen Fehler, steckt der Schlüssel in dessen Ursache.
+        """
+        inhalt: dict[str, Any] = {"detail": exc.detail}
+        code = texte.code_von(exc.detail) or texte.code_von(exc.__cause__)
+        if code:
+            inhalt["code"] = code
+        return JSONResponse(inhalt, status_code=exc.status_code, headers=getattr(exc, "headers", None))
 
     @app.middleware("http")
     async def _origin_guard(request, call_next):
@@ -248,11 +294,16 @@ def create_app(
         Ohne ``Origin`` (Kommandozeile, gleiche Herkunft) bleibt alles frei —
         der Schutz richtet sich gegen den Browser, nicht gegen den Nutzer.
         """
+        if not _host_erlaubt(request.headers.get("host"), allowed_hosts):
+            return JSONResponse(
+                {"detail": texte.t("server.unbekannter_host"), "code": "server.unbekannter_host"},
+                status_code=400,
+            )
         if request.method in _UNSAFE_METHODS:
             origin = request.headers.get("origin")
             if origin is not None and origin not in allowed_origins:
                 return JSONResponse(
-                    {"detail": "Zugriff von einer fremden Herkunft abgelehnt"},
+                    {"detail": texte.t("server.zugriff_einer_fremden_herkunft")},
                     status_code=403,
                 )
         return await call_next(request)
@@ -340,7 +391,7 @@ def create_app(
         """Zeigt das Overlay, versteckt es oder schaltet um."""
         deck = runtime.decks.get(key)
         if deck is None or not deck.binding.is_overlay:
-            raise HTTPException(404, "Kein Deck mit Overlay")
+            raise HTTPException(404, texte.t("server.kein_deck_overlay"))
         try:
             if payload.visible is None:
                 sichtbar = await runtime.overlay.toggle(key, at_cursor=payload.at_cursor)
@@ -394,10 +445,10 @@ def create_app(
         """
         deck = runtime.decks.get(key)
         if deck is None:
-            raise HTTPException(404, "Deck nicht gefunden")
+            raise HTTPException(404, texte.t("server.deck_nicht_gefunden"))
         device = deck.device
         if not isinstance(device, VirtualDevice):
-            raise HTTPException(400, "Dieses Deck ist kein virtuelles")
+            raise HTTPException(400, texte.t("server.dieses_deck_kein_virtuelles"))
         return {
             "deck": deck.key,
             "name": deck.label,
@@ -422,10 +473,10 @@ def create_app(
         deck = runtime.decks.get(key)
         device = deck.device if deck else None
         if not isinstance(device, VirtualDevice):
-            raise HTTPException(404, "Kein virtuelles Deck")
+            raise HTTPException(404, texte.t("server.kein_virtuelles_deck"))
         data = device.image(input_type, index)
         if data is None:
-            raise HTTPException(404, "Für diese Kachel gibt es noch kein Bild")
+            raise HTTPException(404, texte.t("netserver.diese_kachel_gibt_kein"))
         return Response(
             data, media_type="image/png", headers={"Cache-Control": "no-store"}
         )
@@ -440,7 +491,7 @@ def create_app(
         deck = runtime.decks.get(key)
         device = deck.device if deck else None
         if not isinstance(device, VirtualDevice):
-            raise HTTPException(404, "Kein virtuelles Deck")
+            raise HTTPException(404, texte.t("server.kein_virtuelles_deck"))
 
         if payload.action == "rotate":
             device.rotate(payload.index, payload.delta or 1)
@@ -485,7 +536,7 @@ def create_app(
     async def update_deck(key: str, payload: DeckUpdate) -> dict[str, Any]:
         deck = runtime.decks.get(key)
         if deck is None:
-            raise HTTPException(404, "Deck nicht gefunden")
+            raise HTTPException(404, texte.t("server.deck_nicht_gefunden"))
 
         if payload.name is not None:
             deck.binding.name = payload.name.strip() or deck.device.info.deck_type
@@ -493,14 +544,14 @@ def create_app(
             deck.binding.order = payload.order
         if payload.profile_id is not None:
             if payload.profile_id not in runtime.config.profiles:
-                raise HTTPException(404, "Profil nicht gefunden")
+                raise HTTPException(404, texte.t("server.profil_nicht_gefunden"))
             deck.binding.profile_id = payload.profile_id
             deck.apply_config()
         if payload.device is not None:
             try:
                 deck.binding.device = DeviceSettings.model_validate(payload.device)
             except ValidationError as exc:
-                raise HTTPException(422, f"Geräteeinstellungen ungültig: {exc}") from exc
+                raise HTTPException(422, texte.t("server.geraeteeinstellungen_ungueltig", exc=exc)) from exc
             deck.apply_config()
 
         # Nach außen heißt die Kachelgröße ``tile_size`` — im Modell
@@ -519,7 +570,7 @@ def create_app(
             if wert is None:
                 continue
             if not deck.binding.is_virtual:
-                raise HTTPException(400, "Das Raster gilt nur für Decks ohne Gerät")
+                raise HTTPException(400, texte.t("server.raster_gilt_decks_ohne"))
             setattr(deck.binding, innen, max(kleinster, min(groesster, int(wert))))
             geaendert = True
         for schalter in ("overlay_transparent", "hide_empty", "overlay_close_on_click"):
@@ -527,18 +578,18 @@ def create_app(
             if wert is None:
                 continue
             if not deck.binding.is_overlay:
-                raise HTTPException(400, "Diese Einstellung gilt nur fürs Overlay")
+                raise HTTPException(400, texte.t("server.diese_einstellung_gilt_fuers"))
             setattr(deck.binding, schalter, bool(wert))
             geaendert = True
 
         if payload.overlay_hotkey is not None:
             if not deck.binding.is_overlay:
-                raise HTTPException(400, "Ein Kurzbefehl holt nur ein Overlay")
+                raise HTTPException(400, texte.t("server.kurzbefehl_holt_overlay"))
             deck.binding.overlay_hotkey = payload.overlay_hotkey.strip()
 
         if payload.network_enabled is not None:
             if not deck.binding.is_network:
-                raise HTTPException(400, "Diese Einstellung gilt nur für Netz-Decks")
+                raise HTTPException(400, texte.t("server.diese_einstellung_gilt_netz"))
             deck.binding.network_enabled = bool(payload.network_enabled)
             runtime.save_config()
             # An- und Abschalten wirkt sofort: Der Server hört auf zu
@@ -566,7 +617,7 @@ def create_app(
     async def forget_deck(key: str) -> dict[str, Any]:
         try:
             if not runtime.forget_deck(key):
-                raise HTTPException(404, "Deck nicht gefunden")
+                raise HTTPException(404, texte.t("server.deck_nicht_gefunden"))
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         # Wer gerade an diesem Deck hing, fliegt sofort raus — und war es
@@ -674,7 +725,7 @@ def create_app(
         if payload.copy_from:
             vorlage = runtime.config.profiles.get(payload.copy_from)
             if vorlage is None:
-                raise HTTPException(404, "Vorlage nicht gefunden")
+                raise HTTPException(404, texte.t("server.vorlage_nicht_gefunden"))
             profil = _kopiere_profil(vorlage, name)
         else:
             wurzel = Page(name="Start")
@@ -689,12 +740,12 @@ def create_app(
     async def update_profile(profile_id: str, payload: ProfileUpdate) -> dict[str, Any]:
         profil = runtime.config.profiles.get(profile_id)
         if profil is None:
-            raise HTTPException(404, "Profil nicht gefunden")
+            raise HTTPException(404, texte.t("server.profil_nicht_gefunden"))
 
         if payload.name is not None:
             name = payload.name.strip()
             if not name:
-                raise HTTPException(422, "Ein Profil braucht einen Namen")
+                raise HTTPException(422, texte.t("server.profil_braucht_namen"))
             profil.name = name
 
         if payload.auto_apps is not None:
@@ -719,9 +770,9 @@ def create_app(
         damit nichts zu zeigen.
         """
         if profile_id not in runtime.config.profiles:
-            raise HTTPException(404, "Profil nicht gefunden")
+            raise HTTPException(404, texte.t("server.profil_nicht_gefunden"))
         if len(runtime.config.profiles) <= 1:
-            raise HTTPException(409, "Das letzte Profil kann nicht gelöscht werden")
+            raise HTTPException(409, texte.t("server.letzte_profil_kann_nicht"))
 
         del runtime.config.profiles[profile_id]
         ersatz = next(iter(runtime.config.profiles))
@@ -755,7 +806,7 @@ def create_app(
         app_settings = runtime.config.app
         if payload.language is not None:
             if payload.language not in ("de", "en"):
-                raise HTTPException(422, "Unbekannte Sprache")
+                raise HTTPException(422, texte.t("server.unbekannte_sprache"))
             app_settings.language = payload.language
 
         runtime.save_config()
@@ -769,7 +820,7 @@ def create_app(
         try:
             config = Config.model_validate(payload)
         except ValidationError as exc:
-            raise HTTPException(422, f"Config ungültig: {exc}") from exc
+            raise HTTPException(422, texte.t("server.config_ungueltig", exc=exc)) from exc
         runtime.apply_config(config)
         return config.model_dump(mode="json")
 
@@ -831,7 +882,7 @@ def create_app(
         try:
             image = session.screensaver_preview(source, layout)
         except Exception as exc:
-            raise HTTPException(404, f"Schoner nicht darstellbar: {exc}") from exc
+            raise HTTPException(404, texte.t("server.schoner_nicht_darstellbar", exc=exc)) from exc
 
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
@@ -842,7 +893,7 @@ def create_app(
         """Zeigt den eingestellten Schoner sofort — zum Ausprobieren."""
         session = runtime.deck(deck)
         if not session.settings.screensaver.source:
-            raise HTTPException(400, "Kein Bildschirmschoner eingestellt")
+            raise HTTPException(400, texte.t("server.kein_bildschirmschoner_eingestellt"))
         session.start_screensaver_now()
         return {"ok": True}
 
@@ -895,7 +946,7 @@ def create_app(
                 source, fit=fit, opacity=opacity
             )
         except Exception as exc:
-            raise HTTPException(404, f"Hintergrundbild nicht darstellbar: {exc}") from exc
+            raise HTTPException(404, texte.t("server.hintergrundbild_nicht_darstellbar", exc=exc)) from exc
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return Response(buffer.getvalue(), media_type="image/png")
@@ -920,7 +971,7 @@ def create_app(
         except autostart.AutostartUnavailable as exc:
             raise HTTPException(409, str(exc)) from exc
         except (autostart.AutostartError, OSError, subprocess.SubprocessError) as exc:
-            raise HTTPException(500, f"Autostart nicht schaltbar: {exc}") from exc
+            raise HTTPException(500, texte.t("server.autostart_nicht_schaltbar", exc=exc)) from exc
 
     @app.get("/api/export")
     async def export_config() -> Response:
@@ -941,7 +992,7 @@ def create_app(
                 json.dumps(payload), merge_profiles=merge_profiles
             )
         except (ValidationError, json.JSONDecodeError, ValueError) as exc:
-            raise HTTPException(422, f"Import fehlgeschlagen: {exc}") from exc
+            raise HTTPException(422, texte.t("server.import_fehlgeschlagen", exc=exc)) from exc
         runtime.apply_config(config, save=False)
         return config.model_dump(mode="json")
 
@@ -954,8 +1005,11 @@ def create_app(
     @app.get("/api/backup")
     async def create_backup() -> Response:
         stempel = time.strftime("%Y%m%d-%H%M")
+        # Im Thread: Das Paket nimmt alle eigenen Bilder mit, und Packen
+        # hielte sonst den Loop samt Deck an.
+        daten = await asyncio.to_thread(backup.make_archive, runtime.store)
         return Response(
-            backup.make_archive(runtime.store),
+            daten,
             media_type="application/zip",
             headers={
                 "Content-Disposition":
@@ -967,8 +1021,11 @@ def create_app(
     async def restore_backup(file: UploadFile = File(...)) -> dict[str, Any]:
         daten = await file.read(MAX_BACKUP_BYTES + 1)
         if len(daten) > MAX_BACKUP_BYTES:
-            raise HTTPException(413, "Sicherung zu groß")
+            raise HTTPException(413, texte.t("server.sicherung_gross"))
         try:
+            # Bewusst im Loop: Das Wiederherstellen ersetzt die Config des
+            # Stores und speichert. Liefe das in einem Thread, könnte ein
+            # gleichzeitiges Speichern aus dem Loop den alten Stand zurückholen.
             config = backup.restore_archive(daten, runtime.store)
         except backup.BackupError as exc:
             raise HTTPException(422, str(exc)) from exc
@@ -993,7 +1050,7 @@ def create_app(
     async def export_profile(profile_id: str) -> Response:
         """Ein einzelnes Profil zum Weitergeben, samt seiner Bilder."""
         try:
-            daten = backup.export_profile(runtime.store, profile_id)
+            daten = await asyncio.to_thread(backup.export_profile, runtime.store, profile_id)
         except backup.BackupError as exc:
             raise HTTPException(404, str(exc)) from exc
         name = SAFE_FILENAME.sub("-", runtime.config.profiles[profile_id].name)[:40]
@@ -1011,7 +1068,7 @@ def create_app(
         """Nimmt ein Profilpaket an — immer zusätzlich, nie ersetzend."""
         daten = await file.read(MAX_BACKUP_BYTES + 1)
         if len(daten) > MAX_BACKUP_BYTES:
-            raise HTTPException(413, "Paket zu groß")
+            raise HTTPException(413, texte.t("server.paket_gross"))
         try:
             profil = backup.import_profile(daten, runtime.store)
         except backup.BackupError as exc:
@@ -1040,7 +1097,7 @@ def create_app(
         profile = runtime.deck(deck).profile
         parent_id = payload.parent_id
         if parent_id is not None and parent_id not in profile.pages:
-            raise HTTPException(404, "Übergeordnete Seite existiert nicht")
+            raise HTTPException(404, texte.t("server.uebergeordnete_seite_existiert_nicht"))
         page = Page(
             name=payload.name,
             parent_id=parent_id,
@@ -1059,7 +1116,7 @@ def create_app(
         profile = runtime.deck(deck).profile
         page = profile.pages.get(page_id)
         if page is None:
-            raise HTTPException(404, "Seite nicht gefunden")
+            raise HTTPException(404, texte.t("server.seite_nicht_gefunden"))
         if payload.name is not None:
             page.name = payload.name
         if payload.touch_wallpaper is not None:
@@ -1068,7 +1125,7 @@ def create_app(
                     payload.touch_wallpaper
                 )
             except ValidationError as exc:
-                raise HTTPException(422, f"Hintergrundbild ungültig: {exc}") from exc
+                raise HTTPException(422, texte.t("server.hintergrundbild_ungueltig", exc=exc)) from exc
         if payload.parent_id is not None:
             new_parent = payload.parent_id or None
             _check_move_target(profile, page_id, new_parent)
@@ -1087,9 +1144,9 @@ def create_app(
         """Sortiert eine Seite um und/oder hängt sie an ein anderes Elternteil."""
         profile = runtime.deck(deck).profile
         if page_id not in profile.pages:
-            raise HTTPException(404, "Seite nicht gefunden")
+            raise HTTPException(404, texte.t("server.seite_nicht_gefunden"))
         if page_id == profile.root_page_id and payload.parent_id is not None:
-            raise HTTPException(400, "Die Startseite kann keine Unterseite werden")
+            raise HTTPException(400, texte.t("server.startseite_kann_keine_unterseite"))
         _check_move_target(profile, page_id, payload.parent_id)
 
         profile.move_page(page_id, payload.parent_id, payload.index)
@@ -1105,9 +1162,9 @@ def create_app(
         session = runtime.deck(deck)
         profile = session.profile
         if page_id == profile.root_page_id:
-            raise HTTPException(400, "Die Startseite kann nicht gelöscht werden")
+            raise HTTPException(400, texte.t("server.startseite_kann_nicht_geloescht"))
         if page_id not in profile.pages:
-            raise HTTPException(404, "Seite nicht gefunden")
+            raise HTTPException(404, texte.t("server.seite_nicht_gefunden"))
 
         # Unterseiten mitnehmen — sonst blieben unerreichbare Waisen zurück.
         parent_id = profile.pages[page_id].parent_id
@@ -1128,7 +1185,7 @@ def create_app(
     async def navigate(page_id: str, deck: str | None = None) -> dict[str, Any]:
         session = runtime.deck(deck)
         if page_id not in session.profile.pages:
-            raise HTTPException(404, "Seite nicht gefunden")
+            raise HTTPException(404, texte.t("server.seite_nicht_gefunden"))
         session.navigate(page_id)
         return {"current_page_id": session.current_page_id(), "deck": session.key}
 
@@ -1153,7 +1210,7 @@ def create_app(
             mapping.pop(index, None)
         else:
             if runtime.registry.get(payload.slot.plugin_id) is None:
-                raise HTTPException(404, f"Plugin '{payload.slot.plugin_id}' nicht gefunden")
+                raise HTTPException(404, texte.t("server.plugin_nicht_gefunden_2", plugin_id=payload.slot.plugin_id))
             mapping[index] = payload.slot
 
         runtime.save_config()
@@ -1200,7 +1257,7 @@ def create_app(
         if page_id != session.current_page_id():
             session.navigate(page_id)
         if not session.cycle_stack(index):
-            raise HTTPException(400, "Auf diesem Dial liegt kein Stack")
+            raise HTTPException(400, texte.t("server.diesem_dial_liegt_kein"))
         return {"stack_index": session.stack_index(index)}
 
     # ======================================================================
@@ -1254,7 +1311,7 @@ def create_app(
         """
         plugin = runtime.registry.instance(plugin_id)
         if plugin is None:
-            raise HTTPException(404, "Plugin nicht geladen")
+            raise HTTPException(404, texte.t("server.plugin_nicht_geladen"))
         payload = dict(context or {})
         payload["__deck"] = runtime.deck(deck).key
         try:
@@ -1262,23 +1319,23 @@ def create_app(
                 plugin.get_dynamic_options, source, payload
             )
         except Exception as exc:
-            raise HTTPException(500, f"Optionen nicht abrufbar: {exc}") from exc
+            raise HTTPException(500, texte.t("server.optionen_nicht_abrufbar", exc=exc)) from exc
 
     @app.get("/api/plugins/{plugin_id}/icon")
     async def plugin_icon(plugin_id: str) -> Response:
         """Das Bild, das ein Plugin in der Übersicht vertritt."""
         loaded = runtime.registry.get(plugin_id)
         if loaded is None or not loaded.manifest.icon:
-            raise HTTPException(404, "Kein Symbol hinterlegt")
+            raise HTTPException(404, texte.t("server.kein_symbol_hinterlegt"))
 
         # Der Dateiname kommt aus einem fremden Manifest — er darf auf
         # nichts außerhalb des Plugin-Ordners zeigen.
         directory = loaded.directory.resolve()
         candidate = (directory / loaded.manifest.icon).resolve()
         if directory not in candidate.parents or not candidate.is_file():
-            raise HTTPException(404, "Symboldatei nicht gefunden")
+            raise HTTPException(404, texte.t("server.symboldatei_nicht_gefunden"))
         if candidate.suffix.lower() not in PLUGIN_ICON_SUFFIXES:
-            raise HTTPException(415, f"Nicht unterstützt: {candidate.suffix}")
+            raise HTTPException(415, texte.t("server.nicht_unterstuetzt", suffix=candidate.suffix))
 
         media = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         # Wie beim Upload: Ein Plugin-Symbol kommt aus fremder Hand und darf
@@ -1303,11 +1360,11 @@ def create_app(
         """
         loaded = runtime.registry.get(plugin_id)
         if loaded is None:
-            raise HTTPException(404, "Plugin nicht gefunden")
+            raise HTTPException(404, texte.t("server.plugin_nicht_gefunden"))
 
         bilder = loaded.manifest.screenshots
         if not 0 <= index < len(bilder):
-            raise HTTPException(404, "Kein Bild an dieser Stelle")
+            raise HTTPException(404, texte.t("server.kein_bild_dieser_stelle"))
 
         # Dieselbe Sorgfalt wie beim Symbol: Der Dateiname stammt aus einem
         # fremden Manifest und darf auf nichts außerhalb des Plugin-Ordners
@@ -1315,9 +1372,9 @@ def create_app(
         directory = loaded.directory.resolve()
         candidate = (directory / bilder[index]).resolve()
         if directory not in candidate.parents or not candidate.is_file():
-            raise HTTPException(404, "Bilddatei nicht gefunden")
+            raise HTTPException(404, texte.t("server.bilddatei_nicht_gefunden"))
         if candidate.suffix.lower() not in PLUGIN_SCREENSHOT_SUFFIXES:
-            raise HTTPException(415, f"Nicht unterstützt: {candidate.suffix}")
+            raise HTTPException(415, texte.t("server.nicht_unterstuetzt", suffix=candidate.suffix))
 
         media = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         # Wie beim Symbol: gleiche Adresse, wechselnder Inhalt — der Browser
@@ -1331,7 +1388,7 @@ def create_app(
     @app.put("/api/plugins/{plugin_id}/config")
     async def put_plugin_config(plugin_id: str, payload: dict = Body(...)) -> dict[str, Any]:
         if runtime.registry.get(plugin_id) is None:
-            raise HTTPException(404, "Plugin nicht gefunden")
+            raise HTTPException(404, texte.t("server.plugin_nicht_gefunden"))
         runtime.config.plugin_settings[plugin_id] = payload
         runtime.save_config()
         runtime.notify_plugin_config_changed(plugin_id)
@@ -1344,7 +1401,7 @@ def create_app(
     ) -> dict[str, Any]:
         plugin = runtime.registry.instance(plugin_id)
         if plugin is None:
-            raise HTTPException(404, "Plugin nicht geladen")
+            raise HTTPException(404, texte.t("server.plugin_nicht_geladen"))
         # Discords „Jetzt verbinden“ öffnet einen Dialog im Client — großzügig
         # bemessener Timeout, damit der User Zeit zum Bestätigen hat.
         try:
@@ -1354,7 +1411,7 @@ def create_app(
         except NotImplementedError as exc:
             raise HTTPException(400, str(exc)) from exc
         except asyncio.TimeoutError as exc:
-            raise HTTPException(504, "Zeitüberschreitung") from exc
+            raise HTTPException(504, texte.t("server.zeitueberschreitung")) from exc
         except Exception as exc:
             # Nur die Meldung, nicht die Klasse. Ein Plugin, das „Es fehlt der
             # Schlüssel" sagt, hat damit alles gesagt; „KeineZugangsdaten:"
@@ -1372,7 +1429,7 @@ def create_app(
     ) -> dict[str, Any]:
         loaded = runtime.registry.get(plugin_id)
         if loaded is None:
-            raise HTTPException(404, "Plugin nicht gefunden")
+            raise HTTPException(404, texte.t("server.plugin_nicht_gefunden"))
         disabled = set(runtime.config.disabled_plugins)
         disabled.discard(plugin_id) if enabled else disabled.add(plugin_id)
         runtime.config.disabled_plugins = sorted(disabled)
@@ -1438,7 +1495,7 @@ def create_app(
         bringen. Die Anfrage wartet auf Bestätigung in der GUI.
         """
         if not url.lower().startswith(("http://", "https://")):
-            raise HTTPException(400, "Nur http(s)-Adressen werden angenommen")
+            raise HTTPException(400, texte.t("server.http_s_adressen_werden"))
         request = runtime.add_install_request(url, origin, sha256)
         return request.as_dict()
 
@@ -1450,7 +1507,7 @@ def create_app(
     async def confirm_install_request(request_id: str) -> dict[str, Any]:
         request = runtime.take_install_request(request_id)
         if request is None:
-            raise HTTPException(404, "Anfrage nicht gefunden oder abgelaufen")
+            raise HTTPException(404, texte.t("server.anfrage_nicht_gefunden_oder"))
         try:
             # Die Prüfsumme stammt aus derselben Anfrage wie die Adresse —
             # sie schützt also nicht vor einem bösartigen Link, sondern
@@ -1472,9 +1529,11 @@ def create_app(
     async def install_archive(file: UploadFile = File(...)) -> dict[str, Any]:
         data = await file.read(installer.MAX_ARCHIVE_BYTES + 1)
         if len(data) > installer.MAX_ARCHIVE_BYTES:
-            raise HTTPException(413, "Archiv zu groß (max. 64 MB)")
+            raise HTTPException(413, texte.t("installer.archiv_gross_max_64"))
         try:
-            manifest = installer.install_archive(data, filename=file.filename or "")
+            manifest = await asyncio.to_thread(
+                installer.install_archive, data, filename=file.filename or ""
+            )
         except installer.InstallError as exc:
             raise HTTPException(400, str(exc)) from exc
         await runtime.reload_plugins()
@@ -1484,7 +1543,7 @@ def create_app(
     async def uninstall_plugin(plugin_id: str) -> dict[str, Any]:
         loaded = runtime.registry.get(plugin_id)
         if loaded is not None and loaded.builtin:
-            raise HTTPException(400, "Eingebaute Plugins lassen sich nicht entfernen")
+            raise HTTPException(400, texte.t("installer.eingebaute_plugins_lassen_nicht"))
         try:
             installer.uninstall(plugin_id)
         except installer.InstallError as exc:
@@ -1506,7 +1565,7 @@ def create_app(
         known = set(runtime.registry.plugins)
         unknown = [p for p in order if p not in known]
         if unknown:
-            raise HTTPException(404, f"Unbekannte Plugins: {', '.join(unknown)}")
+            raise HTTPException(404, texte.t("server.unbekannte_plugins", plugins=', '.join(unknown)))
 
         runtime.config.app.plugin_order = list(dict.fromkeys(order))
         runtime.save_config()
@@ -1581,7 +1640,7 @@ def create_app(
     async def store_bewerten(slug: str, payload: dict[str, Any]) -> dict[str, Any]:
         wert = payload.get("value")
         if wert not in (1, -1):
-            raise HTTPException(400, "value muss 1 oder -1 sein")
+            raise HTTPException(400, texte.t("server.value_muss_1_oder"))
         kommentar = str(payload.get("comment") or "")
         try:
             return await _im_hintergrund(lambda: store.bewerte(slug, wert, kommentar))
@@ -1715,12 +1774,11 @@ def create_app(
         """
         geladen = runtime.registry.get(plugin_id)
         if geladen is None:
-            raise HTTPException(404, f"'{plugin_id}' ist nicht installiert")
+            raise HTTPException(404, texte.t("installer.nicht_installiert", plugin_id=plugin_id))
         if geladen.builtin:
             raise HTTPException(
                 400,
-                "Mitgelieferte Plugins gehören schon zur App — "
-                "sie im Store einzureichen ginge schief.",
+                texte.t("server.mitgelieferte_plugins_gehoeren_schon"),
             )
 
         try:
@@ -1738,7 +1796,7 @@ def create_app(
 
     async def _reiche_ein(daten: bytes, name: str) -> dict[str, Any]:
         if len(daten) > installer.MAX_ARCHIVE_BYTES:
-            raise HTTPException(413, "Archiv zu groß (max. 64 MB)")
+            raise HTTPException(413, texte.t("installer.archiv_gross_max_64"))
         try:
             return await _im_hintergrund(lambda: store.hochladen(daten, dateiname=name))
         except store.StoreError as exc:
@@ -1774,7 +1832,7 @@ def create_app(
     async def icon_svg(set_id: str, name: str) -> Response:
         source = runtime.icons.icon_svg_source(set_id, name)
         if source is None:
-            raise HTTPException(404, "Icon nicht gefunden")
+            raise HTTPException(404, texte.t("server.icon_nicht_gefunden"))
         return Response(source, media_type="image/svg+xml",
                         headers={"Cache-Control": "public, max-age=86400"})
 
@@ -1788,11 +1846,11 @@ def create_app(
         """
         data = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(data) > MAX_UPLOAD_BYTES:
-            raise HTTPException(413, "Datei zu groß (max. 4 MB)")
+            raise HTTPException(413, texte.t("server.datei_gross_max_4"))
 
         suffix = Path(file.filename or "").suffix.lower()
         if suffix not in {".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif"}:
-            raise HTTPException(415, "Nur PNG, JPG, WEBP, GIF oder SVG")
+            raise HTTPException(415, texte.t("server.png_jpg_webp_gif"))
 
         stem = SAFE_FILENAME.sub("-", Path(file.filename or "icon").stem)[:40] or "icon"
         filename = f"{stem}-{uuid.uuid4().hex[:8]}{suffix}"
@@ -1805,7 +1863,7 @@ def create_app(
     async def get_upload(filename: str) -> FileResponse:
         candidate = paths.image_path(filename)
         if candidate is None:
-            raise HTTPException(404, "Datei nicht gefunden")
+            raise HTTPException(404, texte.t("server.datei_nicht_gefunden"))
         media_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
 
         # nosniff verhindert, dass der Browser den Typ überstimmt. Ein
@@ -1846,13 +1904,13 @@ def create_app(
         entry: int | None = None,
     ) -> Response:
         if input_type not in ("key", "dial"):
-            raise HTTPException(400, "input_type muss 'key' oder 'dial' sein")
+            raise HTTPException(400, texte.t("server.input_type_muss_key"))
         try:
             image = await runtime.deck(deck).render_preview(
                 page_id, input_type, index, entry
             )
         except Exception as exc:
-            raise HTTPException(500, f"Vorschau fehlgeschlagen: {exc}") from exc
+            raise HTTPException(500, texte.t("server.vorschau_fehlgeschlagen", exc=exc)) from exc
         buffer = io.BytesIO()
         image.convert("RGBA").save(buffer, format="PNG")
         return Response(
@@ -1891,6 +1949,10 @@ def create_app(
         origin = socket.headers.get("origin")
         if origin is not None and origin not in allowed_origins:
             log.warning("WebSocket von fremder Herkunft abgelehnt: %s", origin)
+            await socket.close(code=1008)
+            return
+        if not _host_erlaubt(socket.headers.get("host"), allowed_hosts):
+            log.warning("WebSocket mit fremdem Host abgelehnt: %s", socket.headers.get("host"))
             await socket.close(code=1008)
             return
 
@@ -1952,7 +2014,7 @@ def create_app(
             return JSONResponse(
                 {
                     "name": "DECK//SWITCH",
-                    "hint": "GUI noch nicht gebaut — 'npm run dev' im Ordner gui/",
+                    "hint": texte.t("server.gui_nicht_gebaut_ordner"),
                     "api": "/api/docs",
                 }
             )
@@ -2088,7 +2150,7 @@ def _plugins_payload(runtime: Runtime) -> list[dict[str, Any]]:
 def _require_page(session, page_id: str) -> Page:
     page = session.profile.pages.get(page_id)
     if page is None:
-        raise HTTPException(404, "Seite nicht gefunden")
+        raise HTTPException(404, texte.t("server.seite_nicht_gefunden"))
     return page
 
 
@@ -2097,7 +2159,7 @@ def _require_mapping(page: Page, input_type: str) -> dict:
         return page.keys
     if input_type == "dial":
         return page.dials
-    raise HTTPException(400, "input_type muss 'key' oder 'dial' sein")
+    raise HTTPException(400, texte.t("server.input_type_muss_key"))
 
 
 def _check_index(session, input_type: str, index: int) -> None:
@@ -2107,7 +2169,7 @@ def _check_index(session, input_type: str, index: int) -> None:
         else (session.device.info.dial_count or 4)
     )
     if not 0 <= index < limit:
-        raise HTTPException(400, f"Index {index} liegt außerhalb von 0..{limit - 1}")
+        raise HTTPException(400, texte.t("server.index_liegt_ausserhalb_0", index=index, hoechster=limit - 1))
 
 
 def _check_move_target(profile, page_id: str, parent_id: str | None) -> None:
@@ -2120,9 +2182,9 @@ def _check_move_target(profile, page_id: str, parent_id: str | None) -> None:
     if parent_id is None:
         return
     if parent_id not in profile.pages:
-        raise HTTPException(404, "Übergeordnete Seite existiert nicht")
+        raise HTTPException(404, texte.t("server.uebergeordnete_seite_existiert_nicht"))
     if parent_id in profile.subtree_ids(page_id):
-        raise HTTPException(400, "Eine Seite kann nicht unter sich selbst liegen")
+        raise HTTPException(400, texte.t("server.seite_kann_nicht_unter"))
 
 
 def _kopiere_profil(vorlage: Profile, name: str) -> Profile:

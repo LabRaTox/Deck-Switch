@@ -19,11 +19,19 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from deckswitch.plugins.base import plugin_text
+
 log = logging.getLogger(__name__)
 
 #: So lange gilt ein Wert von ``nvidia-smi`` als frisch.
 GPU_TTL_S = 1.5
 GPU_TIMEOUT_S = 4.0
+
+#: Mindestabstand zwischen zwei Messungen einer Rate. Tick, Zeichnen und
+#: Beschriftung fragen kurz nacheinander; ohne Sperre käme beim zweiten
+#: Aufruf eine Differenz über wenige Millisekunden heraus, also fast
+#: immer null. Innerhalb dieses Abstands gilt der letzte Wert weiter.
+RATE_MIN_S = 0.5
 
 #: hwmon-Treiber, die die CPU-Temperatur liefern — in dieser Reihenfolge.
 CPU_TEMP_DRIVERS = ("k10temp", "coretemp", "zenpower", "cpu_thermal")
@@ -47,6 +55,8 @@ class _Rate:
     last: float = 0.0
     at: float = 0.0
     ready: bool = False
+    #: Zuletzt ausgerechneter Wert, gilt bis ``RATE_MIN_S`` vergangen ist.
+    reading: "Reading | None" = None
 
 
 class SystemInfo:
@@ -56,6 +66,8 @@ class SystemInfo:
 
     def __init__(self) -> None:
         self._cpu_prev: tuple[int, int] | None = None
+        self._cpu_at = 0.0
+        self._cpu_reading: Reading | None = None
         self._net: dict[str, _Rate] = {}
         self._gpu: dict[str, float] = {}
         self._gpu_at = 0.0
@@ -70,10 +82,13 @@ class SystemInfo:
         Der allererste Aufruf hat keine Vergleichsbasis und meldet 0 — nach
         einer Sekunde stimmt der Wert.
         """
+        now = time.monotonic()
+        if self._cpu_reading is not None and now - self._cpu_at < RATE_MIN_S:
+            return self._cpu_reading
         try:
             fields = Path("/proc/stat").read_text().split("\n", 1)[0].split()[1:]
         except OSError:
-            return Reading(0.0, None, "—", available=False)
+            return Reading(0.0, None, "---", available=False)
 
         values = [int(v) for v in fields]
         idle = values[3] + (values[4] if len(values) > 4 else 0)
@@ -81,16 +96,16 @@ class SystemInfo:
 
         previous = self._cpu_prev
         self._cpu_prev = (idle, total)
-        if previous is None:
-            return Reading(0.0, 0.0, "0 %")
-
-        idle_delta = idle - previous[0]
-        total_delta = total - previous[1]
-        if total_delta <= 0:
-            return Reading(0.0, 0.0, "0 %")
-
-        percent = max(0.0, min(100.0, (1 - idle_delta / total_delta) * 100))
-        return Reading(percent, percent / 100, f"{percent:.0f} %")
+        self._cpu_at = now
+        if previous is None or total - previous[1] <= 0:
+            reading = Reading(0.0, 0.0, "0 %")
+        else:
+            idle_delta = idle - previous[0]
+            total_delta = total - previous[1]
+            percent = max(0.0, min(100.0, (1 - idle_delta / total_delta) * 100))
+            reading = Reading(percent, percent / 100, f"{percent:.0f} %")
+        self._cpu_reading = reading
+        return reading
 
     def cpu_temp(self) -> Reading:
         path = self._temp_path(CPU_TEMP_DRIVERS)
@@ -103,7 +118,7 @@ class SystemInfo:
         total = info.get("MemTotal", 0)
         available = info.get("MemAvailable", 0)
         if not total:
-            return Reading(0.0, None, "—", available=False)
+            return Reading(0.0, None, "---", available=False)
         used = total - available
         percent = used / total * 100
         return Reading(percent, percent / 100, f"{used / 1024 / 1024:.1f} GB")
@@ -112,7 +127,7 @@ class SystemInfo:
         info = self._meminfo()
         total = info.get("SwapTotal", 0)
         if not total:
-            return Reading(0.0, 0.0, "aus")
+            return Reading(0.0, 0.0, _t("sysinfo.aus"))
         used = total - info.get("SwapFree", 0)
         percent = used / total * 100
         return Reading(percent, percent / 100, f"{used / 1024 / 1024:.1f} GB")
@@ -136,7 +151,7 @@ class SystemInfo:
         """``utilization``, ``temperature`` oder ``memory`` der NVIDIA-GPU."""
         values = self._gpu_values()
         if not values:
-            return Reading(0.0, None, "—", available=False)
+            return Reading(0.0, None, "---", available=False)
 
         if field_name == "temperature":
             celsius = values.get("temperature.gpu", 0.0)
@@ -196,16 +211,22 @@ class SystemInfo:
         try:
             usage = _shutil.disk_usage(path or "/")
         except OSError:
-            return Reading(0.0, None, "—", available=False)
+            return Reading(0.0, None, "---", available=False)
         percent = usage.used / usage.total * 100
-        return Reading(percent, percent / 100, f"{usage.free / 1024**3:.0f} GB frei")
+        return Reading(percent, percent / 100, _t("sysinfo.frei", wert=f"{usage.free / 1024**3:.0f}"))
 
     def network(self, interface: str, direction: str) -> Reading:
         """Durchsatz in Byte/s. ``interface`` leer = alle zusammen."""
         try:
             lines = Path("/proc/net/dev").read_text().splitlines()[2:]
         except OSError:
-            return Reading(0.0, None, "—", available=False)
+            return Reading(0.0, None, "---", available=False)
+
+        key = f"{interface or '*'}:{direction}"
+        rate = self._net.setdefault(key, _Rate())
+        now = time.monotonic()
+        if rate.reading is not None and now - rate.at < RATE_MIN_S:
+            return rate.reading
 
         total = 0
         for line in lines:
@@ -220,20 +241,20 @@ class SystemInfo:
                 continue
             total += int(fields[0] if direction == "down" else fields[8])
 
-        key = f"{interface or '*'}:{direction}"
-        rate = self._net.setdefault(key, _Rate())
-        now = time.monotonic()
         elapsed = now - rate.at
         previous, rate.last, rate.at = rate.last, total, now
 
         if not rate.ready:
             rate.ready = True
-            return Reading(0.0, 0.0, _bytes_per_second(0))
+            rate.reading = Reading(0.0, 0.0, _bytes_per_second(0))
+            return rate.reading
 
         per_second = max(0.0, (total - previous) / elapsed) if elapsed > 0 else 0.0
         # Balken relativ zu 100 MB/s — reicht für Gigabit und darüber
         # verhält es sich wie ein Vollausschlag.
-        return Reading(per_second, min(1.0, per_second / 100e6), _bytes_per_second(per_second))
+        rate.reading = Reading(per_second, min(1.0, per_second / 100e6),
+                               _bytes_per_second(per_second))
+        return rate.reading
 
     def interfaces(self) -> list[str]:
         """Echte Schnittstellen — ohne Loopback und Container-Beiwerk.
@@ -277,11 +298,11 @@ class SystemInfo:
 
     def _read_temp(self, path: Path | None, ceiling: int) -> Reading:
         if path is None:
-            return Reading(0.0, None, "—", available=False)
+            return Reading(0.0, None, "---", available=False)
         try:
             millidegrees = int(path.read_text().strip())
         except (OSError, ValueError):
-            return Reading(0.0, None, "—", available=False)
+            return Reading(0.0, None, "---", available=False)
         celsius = millidegrees / 1000
         return Reading(celsius, min(1.0, celsius / ceiling), self._temperature(celsius))
 
@@ -290,6 +311,10 @@ class SystemInfo:
         if self.fahrenheit:
             return f"{celsius * 9 / 5 + 32:.0f} °F"
         return f"{celsius:.0f} °C"
+
+
+def _t(schluessel: str, **werte) -> str:
+    return plugin_text(Path(__file__).resolve().parent, "system", schluessel, werte)
 
 
 def _bytes_per_second(value: float) -> str:

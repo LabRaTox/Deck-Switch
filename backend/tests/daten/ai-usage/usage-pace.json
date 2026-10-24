@@ -1,0 +1,26 @@
+[
+  {
+    "provider": "codex",
+    "pace": {
+      "primary": {
+        "stage": "ahead",
+        "deltaPercent": 12,
+        "expectedUsedPercent": 16,
+        "willLastToReset": false,
+        "etaSeconds": 9000,
+        "summary": "12% in deficit | Expected 16% used | Projected empty in 2h 30m"
+      },
+      "secondary": {
+        "stage": "slightlyBehind",
+        "deltaPercent": -6,
+        "expectedUsedPercent": 47,
+        "willLastToReset": true,
+        "summary": "6% in reserve | Expected 47% used | Lasts until reset"
+      }
+    }
+  },
+  {
+    "provider": "claude",
+    "pace": null
+  }
+]

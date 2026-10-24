@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-16T12:00:00Z",
+  "staleAfterSeconds": 180,
+  "host": {
+    "codexBarVersion": "0.80.0",
+    "refreshIntervalSeconds": 60,
+    "usageBarsShowUsed": false
+  },
+  "providers": []
+}

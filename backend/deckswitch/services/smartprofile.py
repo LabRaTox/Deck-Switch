@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .. import paths
+from .. import texte
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..runtime import Runtime
@@ -36,6 +37,10 @@ log = logging.getLogger(__name__)
 DIENST = "de.labratox.deckswitch"
 PFAD = "/fenster"
 SCHNITTSTELLE = "de.labratox.Fenster"
+
+#: Höchstdauer eines Aufrufs an KWin. Ohne Grenze bliebe der Start hängen,
+#: wenn der Compositor nicht antwortet.
+KWIN_TIMEOUT_S = 5.0
 
 #: KWin selbst.
 KWIN = "org.kde.KWin"
@@ -51,7 +56,7 @@ SKRIPTNAME = "deckswitch"
 #: Das Skript, das im Compositor läuft. Bewusst kurz: Es entscheidet nichts,
 #: es meldet nur. Alles Weitere passiert hier, wo es zu lesen und zu prüfen
 #: ist.
-SKRIPT = """// Von DECK//SWITCH angelegt — meldet Fensterwechsel über D-Bus.
+SKRIPT = """// Von DECK//SWITCH angelegt. Meldet Fensterwechsel über D-Bus.
 function melde(fenster) {
   if (!fenster) return;
   callDBus("%(dienst)s", "%(pfad)s", "%(schnittstelle)s", "Aktiv",
@@ -68,7 +73,7 @@ class SmartProfileService:
     def __init__(self, runtime: "Runtime") -> None:
         self.runtime = runtime
         self.verfuegbar = False
-        self.grund = "noch nicht gestartet"
+        self.grund = texte.t("smartprofile.nicht_gestartet")
         #: Zuletzt gesehenes Fenster — für die Anzeige in der GUI.
         self.letztes_fenster: tuple[str, str] = ("", "")
         self._bus: Any = None
@@ -79,7 +84,7 @@ class SmartProfileService:
     async def start(self) -> None:
         """Meldet uns am Bus an und lädt das Skript in den Compositor."""
         if not self._regeln_vorhanden():
-            self.grund = "keine Regel eingerichtet"
+            self.grund = texte.t("smartprofile.keine_regel_eingerichtet")
             log.debug("Smart Profiles: %s", self.grund)
             return
         try:
@@ -87,6 +92,16 @@ class SmartProfileService:
         except Exception as exc:  # noqa: BLE001 — ein fehlender Compositor ist kein Absturz
             self.grund = f"{type(exc).__name__}: {exc}"
             log.info("Smart Profiles nicht verfügbar: %s", self.grund)
+            # Die Verbindung von diesem Versuch wieder schließen. Sonst bliebe
+            # bei jedem neuen Anlauf (etwa nach jeder Profiländerung) eine
+            # weitere offen, samt dem Busnamen.
+            self._trenne()
+
+    def _trenne(self) -> None:
+        bus, self._bus = self._bus, None
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                bus.disconnect()
 
     def _regeln_vorhanden(self) -> bool:
         return any(profil.auto_apps for profil in self.runtime.config.profiles.values())
@@ -95,6 +110,7 @@ class SmartProfileService:
         from dbus_next.aio import MessageBus
         from dbus_next.service import ServiceInterface, method
 
+        self._trenne()
         dienst = self
 
         class Fenster(ServiceInterface):
@@ -105,7 +121,7 @@ class SmartProfileService:
             def Aktiv(self, klasse: "s", titel: "s"):  # noqa: N802, F821 — Name und Signatur gibt D-Bus vor
                 dienst._auf_fenster(klasse, titel)
 
-        self._bus = await MessageBus().connect()
+        self._bus = await asyncio.wait_for(MessageBus().connect(), KWIN_TIMEOUT_S)
         self._bus.export(PFAD, Fenster())
         antwort = await self._bus.request_name(DIENST)
         log.debug("Smart Profiles: Busname %s → %s", DIENST, antwort)
@@ -125,8 +141,7 @@ class SmartProfileService:
         nummer = int(await self._kwin("loadScript", "ss", self._skript_pfad, SKRIPTNAME))
         if nummer < 0:
             raise RuntimeError(
-                "KWin nimmt das Skript nicht an (vielleicht läuft eine zweite "
-                "Instanz von DECK//SWITCH?)"
+                texte.t("smartprofile.kwin_nimmt_skript_nicht")
             )
         await self._kwin_script(nummer, "run")
         self.verfuegbar = True
@@ -143,9 +158,7 @@ class SmartProfileService:
             except Exception as exc:  # noqa: BLE001
                 log.debug("Smart Profiles: Entladen fehlgeschlagen: %s", exc)
             self._skript_pfad = ""
-        if self._bus is not None:
-            self._bus.disconnect()
-            self._bus = None
+        self._trenne()
         self.verfuegbar = False
 
     # -- KWin --------------------------------------------------------------
@@ -153,21 +166,27 @@ class SmartProfileService:
     async def _kwin(self, methode: str, signatur: str, *argumente: Any) -> Any:
         from dbus_next import Message, MessageType
 
-        antwort = await self._bus.call(
-            Message(destination=KWIN, path=KWIN_SCRIPTING,
-                    interface="org.kde.kwin.Scripting", member=methode,
-                    signature=signatur, body=list(argumente))
+        antwort = await asyncio.wait_for(
+            self._bus.call(
+                Message(destination=KWIN, path=KWIN_SCRIPTING,
+                        interface="org.kde.kwin.Scripting", member=methode,
+                        signature=signatur, body=list(argumente))
+            ),
+            KWIN_TIMEOUT_S,
         )
         if antwort.message_type is MessageType.ERROR:
-            raise RuntimeError(f"KWin: {antwort.body[0] if antwort.body else antwort.error_name}")
+            raise RuntimeError(texte.t("smartprofile.kwin", antwort=antwort.body[0] if antwort.body else antwort.error_name))
         return antwort.body[0] if antwort.body else 0
 
     async def _kwin_script(self, nummer: int, methode: str) -> None:
         from dbus_next import Message
 
-        await self._bus.call(
-            Message(destination=KWIN, path=f"{KWIN_SCRIPTING}/Script{nummer}",
-                    interface="org.kde.kwin.Script", member=methode)
+        await asyncio.wait_for(
+            self._bus.call(
+                Message(destination=KWIN, path=f"{KWIN_SCRIPTING}/Script{nummer}",
+                        interface="org.kde.kwin.Script", member=methode)
+            ),
+            KWIN_TIMEOUT_S,
         )
 
     # -- Die Regel ---------------------------------------------------------
@@ -200,7 +219,7 @@ class SmartProfileService:
         klasse, titel = self.letztes_fenster
         return {
             "available": self.verfuegbar,
-            "reason": self.grund,
+            "reason": texte.aktuell(self.grund),
             "window": {"app": klasse, "title": titel},
         }
 
@@ -216,7 +235,7 @@ class SmartProfileService:
             await self.start()
         elif not soll and self.verfuegbar:
             await self.stop()
-            self.grund = "keine Regel eingerichtet"
+            self.grund = texte.t("smartprofile.keine_regel_eingerichtet")
         elif soll and self.verfuegbar:
             # Regeln geändert, Dienst läuft: einmal auf das aktuelle Fenster
             # anwenden, damit die Änderung sofort greift.

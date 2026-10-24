@@ -11,8 +11,8 @@
   "accent": "#a855f7",
   "category": "system",
   "description": {
-    "de": "Mehrere Aktionen auf einer Taste — nacheinander, mit Pausen dazwischen.",
-    "en": "Several actions on one key — one after another, with pauses in between."
+    "de": "Mehrere Aktionen auf einer Taste, nacheinander und mit Pausen dazwischen.",
+    "en": "Several actions on one key, one after another with pauses in between."
   },
   "actions": [
     {
@@ -70,8 +70,8 @@
         "en": "Multi action switch"
       },
       "description": {
-        "de": "Zwei Ketten im Wechsel — einmal drücken hin, einmal zurück.",
-        "en": "Two chains, alternating — press once for each direction."
+        "de": "Zwei Ketten im Wechsel. Einmal drücken führt hin, noch einmal zurück.",
+        "en": "Two chains that alternate. Press once for each direction."
       },
       "inputs": [
         "key",

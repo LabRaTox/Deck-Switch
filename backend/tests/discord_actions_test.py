@@ -53,7 +53,7 @@ class Probe(dcmod.DiscordPlugin):
 
 services = Services(audio=None, icons=None, render=RenderService(IconService()),
                     runtime=FakeRuntime(), config=default_config(),
-                    plugin_dir=pathlib.Path("."))
+                    plugin_dir=PLUGIN_DIR)
 
 def ctx_for(action, settings, input_type="key", appearance=None):
     appearance = appearance or Appearance()

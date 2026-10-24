@@ -32,6 +32,7 @@ from pydantic import ValidationError
 
 from .. import paths
 from .base import Manifest
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -97,10 +98,10 @@ def download(url: str) -> bytes:
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ALLOWED_SCHEMES:
         raise InstallError(
-            f"Nur http(s)-Adressen werden geladen, nicht '{parsed.scheme or url[:20]}'"
+            texte.t("installer.http_s_adressen_werden", scheme=parsed.scheme or url[:20])
         )
     if not parsed.netloc:
-        raise InstallError("Adresse unvollständig")
+        raise InstallError(texte.t("installer.adresse_unvollstaendig"))
 
     request = urllib.request.Request(
         url, headers={"User-Agent": "StreamDeckApp/0.1 (+local)"}
@@ -109,20 +110,20 @@ def download(url: str) -> bytes:
         with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_S) as response:
             length = response.headers.get("Content-Length")
             if length and int(length) > MAX_ARCHIVE_BYTES:
-                raise InstallError("Archiv zu groß (max. 64 MB)")
+                raise InstallError(texte.t("installer.archiv_gross_max_64"))
             # Ein Byte mehr lesen, um auch ohne Content-Length zu begrenzen.
             data = response.read(MAX_ARCHIVE_BYTES + 1)
     except urllib.error.HTTPError as exc:
-        raise InstallError(f"Download fehlgeschlagen ({exc.code})") from exc
+        raise InstallError(texte.t("installer.download_fehlgeschlagen", code=exc.code)) from exc
     except urllib.error.URLError as exc:
-        raise InstallError(f"Adresse nicht erreichbar: {exc.reason}") from exc
+        raise InstallError(texte.t("installer.adresse_nicht_erreichbar", reason=exc.reason)) from exc
     except (TimeoutError, OSError) as exc:
-        raise InstallError(f"Download abgebrochen: {exc}") from exc
+        raise InstallError(texte.t("installer.download_abgebrochen", exc=exc)) from exc
 
     if len(data) > MAX_ARCHIVE_BYTES:
-        raise InstallError("Archiv zu groß (max. 64 MB)")
+        raise InstallError(texte.t("installer.archiv_gross_max_64"))
     if not data:
-        raise InstallError("Leere Antwort")
+        raise InstallError(texte.t("installer.leere_antwort"))
     return data
 
 
@@ -145,35 +146,35 @@ def pruefe_sha256(data: bytes, erwartet: str) -> str:
     """
     erwartet = erwartet.strip().lower()
     if not erwartet:
-        raise ChecksumError("Keine Prüfsumme angegeben")
+        raise ChecksumError(texte.t("installer.keine_pruefsumme_angegeben"))
     if len(erwartet) != 64 or any(z not in "0123456789abcdef" for z in erwartet):
         raise ChecksumError(
-            "Die Prüfsumme sieht nicht wie ein SHA-256 aus "
-            "(erwartet werden 64 Zeichen aus 0-9 und a-f)"
+            texte.t("installer.pruefsumme_sieht_nicht_wie")
         )
 
     tatsaechlich = hashlib.sha256(data).hexdigest()
     if not hmac.compare_digest(tatsaechlich, erwartet):
         raise ChecksumError(
-            "Die Prüfsumme stimmt nicht: erwartet wurde "
-            f"{erwartet[:12]}…, geladen wurde {tatsaechlich[:12]}…. "
-            "Das Archiv ist ein anderes als das angekündigte — es wird "
-            "nicht installiert."
+            texte.t("installer.pruefsumme_stimmt_nicht_erwartet", erwartet=erwartet[:12], tatsaechlich=tatsaechlich[:12])
         )
     return tatsaechlich
 
 
-def install_url(url: str, *, sha256: str = "") -> Manifest:
+def install_url(url: str, *, sha256: str = "", expected_id: str = "") -> Manifest:
     """Lädt ein Plugin-Archiv von einer Adresse und installiert es.
 
     Ist ``sha256`` angegeben, muss es passen — sonst wird nichts
     ausgepackt. Ohne Angabe wird installiert wie bisher; die Oberfläche
     weist dann darauf hin, dass niemand geprüft hat, was da ankommt.
+
+    ``expected_id`` ist die Plugin-ID, nach der gefragt wurde, etwa der Slug
+    aus dem Store. Ein Archiv mit anderer ID wird abgelehnt, damit es kein
+    fremdes Plugin überschreiben kann.
     """
     data = download(url)
     if sha256:
         pruefe_sha256(data, sha256)
-    return install_archive(data, filename=url.rsplit("/", 1)[-1])
+    return install_archive(data, filename=url.rsplit("/", 1)[-1], expected_id=expected_id)
 
 
 # --------------------------------------------------------------------------
@@ -181,10 +182,10 @@ def install_url(url: str, *, sha256: str = "") -> Manifest:
 # --------------------------------------------------------------------------
 
 
-def install_archive(data: bytes, *, filename: str = "") -> Manifest:
+def install_archive(data: bytes, *, filename: str = "", expected_id: str = "") -> Manifest:
     """Entpackt ein Plugin-Archiv und installiert es."""
     if len(data) > MAX_ARCHIVE_BYTES:
-        raise InstallError("Archiv zu groß (max. 64 MB)")
+        raise InstallError(texte.t("installer.archiv_gross_max_64"))
 
     with tempfile.TemporaryDirectory(prefix="streamdeck-plugin-") as tmp:
         staging = Path(tmp) / "unpacked"
@@ -195,11 +196,15 @@ def install_archive(data: bytes, *, filename: str = "") -> Manifest:
         source = _find_plugin_root(staging)
         if source is None:
             raise InstallError(
-                "Kein Plugin gefunden — im Archiv fehlt eine manifest.json"
+                texte.t("installer.kein_plugin_gefunden_archiv")
             )
         manifest = _read_manifest(source)
         if manifest is None:
-            raise InstallError("manifest.json ist unlesbar oder unvollständig")
+            raise InstallError(texte.t("installer.manifest_json_unlesbar_oder"))
+        if expected_id and manifest.id != expected_id:
+            raise InstallError(
+                texte.t("installer.id_manifest_passt_nicht", id=manifest.id, plugin_id=expected_id)
+            )
 
         return _install_from_directory(source, manifest.id)
 
@@ -211,27 +216,31 @@ def _extract(data: bytes, target: Path) -> None:
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
-        raise InstallError(f"Kein gültiges ZIP-Archiv: {exc}") from exc
+        raise InstallError(texte.t("installer.kein_gueltiges_zip_archiv", exc=exc)) from exc
 
     entries = archive.infolist()
     if len(entries) > MAX_ENTRIES:
-        raise InstallError("Archiv enthält zu viele Dateien")
+        raise InstallError(texte.t("installer.archiv_enthaelt_viele_dateien"))
     if sum(entry.file_size for entry in entries) > MAX_UNCOMPRESSED_BYTES:
-        raise InstallError("Archivinhalt zu groß (max. 256 MB entpackt)")
+        raise InstallError(texte.t("installer.archivinhalt_gross_max_256"))
 
     resolved_target = target.resolve()
     for entry in entries:
         name = entry.filename
+        # Ein Backslash ist unter Linux Teil des Dateinamens, andere Programme
+        # lesen ihn als Trenner. Solche Archive sehen je nach Leser anders aus.
+        if "\\" in name:
+            raise InstallError(texte.t("installer.unerlaubter_pfad_archiv", name=name))
         if name.startswith("/") or ".." in Path(name).parts:
-            raise InstallError(f"Unerlaubter Pfad im Archiv: {name}")
+            raise InstallError(texte.t("installer.unerlaubter_pfad_archiv", name=name))
 
         # Symlinks im ZIP könnten aus dem Zielordner herauszeigen.
         if (entry.external_attr >> 16) & 0o170000 == 0o120000:
-            raise InstallError(f"Symlinks werden nicht entpackt: {name}")
+            raise InstallError(texte.t("installer.symlinks_werden_nicht_entpackt", name=name))
 
         destination = (resolved_target / name).resolve()
         if resolved_target != destination and resolved_target not in destination.parents:
-            raise InstallError(f"Eintrag zeigt aus dem Zielordner heraus: {name}")
+            raise InstallError(texte.t("installer.eintrag_zeigt_aus_zielordner", name=name))
 
         if entry.is_dir():
             destination.mkdir(parents=True, exist_ok=True)
@@ -250,42 +259,45 @@ def _find_plugin_root(staging: Path) -> Path | None:
     if (staging / "manifest.json").is_file():
         return staging
 
-    candidates = [p for p in staging.iterdir() if p.is_dir()]
-    for directory in candidates:
-        if (directory / "manifest.json").is_file():
-            return directory
-
-    # Eine Ebene tiefer suchen — manche Packer legen noch einen Ordner an.
-    for directory in candidates:
-        for nested in directory.iterdir():
-            if nested.is_dir() and (nested / "manifest.json").is_file():
-                return nested
-    return None
+    # Mehr als ein Plugin-Ordner wird abgelehnt. Sonst hinge es von der
+    # Reihenfolge im Dateisystem ab, welcher installiert wird.
+    candidates = sorted(p for p in staging.iterdir() if p.is_dir())
+    found = [d for d in candidates if (d / "manifest.json").is_file()]
+    if not found:
+        # Eine Ebene tiefer suchen, manche Packer legen noch einen Ordner an.
+        found = [
+            nested
+            for directory in candidates
+            for nested in sorted(directory.iterdir())
+            if nested.is_dir() and (nested / "manifest.json").is_file()
+        ]
+    if len(found) > 1:
+        raise InstallError(texte.t("installer.mehrere_plugins_archiv"))
+    return found[0] if found else None
 
 
 def _install_from_directory(source: Path, plugin_id: str) -> Manifest:
     manifest = _read_manifest(source)
     if manifest is None:
-        raise InstallError("manifest.json ist unlesbar oder unvollständig")
+        raise InstallError(texte.t("installer.manifest_json_unlesbar_oder"))
 
     if manifest.id != plugin_id:
         raise InstallError(
-            f"ID im Manifest ('{manifest.id}') passt nicht zum Plugin ('{plugin_id}')"
+            texte.t("installer.id_manifest_passt_nicht", id=manifest.id, plugin_id=plugin_id)
         )
     if not VALID_ID.match(manifest.id):
         raise InstallError(
-            f"Ungültige Plugin-ID '{manifest.id}' — erlaubt sind Kleinbuchstaben, "
-            "Ziffern, Punkt, Bindestrich und Unterstrich"
+            texte.t("installer.ungueltige_plugin_id_erlaubt", id=manifest.id)
         )
     if manifest.type != "iconset" and not (manifest.entry and manifest.plugin_class):
         raise InstallError(
-            f"{manifest.type}-Plugin braucht 'entry' und 'class' im Manifest"
+            texte.t("installer.plugin_braucht_entry_class", type=manifest.type)
         )
 
     builtin = paths.BUILTIN_PLUGINS_DIR / manifest.id
     if builtin.is_dir():
         raise InstallError(
-            f"'{manifest.id}' ist bereits eingebaut und kann nicht ersetzt werden"
+            texte.t("installer.bereits_eingebaut_kann_nicht", id=manifest.id)
         )
 
     paths.USER_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
@@ -307,7 +319,7 @@ def _install_from_directory(source: Path, plugin_id: str) -> Manifest:
         shutil.rmtree(staged, ignore_errors=True)
         if backup.exists() and not target.exists():
             backup.rename(target)
-        raise InstallError(f"Installation fehlgeschlagen: {exc}") from exc
+        raise InstallError(texte.t("installer.installation_fehlgeschlagen", exc=exc)) from exc
     finally:
         shutil.rmtree(backup, ignore_errors=True)
 
@@ -326,20 +338,20 @@ def _ignore_junk(_directory: str, names: list[str]) -> set[str]:
 
 def uninstall(plugin_id: str) -> None:
     if not VALID_ID.match(plugin_id or ""):
-        raise InstallError("Ungültige Plugin-ID")
+        raise InstallError(texte.t("installer.ungueltige_plugin_id"))
 
     if (paths.BUILTIN_PLUGINS_DIR / plugin_id).is_dir():
-        raise InstallError("Eingebaute Plugins lassen sich nicht entfernen")
+        raise InstallError(texte.t("installer.eingebaute_plugins_lassen_nicht"))
 
     # Gesucht wird über das Manifest und nicht über den Ordnernamen: Der ist
     # eine Nummer und sagt nichts darüber, was darin liegt.
     target = _finde_ordner(plugin_id)
     if target is None:
-        raise InstallError(f"'{plugin_id}' ist nicht installiert")
+        raise InstallError(texte.t("installer.nicht_installiert", plugin_id=plugin_id))
 
     root = paths.USER_PLUGINS_DIR.resolve()
     if root not in target.resolve().parents:
-        raise InstallError(f"'{plugin_id}' liegt nicht im Plugin-Verzeichnis")
+        raise InstallError(texte.t("installer.liegt_nicht_plugin_verzeichnis", plugin_id=plugin_id))
 
     shutil.rmtree(target)
     log.info("Plugin '%s' entfernt (%s)", plugin_id, target.name)

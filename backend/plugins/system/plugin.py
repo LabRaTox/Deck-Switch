@@ -44,22 +44,23 @@ BAR_OK = "#22c55e"
 BAR_WARN = "#f59e0b"
 BAR_ALERT = "#ef4444"
 
-#: Kürzel vor dem Wert. Bewusst ohne Einheit — die steht schon im Wert
-#: selbst, sonst läse man „CPU °C 50 °C“. Und bewusst ohne Pfeilzeichen:
-#: Die mitgelieferte Schrift kennt ↓/↑ nicht und malt Kästchen.
-METRIC_LABELS = {
-    "cpu": "CPU",
-    "cpu_temp": "CPU",
-    "memory": "RAM",
-    "swap": "Swap",
-    "gpu": "GPU",
-    "gpu_temp": "GPU",
-    "gpu_memory": "VRAM",
-    "nvme_temp": "SSD",
-    "disk": "Platte",
-    "net_down": "Down",
-    "net_up": "Up",
-}
+#: Messwerte, die ein Kürzel vor dem Wert bekommen. Der Text steht unter
+#: ``metrik.<name>`` in den Sprachdateien. Bewusst ohne Einheit — die steht
+#: schon im Wert selbst, sonst läse man „CPU °C 50 °C“. Und bewusst ohne
+#: Pfeilzeichen: Die mitgelieferte Schrift kennt ↓/↑ nicht und malt Kästchen.
+METRIC_LABELS = frozenset({
+    "cpu",
+    "cpu_temp",
+    "memory",
+    "swap",
+    "gpu",
+    "gpu_temp",
+    "gpu_memory",
+    "nvme_temp",
+    "disk",
+    "net_down",
+    "net_up",
+})
 
 
 class SystemPlugin(ActionPlugin):
@@ -92,6 +93,7 @@ class SystemPlugin(ActionPlugin):
 
         await asyncio.get_running_loop().run_in_executor(None, work)
         self.services.runtime.request_redraw()
+        self.services.runtime.publish_plugin_status(self.manifest.id)
 
     async def teardown(self):
         self.ddc.shutdown()
@@ -116,7 +118,7 @@ class SystemPlugin(ActionPlugin):
             return
         number = _display_number(settings)
         if number is None:
-            self.notify_error("Kein Monitor eingestellt")
+            self.notify_error(self.t("kein_monitor"))
             return
         step = int(ctx.setting("step", 5))
         self.ddc.nudge(number, delta * step)
@@ -153,7 +155,7 @@ class SystemPlugin(ActionPlugin):
         image = render.render_slot(
             ctx,
             state=None,
-            label_override=self.get_label(action_id, settings, ctx),
+            label_override=self._gauge_label(action_id, settings, ctx, reading),
             accent=ACCENT,
             reserve_bottom=render.bar_reserve(ctx.size, box) if show_bar else 0,
         )
@@ -206,7 +208,7 @@ class SystemPlugin(ActionPlugin):
             return info.disk_usage(settings.get("path") or "/")
         if metric in ("net_down", "net_up"):
             return info.network(settings.get("interface") or "", metric.split("_")[1])
-        return Reading(0.0, None, "—", available=False)
+        return Reading(0.0, None, "---", available=False)
 
     def on_tick(self, action_id, settings, ctx):
         """Messwerte neu holen — nur für die Kacheln, die welche zeigen."""
@@ -226,7 +228,15 @@ class SystemPlugin(ActionPlugin):
             ctx.request_redraw()
 
     async def _refresh_media(self, settings, ctx) -> None:
-        state = await self.services.media.refresh(settings.get("player") or "")
+        # Hängt D-Bus, soll nicht jede Sekunde eine weitere Nachfrage
+        # dazukommen, die auf dieselbe Antwort wartet.
+        if ctx.scratch.get("media_busy"):
+            return
+        ctx.scratch["media_busy"] = True
+        try:
+            state = await self.services.media.refresh(settings.get("player") or "")
+        finally:
+            ctx.scratch["media_busy"] = False
         signature = (state.playing, state.title, state.artist)
         if ctx.scratch.get("media") != signature:
             ctx.scratch["media"] = signature
@@ -236,7 +246,7 @@ class SystemPlugin(ActionPlugin):
         if action_id == "power" and ctx.scratch.get("armed_until", 0) > time.monotonic():
             # Während der Rückfrage schlägt die Beschriftung alles andere —
             # der Benutzer muss sehen, dass der nächste Druck ernst wird.
-            return "Sicher?"
+            return self.t("label.sicher")
         if ctx.appearance.label_text:
             return None
         if action_id == "hotkey":
@@ -249,7 +259,15 @@ class SystemPlugin(ActionPlugin):
         # Ohne eigenes Label wenigstens einen sprechenden Namen zeigen.
         if action_id == "launch":
             command = (settings.get("command") or "").strip()
-            return Path(shlex.split(command)[0]).name if command else None
+            if not command:
+                return None
+            try:
+                parts = shlex.split(command)
+            except ValueError:
+                # Unpaarige Anführungszeichen: Für die Beschriftung reicht
+                # das erste Wort, der Fehler kommt erst beim Starten.
+                parts = command.split()
+            return Path(parts[0]).name if parts else None
         if action_id in ("open_folder", "open_file"):
             path = (settings.get("path") or "").strip()
             return Path(path).name or path if path else None
@@ -257,12 +275,20 @@ class SystemPlugin(ActionPlugin):
             url = (settings.get("url") or "").strip()
             return url.replace("https://", "").replace("http://", "").split("/")[0] or None
         if action_id in ("monitor", "display_brightness"):
-            reading = self._reading(action_id, settings, ctx)
-            if action_id == "monitor" and ctx.setting("show_name", True):
-                name = METRIC_LABELS.get(settings.get("metric") or "cpu", "")
-                return f"{name} {reading.text}" if name else reading.text
-            return reading.text
+            return self._gauge_label(
+                action_id, settings, ctx, self._reading(action_id, settings, ctx)
+            )
         return None
+
+    def _gauge_label(self, action_id, settings, ctx, reading) -> str | None:
+        """Beschriftung einer Messkachel aus einem schon gelesenen Wert."""
+        if ctx.appearance.label_text:
+            return None
+        if action_id == "monitor" and ctx.setting("show_name", True):
+            metric = settings.get("metric") or "cpu"
+            name = self.t(f"metrik.{metric}") if metric in METRIC_LABELS else ""
+            return f"{name} {reading.text}" if name else reading.text
+        return reading.text
 
     def get_state(self, action_id, settings, ctx):
         if action_id == "hotkey":
@@ -282,7 +308,7 @@ class SystemPlugin(ActionPlugin):
         # Worker-Thread und darf deshalb auf sie warten.
         if source == "players":
             players = self._await(self.services.media.list_players()) or []
-            return [{"value": "", "label": "Automatisch (was gerade spielt)"}] + [
+            return [{"value": "", "label": self.t("option.player_automatisch")}] + [
                 {"value": name, "label": name} for name in players
             ]
         if source == "shortcut_components":
@@ -297,7 +323,7 @@ class SystemPlugin(ActionPlugin):
                 {"value": str(d.number), "label": d.label} for d in self.ddc.displays()
             ]
         if source == "interfaces":
-            return [{"value": "", "label": "Alle zusammen"}] + [
+            return [{"value": "", "label": self.t("option.alle_schnittstellen")}] + [
                 {"value": name, "label": name} for name in self.info.interfaces()
             ]
         return []
@@ -323,10 +349,14 @@ class SystemPlugin(ActionPlugin):
         """Hinweis in der Plugin-Liste, wenn DDC nicht durchkommt."""
         if not self.ddc.available():
             return None
-        displays = self.ddc.displays()
+        # Nur den gemerkten Stand: ``ddcutil detect`` braucht Sekunden, und
+        # dieser Hook darf nicht warten. Die erste Suche läuft in ``setup``.
+        displays = self.ddc.known_displays()
+        if displays is None:
+            return {"connected": False, "detail": self.t("status.ddc_sucht")}
         if displays:
-            return {"connected": True, "detail": f"{len(displays)} Monitor(e) über DDC"}
-        return {"connected": False, "detail": self.ddc.last_error or "kein DDC-Monitor"}
+            return {"connected": True, "detail": self.t("status.ddc_monitore", anzahl=len(displays))}
+        return {"connected": False, "detail": self.ddc.last_error or self.t("status.kein_ddc_monitor")}
 
     # -- Ausführung --------------------------------------------------------
 
@@ -366,14 +396,14 @@ class SystemPlugin(ActionPlugin):
     def _send_hotkey(self, settings) -> None:
         combo = (settings.get("combo") or "").strip()
         if not combo:
-            raise ValueError("Keine Tastenkombination eingestellt")
+            raise ValueError(self.t("keine_tastenkombination"))
         self.services.input.send_combo(combo)
 
     def _hold_hotkey(self, settings, ctx, *, pressed: bool) -> None:
         combo = (settings.get("combo") or "").strip()
         if not combo:
             if pressed:
-                self.notify_error("Keine Tastenkombination eingestellt")
+                self.notify_error(self.t("keine_tastenkombination"))
             return
         try:
             self.services.input.hold_combo(combo, pressed)
@@ -389,9 +419,7 @@ class SystemPlugin(ActionPlugin):
         key = "combo_b" if not second else "combo_a"
         combo = (settings.get(key) or "").strip()
         if not combo:
-            raise ValueError(
-                "Für diese Richtung ist keine Tastenkombination eingestellt"
-            )
+            raise ValueError(self.t("keine_tastenkombination_richtung"))
         self.services.input.send_combo(combo)
         ctx.scratch["toggled"] = not second
         ctx.request_redraw()
@@ -399,14 +427,14 @@ class SystemPlugin(ActionPlugin):
     def _type_text(self, settings) -> None:
         text = settings.get("text") or ""
         if not text:
-            raise ValueError("Kein Text eingetragen")
+            raise ValueError(self.t("kein_text"))
         if settings.get("enter_after"):
             text += "\n"
         typed = self.services.input.type_text(
             text, delay_s=max(0, int(settings.get("delay_ms") or 12)) / 1000
         )
         if typed == 0:
-            raise ValueError("Kein Zeichen war auf der Tastaturbelegung erreichbar")
+            raise ValueError(self.t("kein_zeichen_erreichbar"))
 
     # -- Medien ------------------------------------------------------------
 
@@ -418,7 +446,7 @@ class SystemPlugin(ActionPlugin):
     async def _multimedia_async(self, command: str, player: str, ctx) -> None:
         media = self.services.media
         if not await media.control(command, player=player):
-            self.notify_info("Kein Medienspieler erreichbar")
+            self.notify_info(self.t("kein_medienspieler"))
         await media.refresh(player)
         ctx.request_redraw()
 
@@ -453,8 +481,8 @@ class SystemPlugin(ActionPlugin):
             delay_ms=int(settings.get("delay_ms") or 0),
         )
         self.notify_info(
-            f"Bildschirmfoto gespeichert: {path}" if path
-            else "Bildschirmfoto in der Zwischenablage"
+            self.t("bildschirmfoto_gespeichert", pfad=path) if path
+            else self.t("bildschirmfoto_zwischenablage")
         )
 
     def _close_app(self, settings) -> None:
@@ -463,7 +491,7 @@ class SystemPlugin(ActionPlugin):
             pattern, force=bool(settings.get("force"))
         )
         if not hits:
-            self.notify_info(f"Kein laufender Prozess passt auf '{pattern}'")
+            self.notify_info(self.t("kein_prozess", muster=pattern))
 
     def _confirmed(self, ctx) -> bool:
         """„Zweimal drücken“ — der erste Druck macht nur scharf.
@@ -492,7 +520,7 @@ class SystemPlugin(ActionPlugin):
         """Druck auf das Dial: zwischen zwei Werten hin- und herschalten."""
         number = _display_number(settings)
         if number is None:
-            raise ValueError("Kein Monitor eingestellt")
+            raise ValueError(self.t("kein_monitor"))
         low = int(ctx.setting("preset_low", 20))
         high = int(ctx.setting("preset_high", 80))
         current = self.ddc.brightness(number)
@@ -503,15 +531,15 @@ class SystemPlugin(ActionPlugin):
     def _launch(self, settings) -> None:
         raw = (settings.get("command") or "").strip()
         if not raw:
-            raise ValueError("Kein Befehl eingetragen")
+            raise ValueError(self.t("kein_befehl"))
 
         parts = shlex.split(raw)
         binary = parts[0]
         if shutil.which(binary) is None and not Path(binary).expanduser().is_file():
-            raise FileNotFoundError(f"'{binary}' nicht gefunden")
+            raise FileNotFoundError(self.t("programm_nicht_gefunden", programm=binary))
 
         if settings.get("single_instance") and _is_running(Path(binary).name):
-            self.log.info("'%s' läuft bereits — nicht erneut gestartet", binary)
+            self.log.info("'%s' läuft bereits und wird nicht erneut gestartet", binary)
             return
 
         working_dir = (settings.get("working_dir") or "").strip()
@@ -521,26 +549,26 @@ class SystemPlugin(ActionPlugin):
     def _open_path(self, settings) -> None:
         raw = (settings.get("path") or "").strip()
         if not raw:
-            raise ValueError("Kein Pfad eingetragen")
+            raise ValueError(self.t("kein_pfad"))
         path = Path(raw).expanduser()
         if not path.exists():
-            raise FileNotFoundError(f"'{path}' existiert nicht")
+            raise FileNotFoundError(self.t("pfad_existiert_nicht", pfad=path))
         _spawn(["xdg-open", str(path)])
 
     def _open_url(self, settings) -> None:
         url = (settings.get("url") or "").strip()
         if not url:
-            raise ValueError("Keine URL eingetragen")
+            raise ValueError(self.t("keine_url"))
         if "://" not in url:
             url = f"https://{url}"
         if not url.startswith(("http://", "https://")):
-            raise ValueError("Nur http(s)-Links werden geöffnet")
+            raise ValueError(self.t("nur_http"))
         _spawn(["xdg-open", url])
 
     def _run_script(self, settings) -> None:
         command = (settings.get("command") or "").strip()
         if not command:
-            raise ValueError("Kein Befehl eingetragen")
+            raise ValueError(self.t("kein_befehl"))
         shell = settings.get("shell") or "fish"
         if shutil.which(shell) is None:
             shell = "sh"

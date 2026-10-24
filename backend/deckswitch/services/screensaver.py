@@ -164,7 +164,7 @@ def load_frames(
         frames.append(Frame(keys=keys, strip=strip, duration_s=max(MIN_FRAME_S, seconds)))
         if len(frames) >= MAX_FRAMES:
             log.warning(
-                "Schoner hat mehr als %d Einzelbilder — der Rest wird verworfen", MAX_FRAMES
+                "Schoner hat mehr als %d Einzelbilder, der Rest wird verworfen", MAX_FRAMES
             )
             break
     return frames

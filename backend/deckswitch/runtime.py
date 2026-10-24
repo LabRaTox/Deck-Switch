@@ -33,14 +33,14 @@ from typing import Any
 
 from . import device as device_module
 from . import events as ev
-from . import paths
+from . import paths, texte
 from .config import Config, ConfigLoadError, ConfigStore, DeckBinding, Page, Profile, Slot
 from .netserver import NetzService
 from .virtualdeck import DECK_TYPE as VIRTUAL_DECK_TYPE
 from .virtualdeck import NETWORK_DECK_TYPE
 from .virtualdeck import VirtualDevice
 from .deck import Deck, bindungs_key
-from .events import EventBus
+from .events import EventBus, im_loop
 from .plugins.base import Services, SlotContext
 from .plugins.loader import PluginRegistry
 from .services.audio import AudioService
@@ -70,6 +70,9 @@ class Runtime:
         self.bus = EventBus()
         self.store = ConfigStore(config_path)
         self.config: Config = self.store.config
+        # Texte für die Oberfläche folgen der eingestellten Sprache. Gelesen
+        # wird bei jedem Text neu, damit ein Wechsel sofort gilt.
+        texte.verbinde_sprache(lambda: self.config.app.language)
 
         #: Was diese Sitzung hergibt. Gefüllt wird es in :meth:`start`;
         #: bis dahin meldet es alles als nicht verfügbar. Die Oberfläche
@@ -101,7 +104,14 @@ class Runtime:
 
         self._loop: asyncio.AbstractEventLoop | None = None
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sd-hook")
+        #: Eigener Pool für ``on_tick``: Ein Plugin, das dort lange braucht
+        #: (ein Monitor über DDC), darf Tastendrücke und Zeichnen nicht
+        #: ausbremsen, die sich sonst dieselben vier Threads teilen.
+        self._tick_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sd-tick")
         self._tasks: list[asyncio.Task] = []
+        #: Aufräum-Aufgaben entfernter Decks. Festgehalten, damit sie nicht
+        #: vorzeitig eingesammelt werden.
+        self._aufraeumen: set[asyncio.Task] = set()
 
         #: Bindungs-ID (Seriennummer) → Sitzung.
         self.decks: dict[str, Deck] = {}
@@ -216,7 +226,10 @@ class Runtime:
         # device.open() im Executor und ein gleichzeitiges close() hier greifen
         # sonst zeitgleich auf dasselbe libusb-Handle zu — das endet in einer
         # Assertion tief in libusb, nicht in einer Python-Exception.
-        self._executor.shutdown(wait=True)
+        # Gewartet wird in einem Thread: Ein Worker, der gerade etwas im
+        # Loop erledigen lässt (speichern, blättern), braucht den Loop dafür.
+        await asyncio.to_thread(self._executor.shutdown, True)
+        await asyncio.to_thread(self._tick_executor.shutdown, True)
 
     # ======================================================================
     # Decks
@@ -247,6 +260,20 @@ class Runtime:
         for key in [k for k in self.decks if k not in vorhanden]:
             deck = self.decks.pop(key)
             deck.detach()
+            self._stop_deck(deck)
+
+    def _stop_deck(self, deck: Deck) -> None:
+        """Hält die Schleifen eines entfernten Decks an.
+
+        Ohne das liefen Zeichnen, Tick und Animation weiter, für ein Deck,
+        das niemand mehr sieht, und riefen Plugins bis zum Neustart auf.
+        """
+        loop = self._loop
+        if loop is None or loop.is_closed() or not deck._tasks:
+            return
+        aufgabe = loop.create_task(deck.stop(), name=f"stop-{deck.key}")
+        self._aufraeumen.add(aufgabe)
+        aufgabe.add_done_callback(self._aufraeumen.discard)
 
     def _attach_virtual(self, deck: Deck) -> None:
         """Hängt ein virtuelles Gerät an eine Sitzung und startet sie."""
@@ -399,7 +426,7 @@ class Runtime:
             if not self.session.bus_reachable:
                 continue
 
-            log.info("Sitzungsbus jetzt erreichbar — Fähigkeiten neu erkannt")
+            log.info("Sitzungsbus jetzt erreichbar, Fähigkeiten neu erkannt")
             # Die Kurzbefehle hängen daran und wurden beim Start
             # übersprungen; jetzt lassen sie sich anmelden.
             with contextlib.suppress(Exception):
@@ -409,7 +436,7 @@ class Runtime:
             return
 
         log.info(
-            "Sitzungsbus blieb unerreichbar — was daran hängt, bleibt aus. "
+            "Sitzungsbus blieb unerreichbar. Was daran hängt, bleibt aus. "
             "In den Einstellungen lässt sich erneut prüfen."
         )
 
@@ -571,12 +598,19 @@ class Runtime:
         # Ein virtuelles Deck ist immer „verbunden" — es zu entfernen muss
         # trotzdem gehen, sonst wird man es nie wieder los.
         if deck.connected and not deck.binding.is_virtual:
-            raise ValueError("Ein verbundenes Deck lässt sich nicht entfernen")
+            raise ValueError(texte.t("runtime.verbundenes_deck_laesst_nicht"))
         if len(self.decks) <= 1:
-            raise ValueError("Das letzte Deck lässt sich nicht entfernen")
+            raise ValueError(texte.t("runtime.letzte_deck_laesst_nicht"))
         self.decks.pop(key, None)
-        self.config.decks.pop(key, None)
+        # Die Konfiguration führt die Bindung unter ihrer Seriennummer, die
+        # beim Platzhalter leer ist; ``key`` ist dort ein Name.
+        for schluessel in [k for k, b in self.config.decks.items() if b is deck.binding or k == key]:
+            self.config.decks.pop(schluessel, None)
         self._open_paths.pop(key, None)
+        with contextlib.suppress(Exception):
+            if deck.binding.is_overlay:
+                self.overlay.hide(key)
+        self._stop_deck(deck)
         self.save_config()
         self.bus.publish(ev.EVT_DECKS_CHANGED, decks=self.decks_payload())
         return True
@@ -765,6 +799,9 @@ class Runtime:
         return self.deck(ctx.deck_serial).steps_running(ctx)
 
     def notify(self, level: str, message: str, **extra: Any) -> None:
+        im_loop(self._loop, self._notify_jetzt, level, message, warten=False, **extra)
+
+    def _notify_jetzt(self, level: str, message: str, **extra: Any) -> None:
         log.log(
             {"error": logging.ERROR, "warning": logging.WARNING}.get(level, logging.INFO),
             "%s",
@@ -776,6 +813,11 @@ class Runtime:
         self._record_error(plugin_id, message, level=level, **extra)
 
     def save_config(self) -> None:
+        # Aus einem Plugin-Hook im Executor kommend: im Loop speichern, damit
+        # niemand die Config verändert, während sie geschrieben wird.
+        im_loop(self._loop, self._save_config_jetzt)
+
+    def _save_config_jetzt(self) -> None:
         self.store.save(self.config)
 
     # -- Bequemlichkeit für Aufrufer, die nur ein Deck kennen --------------
@@ -889,6 +931,22 @@ class Runtime:
         source: str = "runtime",
         **extra: Any,
     ) -> None:
+        # Kommt auch aus Arbeitsthreads (Geräte öffnen, Plugin-Hooks). Die
+        # Liste und der Bus gehören dem Loop.
+        im_loop(
+            self._loop, self._record_error_jetzt, plugin_id, message,
+            level=level, source=source, warten=False, **extra,
+        )
+
+    def _record_error_jetzt(
+        self,
+        plugin_id: str,
+        message: str,
+        *,
+        level: str = "error",
+        source: str = "runtime",
+        **extra: Any,
+    ) -> None:
         # Wiederholt sich derselbe Fehler (etwa weil er bei jedem Tick
         # auftritt), wird mitgezählt statt die Liste zuzumüllen — sonst
         # verdeckt ein einziges hakendes Plugin binnen Sekunden alles andere.
@@ -949,17 +1007,25 @@ class Runtime:
         # Sitzungen bekommen ihre (neue) Bindung untergeschoben, damit ein
         # verbundenes Gerät nicht wegen einer Einstellungsänderung neu
         # verbinden muss.
-        for key, binding in config.decks.items():
-            deck = self.decks.get(key)
-            if deck is not None:
-                deck.binding = binding
+        # Gesucht wird über ``bindungs_key``: Der Platzhalter steht in der
+        # Config unter ``""``, in der Runtime unter seinem Namen.
+        for binding in config.decks.values():
+            deck = self.decks.get(bindungs_key(binding))
+            if deck is None:
+                continue
+            deck.binding = binding
+            if isinstance(deck.device, VirtualDevice):
+                # Das virtuelle Gerät liest Raster und Kachelgröße aus seiner
+                # eigenen Referenz; die muss mit.
+                deck.device.binding = binding
+                deck.device.refresh_geometry()
         self._sync_decks()
 
         self.icons.clear_cache()
         for deck in self.decks.values():
             deck.apply_config()
-            if not deck._tasks:
-                deck.start()
+            # Startet auch Schleifen neu, die unerwartet geendet haben.
+            deck.start()
 
         self.bus.publish(ev.EVT_CONFIG_CHANGED)
 
@@ -983,7 +1049,7 @@ class Runtime:
             if not deck.connected or deck.binding.is_virtual:
                 continue
             log.info(
-                "Deck '%s' fehlte in der eingehenden Config — Bindung behalten",
+                "Deck '%s' fehlte in der eingehenden Config, Bindung behalten",
                 deck.label,
             )
             incoming.decks[key] = deck.binding
@@ -1010,7 +1076,7 @@ class Runtime:
     # Hilfen
     # ======================================================================
 
-    async def _call_hook(self, hook, *args) -> Any:
+    async def _call_hook(self, hook, *args, executor=None) -> Any:
         """Ruft einen Plugin-Hook auf, egal ob sync oder async.
 
         Synchrone Hooks landen im Executor: Plugins dürfen ``subprocess`` &
@@ -1019,7 +1085,7 @@ class Runtime:
         if inspect.iscoroutinefunction(hook):
             return await hook(*args)
         result = await asyncio.get_running_loop().run_in_executor(
-            self._executor, lambda: hook(*args)
+            executor or self._executor, lambda: hook(*args)
         )
         if inspect.isawaitable(result):
             return await result

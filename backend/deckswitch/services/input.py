@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import threading
 import time
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +41,10 @@ TYPE_DELAY_S = 0.012
 
 #: So lange wartet die erste Eingabe nach dem Anmelden des Geräts.
 SETTLE_S = 0.25
+
+#: So lange gilt die erkannte Tastaturbelegung, bevor erneut nachgesehen
+#: wird. Wer die Belegung umstellt, soll nicht das Backend neu starten müssen.
+LAYOUT_RECHECK_S = 30.0
 
 #: Obergrenze für „Text tippen". Bei 12 ms je Zeichen wären 5000 Zeichen
 #: schon eine Minute, in der die Tastatur belegt ist und Anschläge in
@@ -171,6 +176,11 @@ class InputService:
         #: Zeichen → (Tastencode, Modifier-Liste), aus der aktiven Belegung.
         self._chars: dict[str, tuple[int, list[str]]] = {}
         self._layout: str = ""
+        self._variant: str = ""
+        #: Was zuletzt erkannt wurde, auch wenn es nicht auswertbar war.
+        self._detected: tuple[str, str] | None = None
+        self._layout_checked_at = 0.0
+        self._layout_lock = threading.Lock()
         self._unmapped: set[str] = set()
 
     # -- Öffentlich --------------------------------------------------------
@@ -186,24 +196,23 @@ class InputService:
         try:
             import evdev  # noqa: F401
         except ImportError:
-            return False, "Python-Paket 'evdev' fehlt"
+            return False, texte.t("input.python_paket_evdev_fehlt")
         try:
             with open("/dev/uinput", "wb"):
                 pass
         except PermissionError:
             return False, (
-                "Kein Schreibrecht auf /dev/uinput — der Benutzer muss in der "
-                "Gruppe 'input' sein (danach ab- und wieder anmelden)"
+                texte.t("input.kein_schreibrecht_dev_uinput")
             )
         except OSError as exc:
-            return False, f"/dev/uinput nicht nutzbar: {exc}"
+            return False, texte.t("input.dev_uinput_nicht_nutzbar", exc=exc)
         return True, ""
 
     def send_combo(self, combo: str) -> None:
         """Drückt eine Kombination einmal (drücken, loslassen)."""
         modifiers, key = parse_combo(combo)
         if not key and not modifiers:
-            raise InputUnavailable("Keine Tastenkombination angegeben")
+            raise InputUnavailable(texte.t("input.keine_tastenkombination_angegeben"))
 
         code, extra_modifiers = self._resolve_key(key) if key else (None, [])
         held = [self._key_code(_MODIFIER_KEY_NAMES[m]) for m in modifiers]
@@ -283,8 +292,7 @@ class InputService:
         """
         if len(text) > MAX_TEXT_LENGTH:
             raise InputUnavailable(
-                f"Text ist zu lang ({len(text)} Zeichen, erlaubt sind "
-                f"{MAX_TEXT_LENGTH}) — so lange wäre die Tastatur belegt."
+                texte.t("input.text_lang_zeichen_erlaubt", anzahl=len(text), MAX_TEXT_LENGTH=MAX_TEXT_LENGTH)
             )
 
         self._ensure_layout()
@@ -390,7 +398,7 @@ class InputService:
                 product=0x0001,
             )
         except OSError as exc:
-            raise InputUnavailable(f"Virtuelle Tastatur nicht anlegbar: {exc}") from exc
+            raise InputUnavailable(texte.t("input.virtuelle_tastatur_nicht_anlegbar", exc=exc)) from exc
 
         self._ready_at = time.monotonic() + SETTLE_S
         log.info("Virtuelle Tastatur angemeldet (Belegung '%s')", self._layout)
@@ -424,55 +432,91 @@ class InputService:
 
         if raw in evdev.ecodes.ecodes:
             return self._key_code(raw), []
-        raise InputUnavailable(f"Taste '{key}' nicht gefunden")
+        raise InputUnavailable(texte.t("input.taste_nicht_gefunden", key=key))
 
     def _ensure_layout(self) -> None:
-        if self._chars:
+        """Zuordnung Zeichen → Taste bereitstellen, bei Bedarf neu berechnen.
+
+        Die Belegung wird alle :data:`LAYOUT_RECHECK_S` Sekunden erneut
+        erfragt; neu gerechnet wird nur, wenn sie sich geändert hat.
+        """
+        now = time.monotonic()
+        if self._detected is not None and now - self._layout_checked_at < LAYOUT_RECHECK_S:
             return
-        layout = _detect_layout()
-        self._layout = layout or "us"
-        try:
-            self._chars = _build_char_map(self._layout)
-        except Exception as exc:
-            log.warning(
-                "Tastaturbelegung '%s' nicht auswertbar (%s) — es wird 'us' "
-                "angenommen. Text mit Umlauten kann dadurch falsch ankommen.",
-                self._layout,
-                exc,
-            )
+        with self._layout_lock:
+            if (
+                self._detected is not None
+                and time.monotonic() - self._layout_checked_at < LAYOUT_RECHECK_S
+            ):
+                return
+            layout, variant = _detect_layout()
+            layout = layout or "us"
+            self._layout_checked_at = time.monotonic()
+            if (layout, variant) == self._detected:
+                return
+            if self._detected is not None:
+                log.info("Tastaturbelegung gewechselt: '%s' → '%s'", self._layout, layout)
+            detected = (layout, variant)
             try:
-                self._chars = _build_char_map("us")
-                self._layout = "us"
-            except Exception:
-                self._chars = {}
+                chars = _build_char_map(layout, variant)
+            except Exception as exc:
+                log.warning(
+                    "Tastaturbelegung '%s' nicht auswertbar (%s), es wird 'us' "
+                    "angenommen. Text mit Umlauten kann dadurch falsch ankommen.",
+                    layout,
+                    exc,
+                )
+                try:
+                    chars = _build_char_map("us", "")
+                except Exception:
+                    chars = {}
+                layout, variant = ("us", "") if chars else (layout, variant)
+            self._detected = detected
+            self._layout, self._variant = layout, variant
+            self._chars = chars
+            self._unmapped.clear()
 
 
-def _detect_layout() -> str:
-    """Die eingestellte Tastaturbelegung — erst KDE fragen, dann systemd."""
+def _detect_layout() -> tuple[str, str]:
+    """Die eingestellte Belegung samt Variante, erst KDE fragen, dann systemd."""
     if shutil.which("kreadconfig6"):
         value = _run(
             ["kreadconfig6", "--file", "kxkbrc", "--group", "Layout", "--key", "LayoutList"]
         )
         if value:
-            return value.split(",")[0].strip()
+            variant = _run(
+                ["kreadconfig6", "--file", "kxkbrc", "--group", "Layout", "--key", "VariantList"]
+            )
+            return value.split(",")[0].strip(), variant.split(",")[0].strip()
 
     if shutil.which("localectl"):
-        for line in _run(["localectl", "status"]).splitlines():
-            if "X11 Layout" in line:
-                return line.split(":", 1)[1].strip().split(",")[0]
-            if "VC Keymap" in line and "n/a" not in line:
-                return line.split(":", 1)[1].strip()
-    return "us"
+        return _parse_localectl(_run(["localectl", "status"]))
+    return "us", ""
 
 
-def _detect_variant() -> str:
-    if shutil.which("kreadconfig6"):
-        value = _run(
-            ["kreadconfig6", "--file", "kxkbrc", "--group", "Layout", "--key", "VariantList"]
-        )
-        if value:
-            return value.split(",")[0].strip()
-    return ""
+def _parse_localectl(text: str) -> tuple[str, str]:
+    """Belegung und Variante aus ``localectl status``.
+
+    ``VC Keymap`` steht dort *vor* ``X11 Layout``, ist aber eine
+    Konsolenbelegung (``de-latin1-nodeadkeys``), die xkb nicht kennt. Sie
+    zählt deshalb nur, wenn es keine X11-Angabe gibt, und auch dann nur der
+    Teil vor dem ersten Bindestrich.
+    """
+    felder: dict[str, str] = {}
+    for line in text.splitlines():
+        name, sep, wert = line.partition(":")
+        if sep:
+            felder[name.strip()] = wert.strip()
+
+    layout = felder.get("X11 Layout", "").split(",")[0].strip()
+    if layout and layout != "n/a":
+        variant = felder.get("X11 Variant", "").split(",")[0].strip()
+        return layout, "" if variant == "n/a" else variant
+
+    keymap = felder.get("VC Keymap", "")
+    if keymap and keymap != "n/a":
+        return keymap.split("-")[0].strip(), ""
+    return "us", ""
 
 
 def _run(command: list[str]) -> str:
@@ -485,7 +529,7 @@ def _run(command: list[str]) -> str:
     return result.stdout.strip()
 
 
-def _build_char_map(layout: str) -> dict[str, tuple[int, list[str]]]:
+def _build_char_map(layout: str, variant: str = "") -> dict[str, tuple[int, list[str]]]:
     """Zeichen → (Tastencode, Modifier) für eine Belegung.
 
     Gebaut aus derselben Bibliothek, mit der auch der Compositor arbeitet —
@@ -495,7 +539,7 @@ def _build_char_map(layout: str) -> dict[str, tuple[int, list[str]]]:
 
     context = xkb.Context()
     keymap = context.keymap_new_from_names(
-        rules="evdev", model="pc105", layout=layout, variant=_detect_variant()
+        rules="evdev", model="pc105", layout=layout, variant=variant
     )
     modifier_names = [keymap.mod_get_name(i) for i in range(keymap.num_mods())]
 

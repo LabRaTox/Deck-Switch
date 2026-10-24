@@ -23,6 +23,7 @@ from StreamDeck.DeviceManager import DeviceManager
 from StreamDeck.Devices.StreamDeck import DialEventType, TouchscreenEventType
 from StreamDeck.ImageHelpers import PILHelper
 from StreamDeck.Transport.Transport import TransportError
+from . import texte
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ class DeviceInfo:
             "has_displays": self.has_displays,
             "has_dials": self.has_dials,
             "has_touchscreen": self.has_touchscreen,
-            "error": self.error,
+            "error": texte.aktuell(self.error),
         }
 
 
@@ -119,11 +120,11 @@ class StreamDeckDevice:
                 try:
                     decks = DeviceManager().enumerate()
                 except Exception as exc:
-                    self.info = DeviceInfo(error=f"Geräte-Suche fehlgeschlagen: {exc}")
+                    self.info = DeviceInfo(error=texte.t("device.geraete_suche_fehlgeschlagen", exc=exc))
                     return False
 
                 if not decks:
-                    self.info = DeviceInfo(error="Kein Stream Deck gefunden")
+                    self.info = DeviceInfo(error=texte.t("device.kein_stream_deck_gefunden"))
                     return False
                 deck = decks[0]
 
@@ -135,13 +136,12 @@ class StreamDeckDevice:
             except TransportError as exc:
                 self.info = DeviceInfo(
                     error=(
-                        f"Gerät gefunden, aber nicht zu öffnen ({exc}). "
-                        "Meist fehlt die udev-Regel — siehe packaging/70-streamdeck.rules."
+                        texte.t("device.geraet_gefunden_aber_nicht", exc=exc)
                     )
                 )
                 return False
             except Exception as exc:
-                self.info = DeviceInfo(error=f"Gerät nicht zu öffnen: {exc}")
+                self.info = DeviceInfo(error=texte.t("device.geraet_nicht_oeffnen", exc=exc))
                 return False
 
             self.deck = deck
@@ -193,7 +193,7 @@ class StreamDeckDevice:
         log.warning("Verbindung zum Deck verloren: %s", exc)
         was_connected = self.info.connected
         self.close()
-        self.info.error = "Verbindung verloren"
+        self.info.error = texte.t("device.verbindung_verloren")
         if was_connected and self.on_disconnect is not None:
             self.on_disconnect()
 
@@ -240,11 +240,25 @@ class StreamDeckDevice:
             self._handle_transport_error(exc)
 
     def set_key_image(self, index: int, image: Image.Image) -> None:
+        self.write_key_image(index, self.prepare_key_image(image))
+
+    def prepare_key_image(self, image: Image.Image) -> Any:
+        """Wandelt ein Bild ins Format des Geräts. Darf in einem Thread laufen."""
         deck = self.deck
         if deck is None:
+            return None
+        try:
+            return PILHelper.to_native_key_format(deck, _flatten(image))
+        except Exception as exc:
+            log.warning("Tastenbild nicht umwandelbar: %s", exc)
+            return None
+
+    def write_key_image(self, index: int, native: Any) -> None:
+        """Schickt ein fertig umgewandeltes Bild ans Gerät."""
+        deck = self.deck
+        if deck is None or native is None:
             return
         try:
-            native = PILHelper.to_native_key_format(deck, _flatten(image))
             deck.set_key_image(index, native)
         except (TransportError, OSError) as exc:
             self._handle_transport_error(exc)
@@ -254,12 +268,30 @@ class StreamDeckDevice:
     def set_touchscreen_image(
         self, image: Image.Image, x: int = 0, y: int = 0
     ) -> None:
+        self.write_touchscreen_image(
+            self.prepare_touchscreen_image(image), x=x, y=y,
+            width=image.width, height=image.height,
+        )
+
+    def prepare_touchscreen_image(self, image: Image.Image) -> Any:
+        """Wie :meth:`prepare_key_image`, für den Touchstrip."""
         deck = self.deck
         if deck is None or not hasattr(deck, "set_touchscreen_image"):
+            return None
+        try:
+            return PILHelper.to_native_touchscreen_format(deck, _flatten(image))
+        except Exception as exc:
+            log.warning("Touchstrip-Bild nicht umwandelbar: %s", exc)
+            return None
+
+    def write_touchscreen_image(
+        self, native: Any, x: int = 0, y: int = 0, width: int = 0, height: int = 0
+    ) -> None:
+        deck = self.deck
+        if deck is None or native is None or not hasattr(deck, "set_touchscreen_image"):
             return
         try:
-            native = PILHelper.to_native_touchscreen_format(deck, _flatten(image))
-            deck.set_touchscreen_image(native, x, y, image.width, image.height)
+            deck.set_touchscreen_image(native, x, y, width, height)
         except (TransportError, OSError) as exc:
             self._handle_transport_error(exc)
         except Exception as exc:

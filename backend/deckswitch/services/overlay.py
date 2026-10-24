@@ -26,13 +26,13 @@ import contextlib
 import logging
 import os
 import subprocess
-from pathlib import Path
 
 from dbus_next import BusType, Message, MessageType
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, method
 
 from .. import paths
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class OverlayService:
                 return False, cap.reason
 
         if not OVERLAY_QML.is_file():
-            return False, f"Overlay-Datei nicht gefunden: {OVERLAY_QML}"
+            return False, texte.t("overlay.overlay_datei_nicht_gefunden", OVERLAY_QML=OVERLAY_QML)
         return True, ""
 
     def _auf_x11(self) -> bool:
@@ -127,7 +127,7 @@ class OverlayService:
     async def show(self, deck_key: str, *, at_cursor: bool = True) -> None:
         deck = self.runtime.decks.get(deck_key)
         if deck is None:
-            raise RuntimeError(f"Deck '{deck_key}' gibt es nicht")
+            raise RuntimeError(texte.t("overlay.deck_gibt_nicht", deck_key=deck_key))
         ok, grund = self.available()
         if not ok:
             raise RuntimeError(grund)
@@ -163,16 +163,19 @@ class OverlayService:
         if self._auf_x11():
             befehl.append("--x11")
         try:
+            # stderr nicht an eine Pipe: Die liest niemand, und QML schreibt
+            # Warnungen dorthin. Ist der Puffer voll, bliebe das Overlay beim
+            # nächsten Schreiben stehen. So landen sie im Journal des Dienstes.
             self._prozesse[deck_key] = subprocess.Popen(
                 befehl,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
+                stderr=None,
                 start_new_session=True,
                 env=os.environ.copy(),
             )
         except OSError as exc:
-            raise RuntimeError(f"Overlay ließ sich nicht starten: {exc}") from exc
+            raise RuntimeError(texte.t("overlay.overlay_liess_nicht_starten", exc=exc)) from exc
 
         # Alles neu zeichnen — das frische Overlay hat noch keine Bilder.
         deck._mark_all_dirty()
@@ -187,6 +190,8 @@ class OverlayService:
             prozess.wait(timeout=2)
         except subprocess.TimeoutExpired:
             prozess.kill()
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                prozess.wait(timeout=1)
 
     def close(self) -> None:
         for key in list(self._prozesse):
@@ -220,7 +225,7 @@ class OverlayService:
         """
         deck = self.runtime.decks.get(deck_key)
         if deck is None or not deck.binding.is_overlay:
-            raise RuntimeError(f"Kein Deck mit Overlay: '{deck_key}'")
+            raise RuntimeError(texte.t("overlay.kein_deck_overlay", deck_key=deck_key))
         deck.binding.overlay_x = max(0, int(x))
         deck.binding.overlay_y = max(0, int(y))
         self.runtime.save_config()
@@ -242,8 +247,12 @@ class OverlayService:
         if bus is None:
             return None
 
-        pfad = Path("/tmp") / f"deckswitch-cursor-{os.getuid()}.js"
+        # Im eigenen Datenverzeichnis, nicht in /tmp: Dort könnte ein anderer
+        # Benutzer die Datei vorher anlegen oder austauschen, und KWin führte
+        # dann dessen Skript in dieser Sitzung aus.
+        pfad = paths.DATA_DIR / "kwin" / "cursor.js"
         try:
+            pfad.parent.mkdir(parents=True, exist_ok=True)
             pfad.write_text(CURSOR_SCRIPT, encoding="utf-8")
         except OSError as exc:
             log.debug("Skript nicht schreibbar: %s", exc)
@@ -280,8 +289,13 @@ class OverlayService:
     # -- D-Bus -------------------------------------------------------------
 
     async def _ensure_bus(self) -> MessageBus | None:
-        if self._bus is not None:
+        if self._bus is not None and self._bus.connected:
             return self._bus
+        if self._bus is not None:
+            # Abgerissen: Name und Export hingen an der alten Verbindung.
+            with contextlib.suppress(Exception):
+                self._bus.disconnect()
+            self._bus = None
         try:
             bus = await MessageBus(bus_type=BusType.SESSION).connect()
             bus.export(BUS_PATH, _CursorReceiver(self))

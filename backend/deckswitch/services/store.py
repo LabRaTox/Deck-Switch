@@ -26,6 +26,7 @@ from typing import Any
 
 from .. import paths
 from ..plugins import installer
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +48,16 @@ TOKEN_DATEI: Path = paths.CONFIG_DIR / "store-token"
 
 
 class StoreError(RuntimeError):
-    """Der Store hat nicht das getan, was er sollte."""
+    """Der Store hat nicht das getan, was er sollte.
+
+    ``status`` ist der HTTP-Status, wenn der Store geantwortet hat, sonst
+    ``None``. Geprüft wird darauf und nicht auf den Wortlaut: Der ist
+    übersetzt oder kommt gleich vom Store.
+    """
+
+    def __init__(self, message: str = "", *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 @dataclass(slots=True)
@@ -104,7 +114,7 @@ def _anfrage(
     if mit_token:
         token = lies_token()
         if not token:
-            raise StoreError("Dafür musst du im Store angemeldet sein")
+            raise StoreError(texte.t("store.dafuer_musst_du_store"))
         kopf["Authorization"] = f"Bearer {token}"
     elif token_falls_da:
         token = lies_token()
@@ -118,18 +128,18 @@ def _anfrage(
         with urllib.request.urlopen(anfrage, timeout=ZEITLIMIT_S) as antwort:
             roh = antwort.read(8 * 1024 * 1024)
     except urllib.error.HTTPError as exc:
-        raise StoreError(_fehlertext(exc)) from exc
+        raise StoreError(_fehlertext(exc), status=exc.code) from exc
     except urllib.error.URLError as exc:
-        raise StoreError(f"Der Store ist nicht erreichbar: {exc.reason}") from exc
+        raise StoreError(texte.t("store.store_nicht_erreichbar", reason=exc.reason)) from exc
     except (TimeoutError, OSError) as exc:
-        raise StoreError(f"Verbindung abgebrochen: {exc}") from exc
+        raise StoreError(texte.t("store.verbindung_abgebrochen", exc=exc)) from exc
 
     if not roh:
         return None
     try:
         return json.loads(roh.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise StoreError("Der Store hat etwas Unlesbares geschickt") from exc
+        raise StoreError(texte.t("store.store_hat_etwas_unlesbares")) from exc
 
 
 def _fehlertext(exc: urllib.error.HTTPError) -> str:
@@ -146,10 +156,10 @@ def _fehlertext(exc: urllib.error.HTTPError) -> str:
     except Exception:  # noqa: BLE001 — der Fehlertext ist nur ein Zubrot
         pass
     if exc.code == 401:
-        return "Nicht angemeldet"
+        return texte.t("netserver.nicht_angemeldet")
     if exc.code == 403:
-        return "Dafür fehlen die Rechte"
-    return f"Der Store antwortet mit {exc.code}"
+        return texte.t("store.dafuer_fehlen_rechte")
+    return texte.t("store.store_antwortet", code=exc.code)
 
 
 # --------------------------------------------------------------------------
@@ -200,7 +210,7 @@ def bewertung(slug: str) -> dict[str, Any]:
 def bewerte(slug: str, wert: int, kommentar: str = "") -> dict[str, Any]:
     """Daumen hoch (``1``) oder runter (``-1``), auf Wunsch mit einem Satz."""
     if wert not in (1, -1):
-        raise StoreError("Eine Bewertung ist entweder 1 oder -1")
+        raise StoreError(texte.t("store.bewertung_entweder_1_oder"))
     rumpf = json.dumps({"value": wert, "comment": kommentar}).encode("utf-8")
     daten = _anfrage(
         f"/api/catalog/{urllib.parse.quote(slug)}/rating",
@@ -261,7 +271,7 @@ def bild(slug: str, version: str, art: str, index: int = 0) -> tuple[bytes, str]
     fassungen = [*daten.get("versions", []), daten.get("latest")]
     passend = next((v for v in fassungen if v and v.get("version") == version), None)
     if passend is None:
-        raise StoreError(f"Fassung {version} steht nicht im Katalog")
+        raise StoreError(texte.t("store.fassung_steht_nicht_katalog", version=version))
 
     if art == "icon":
         adresse = passend.get("icon_url")
@@ -269,7 +279,7 @@ def bild(slug: str, version: str, art: str, index: int = 0) -> tuple[bytes, str]
         bilder = passend.get("screenshot_urls") or []
         adresse = bilder[index] if 0 <= index < len(bilder) else None
     if not adresse:
-        raise StoreError("Dafür nennt der Katalog kein Bild")
+        raise StoreError(texte.t("store.dafuer_nennt_katalog_kein"))
 
     return _hol_bild(adresse)
 
@@ -280,7 +290,7 @@ def _hol_bild(adresse: str) -> tuple[bytes, str]:
         return zwischen
 
     if not adresse.startswith(STORE_URL.rstrip("/") + "/"):
-        raise StoreError("Diese Bildadresse zeigt nicht auf den Store")
+        raise StoreError(texte.t("store.diese_bildadresse_zeigt_nicht"))
 
     anfrage = urllib.request.Request(
         adresse, headers={"Accept": "image/*", "User-Agent": "DeckSwitch/1.0"}
@@ -290,16 +300,16 @@ def _hol_bild(adresse: str) -> tuple[bytes, str]:
             typ = (antwort.headers.get("Content-Type") or "").split(";")[0].strip().lower()
             roh = antwort.read(MAX_BILD_BYTES + 1)
     except urllib.error.HTTPError as exc:
-        raise StoreError(_fehlertext(exc)) from exc
+        raise StoreError(_fehlertext(exc), status=exc.code) from exc
     except urllib.error.URLError as exc:
-        raise StoreError(f"Der Store ist nicht erreichbar: {exc.reason}") from exc
+        raise StoreError(texte.t("store.store_nicht_erreichbar", reason=exc.reason)) from exc
     except (TimeoutError, OSError) as exc:
-        raise StoreError(f"Verbindung abgebrochen: {exc}") from exc
+        raise StoreError(texte.t("store.verbindung_abgebrochen", exc=exc)) from exc
 
     if typ not in BILDTYPEN:
-        raise StoreError(f"Der Store hat kein Bild geschickt, sondern {typ or 'nichts Erkennbares'}")
+        raise StoreError(texte.t("store.store_hat_kein_bild", typ=typ or texte.t("store.nichts_erkennbares")))
     if len(roh) > MAX_BILD_BYTES:
-        raise StoreError("Das Bild ist zu groß")
+        raise StoreError(texte.t("store.bild_gross"))
 
     if len(_bilder) >= _BILDER_MAX:
         _bilder.clear()
@@ -419,14 +429,16 @@ def installiere(slug: str, version: str = "") -> dict[str, Any]:
         gesucht = _neueste(daten)
     if gesucht is None:
         raise StoreError(
-            f"Für '{slug}' gibt es keine Fassung {version or 'zum Installieren'}"
+            texte.t("store.gibt_keine_fassung", slug=slug, version=version)
+            if version
+            else texte.t("store.keine_fassung_zum_installieren", slug=slug)
         )
 
     summe = str(gesucht.get("sha256") or "")
     if not summe:
         # Der Store nennt zu jeder Fassung eine Summe. Fehlt sie, stimmt
         # etwas nicht — und ungeprüft wird nichts ausgepackt.
-        raise StoreError("Der Store nennt keine Prüfsumme — es wird nichts installiert")
+        raise StoreError(texte.t("store.store_nennt_keine_pruefsumme"))
 
     # Die Adresse kommt aus dem Katalog: Ändert der Store seinen Weg,
     # ändert er ihn dort. Nur wenn er keine nennt, wird sie hier gebaut.
@@ -440,7 +452,7 @@ def installiere(slug: str, version: str = "") -> dict[str, Any]:
             f"{urllib.parse.quote(gesucht['version'])}",
             via="app",
         )
-    manifest = installer.install_url(adresse, sha256=summe)
+    manifest = installer.install_url(adresse, sha256=summe, expected_id=slug)
     vergiss()
 
     return {
@@ -519,7 +531,7 @@ def wer_bin_ich() -> dict[str, Any] | None:
     try:
         return _anfrage("/api/auth/me", mit_token=True)
     except StoreError as exc:
-        if "angemeldet" in str(exc).lower():
+        if exc.status == 401:
             schreib_token("")
             return None
         raise
@@ -537,8 +549,7 @@ def offene_pruefungen() -> dict[str, Any] | None:
     try:
         return _anfrage("/api/review/pending", mit_token=True)
     except StoreError as exc:
-        text = str(exc).lower()
-        if "recht" in text or "angemeldet" in text:
+        if exc.status in (401, 403):
             return None
         raise
 
@@ -567,7 +578,7 @@ def name_pruefen(slug: str) -> dict[str, Any]:
 def hochladen(daten: bytes, *, dateiname: str = "plugin.zip") -> dict[str, Any]:
     """Reicht ein Archiv beim Store ein."""
     if len(daten) > installer.MAX_ARCHIVE_BYTES:
-        raise StoreError("Das Archiv ist zu groß (max. 64 MB)")
+        raise StoreError(texte.t("store.archiv_gross_max_64"))
 
     grenze = "----DeckSwitch" + os.urandom(16).hex()
     rumpf = b"".join(
@@ -622,7 +633,7 @@ def packe(ordner: Path) -> bytes:
 
     ordner = ordner.resolve()
     if not (ordner / "manifest.json").is_file():
-        raise StoreError(f"In {ordner.name} liegt keine manifest.json")
+        raise StoreError(texte.t("store.liegt_keine_manifest_json", name=ordner.name))
 
     #: Was nicht mitgehört: Übersetzungsreste, Editorkram, Versionsverlauf.
     UEBERGEHEN = {"__pycache__", ".git", ".mypy_cache", ".ruff_cache", "node_modules"}

@@ -116,10 +116,10 @@ def main() -> int:
         b = registry.instance("pruef-zwei")
         check("das erste bekam seine eigene api.py",
               a is not None and a.herkunft == "pruef-eins",
-              getattr(a, "herkunft", "—"))
+              getattr(a, "herkunft", "---"))
         check("das zweite auch seine eigene",
               b is not None and b.herkunft == "pruef-zwei",
-              getattr(b, "herkunft", "—"))
+              getattr(b, "herkunft", "---"))
 
         print("\n== Der alte Weg bleibt offen ==")
         # Fremde Plugins importieren ihre Nachbarn womöglich beim kurzen
@@ -133,7 +133,7 @@ def main() -> int:
         c = registry2.instance("pruef-alt")
         check("und bekommt seine eigene Datei",
               c is not None and c.herkunft == "pruef-alt",
-              getattr(c, "herkunft", "—"))
+              getattr(c, "herkunft", "---"))
 
         print("\n== Und die echten Plugins des Projekts ==")
         quellen = pathlib.Path(__file__).resolve().parents[2] / "plugin-sources"

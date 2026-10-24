@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-16T12:00:00Z",
+  "staleAfterSeconds": 180,
+  "host": {
+    "codexBarVersion": "0.80.0",
+    "refreshIntervalSeconds": 60,
+    "usageBarsShowUsed": false
+  },
+  "providers": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "enabled": true,
+      "source": "oauth",
+      "status": {
+        "level": "ok",
+        "label": "Operational",
+        "updatedAt": "2026-07-16T11:59:00Z"
+      },
+      "identity": {
+        "accountEmail": "redacted@example.com",
+        "plan": "Max"
+      },
+      "windows": [
+        {
+          "kind": "session",
+          "label": "Session",
+          "usedPercent": 20,
+          "remainingPercent": 80,
+          "resetAt": "2026-07-16T17:00:00Z"
+        },
+        {
+          "kind": "weekly",
+          "label": "Weekly",
+          "usedPercent": 75,
+          "remainingPercent": 25,
+          "resetAt": "2026-07-18T12:00:00Z"
+        },
+        {
+          "kind": "claude-weekly-scoped-fable",
+          "label": "Fable only",
+          "usedPercent": 33,
+          "remainingPercent": 67,
+          "resetAt": "2026-07-18T12:00:00Z"
+        },
+        {
+          "kind": "claude-weekly-scoped-opus",
+          "label": "Opus only",
+          "usedPercent": 0,
+          "remainingPercent": 100,
+          "resetAt": "2026-07-18T12:00:00Z",
+          "idle": true
+        }
+      ],
+      "credits": null,
+      "cost": {
+        "todayUSD": 1.04,
+        "last30DaysUSD": 18.22
+      },
+      "display": {
+        "accentColor": "#D97757",
+        "sortKey": 1,
+        "priority": "normal"
+      },
+      "error": null,
+      "updatedAt": "2026-07-16T11:59:45Z"
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "enabled": true,
+      "source": "oauth",
+      "status": {
+        "level": "unknown"
+      },
+      "identity": {
+        "accountEmail": "redacted@example.com",
+        "plan": "Pro 20x"
+      },
+      "windows": [],
+      "credits": null,
+      "cost": null,
+      "display": {
+        "accentColor": "#49A3B0",
+        "sortKey": 0,
+        "priority": "normal"
+      },
+      "error": "Codex request failed: HTTP 500",
+      "updatedAt": "2026-07-16T11:59:40Z"
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "enabled": true,
+      "source": "web",
+      "status": null,
+      "identity": null,
+      "windows": [],
+      "credits": null,
+      "cost": null,
+      "display": {
+        "accentColor": null,
+        "sortKey": 3,
+        "priority": "normal"
+      },
+      "error": "Cookie expired. Paste a fresh Cookie header in Settings.",
+      "updatedAt": null
+    }
+  ]
+}

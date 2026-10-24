@@ -17,6 +17,7 @@ from pathlib import Path
 import uvicorn
 
 from . import paths
+from .netserver import StillerServer
 from .runtime import Runtime
 from .server import create_app
 
@@ -61,12 +62,21 @@ def port_available(host: str, port: int) -> bool:
 async def run(args: argparse.Namespace) -> int:
     log = logging.getLogger(__name__)
 
-    # Config einmal ohne laufende Runtime lesen, um Host/Port zu erfahren.
+    loop = asyncio.get_running_loop()
+    stopping = asyncio.Event()
+    # Gleich zu Beginn: Ein SIGTERM während des Starts soll ebenfalls
+    # geordnet herunterfahren statt den Prozess sofort zu beenden.
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with contextlib.suppress(NotImplementedError):
+            loop.add_signal_handler(sig, stopping.set)
+
+    # Host und Port nur nachlesen, nicht laden: Ein Laden hier würde eine
+    # kaputte Datei schon ersetzen, und die Runtime könnte den Fehler danach
+    # nicht mehr melden.
     probe_runtime = Runtime(Path(args.config) if args.config else None)
-    with contextlib.suppress(Exception):
-        probe_runtime.store.load()
-    host = args.host or probe_runtime.store.config.app.host
-    port = args.port or probe_runtime.store.config.app.port
+    app_settings = probe_runtime.store.peek_app()
+    host = args.host or app_settings.host
+    port = args.port or app_settings.port
 
     if not port_available(host, port):
         log.error(
@@ -81,15 +91,9 @@ async def run(args: argparse.Namespace) -> int:
     await runtime.start()
 
     app = create_app(runtime, host=host, port=port, dev=getattr(args, "dev", False))
-    server = uvicorn.Server(
+    server = StillerServer(
         uvicorn.Config(app, host=host, port=port, log_level="warning", access_log=False)
     )
-
-    loop = asyncio.get_running_loop()
-    stopping = asyncio.Event()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        with contextlib.suppress(NotImplementedError):
-            loop.add_signal_handler(sig, stopping.set)
 
     serve_task = asyncio.create_task(server.serve(), name="uvicorn")
     log.info("Backend läuft auf http://%s:%s", host, port)
@@ -139,9 +143,11 @@ async def _start_tray(runtime: Runtime, url: str, stopping: asyncio.Event):
         runtime.device.close()
 
     def brightness(step: int) -> None:
-        device = runtime.config.device
-        device.brightness = max(5, min(100, device.brightness + step))
-        runtime.device.set_brightness(device.brightness)
+        # Die Helligkeit des Decks, nicht die Vorlage für neue Geräte.
+        deck = runtime.primary
+        settings = deck.settings
+        settings.brightness = max(5, min(100, settings.brightness + step))
+        deck.device.set_brightness(settings.brightness)
         runtime.save_config()
 
     tray = SystemTray(
@@ -190,7 +196,12 @@ def main() -> int:
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug-Ausgaben")
     args = parser.parse_args()
 
+    # Vor allem anderen: Schon das Logging legt das Datenverzeichnis an, und
+    # ein vorhandenes Ziel hält den Umzug aus den alten Ordnern auf.
+    umgezogen = paths.migrate_legacy_dirs()
     setup_logging(args.verbose)
+    for eintrag in umgezogen:
+        logging.getLogger(__name__).info("Umgezogen: %s", eintrag)
     try:
         return asyncio.run(run(args))
     except KeyboardInterrupt:

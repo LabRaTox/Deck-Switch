@@ -39,7 +39,7 @@ class StreamdeckPlugin(ActionPlugin):
         elif action_id in ("folder", "goto_page"):
             page_id = settings.get("page_id")
             if not page_id:
-                self.notify_error("Keine Zielseite eingestellt")
+                self.notify_error(self.t("keine_zielseite"))
                 return
             runtime.navigate(page_id)
         elif action_id == "next_page":
@@ -64,7 +64,7 @@ class StreamdeckPlugin(ActionPlugin):
         if gewaehlt:
             profil = self.services.config.profiles.get(gewaehlt)
             if profil is None:
-                self.notify_error("Das eingestellte Profil gibt es nicht mehr")
+                self.notify_error(self.t("profil_fehlt"))
                 return
             name = profil.name
         if not ctx.services.runtime.switch_profile(name):
@@ -82,7 +82,7 @@ class StreamdeckPlugin(ActionPlugin):
         dienst = self.services.overlay
         ziel = (settings.get("deck") or "").strip()
         if not ziel:
-            self.notify_error("Kein virtuelles Deck ausgewählt")
+            self.notify_error(self.t("kein_virtuelles_deck"))
             return
 
         modus = settings.get("mode") or "toggle"
@@ -119,7 +119,7 @@ class StreamdeckPlugin(ActionPlugin):
         if action_id == "profile" and not ctx.appearance.label_text:
             gewaehlt = (settings.get("profile_id") or "").strip()
             profil = self.services.config.profiles.get(gewaehlt)
-            return profil.name if profil is not None else "Zurück"
+            return profil.name if profil is not None else self.t("label.zurueck")
         pages = self.services.config.profile(ctx.profile_id).pages
         if action_id == "page_number":
             mode = ctx.setting("format", "number_of_total")
@@ -196,7 +196,9 @@ class StreamdeckPlugin(ActionPlugin):
     def _render_brightness(self, ctx):
         render = self.services.render
         image = render.background(ctx.size, ctx.appearance, accent=ACCENT)
-        value = self.services.config.device.brightness
+        # Die Helligkeit dieses Decks, nicht die Vorlage in der Config: Jede
+        # Bindung hat ihre eigene Kopie, und nur die ändert sich beim Drehen.
+        value = ctx.services.runtime.device_settings.brightness
         # Gleiches Segment-Layout wie beim Lautstärke-Dial: Balken unten in
         # eigener Zone, Text oben, Icon links dazwischen. Alle Maße hängen an
         # der Höhe — auf einem virtuellen Deck ist ein Segment kleiner.
@@ -241,7 +243,7 @@ class StreamdeckPlugin(ActionPlugin):
         if source == "profiles":
             # Leer als erste Wahl: Das ist der Weg zurück, und er ist die
             # häufigste zweite Taste neben einem Profilwechsel.
-            return [{"value": "", "label": "Zurück zum vorigen"}] + [
+            return [{"value": "", "label": self.t("option.zurueck_zum_vorigen")}] + [
                 {"value": profil.id, "label": profil.name}
                 for profil in self.services.config.profiles.values()
             ]

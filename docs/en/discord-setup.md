@@ -51,6 +51,9 @@ application. Once you confirm, the connection is done. The access token lands
 in `~/.config/deckswitch/discord-token.json` with mode 0600 and is used
 automatically from then on.
 
+Discord issues the token for 7 days. One day before it expires, the plugin
+fetches a new one by itself, without showing the dialog again.
+
 The token deliberately does not live in `config.json`. That file can be
 exported and passed on, and the token should not travel with it.
 

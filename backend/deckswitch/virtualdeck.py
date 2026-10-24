@@ -89,7 +89,7 @@ class VirtualDevice:
             connected=True,
             deck_type=NETWORK_DECK_TYPE if self.binding.is_network else DECK_TYPE,
             serial=self.binding.serial,
-            firmware="—",
+            firmware="---",
             key_count=columns * rows,
             dial_count=dials,
             key_size=(size, size),
@@ -145,7 +145,17 @@ class VirtualDevice:
         self.brightness = max(0, min(100, int(percent)))
 
     def set_key_image(self, index: int, image: Image.Image) -> None:
-        data = _encode(image)
+        self.write_key_image(index, _encode(image))
+
+    def prepare_key_image(self, image: Image.Image) -> bytes:
+        """PNG mit runden Ecken. Darf in einem Thread laufen."""
+        return _encode(image)
+
+    prepare_touchscreen_image = prepare_key_image
+
+    def write_key_image(self, index: int, data: bytes | None) -> None:
+        if data is None:
+            return
         with self._lock:
             if self._keys.get(index) == data:
                 return  # unverändert — kein Grund, das Overlay zu wecken
@@ -153,9 +163,15 @@ class VirtualDevice:
         self._bump("key", index)
 
     def set_touchscreen_image(self, image: Image.Image, x: int = 0, y: int = 0) -> None:
-        width = self.info.segment_size[0] or 1
-        index = max(0, x // width)
-        data = _encode(image)
+        self.write_touchscreen_image(_encode(image), x=x, y=y)
+
+    def write_touchscreen_image(
+        self, data: bytes | None, x: int = 0, y: int = 0, width: int = 0, height: int = 0
+    ) -> None:
+        if data is None:
+            return
+        segment_width = self.info.segment_size[0] or 1
+        index = max(0, x // segment_width)
         with self._lock:
             if self._segments.get(index) == data:
                 return

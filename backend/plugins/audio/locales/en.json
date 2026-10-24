@@ -1,0 +1,7 @@
+{
+  "kein_ausgabegeraet": "No output device selected in the settings",
+  "option.geraet_standard": "{name} (default)",
+  "option.standard_mikrofon": "Default microphone",
+  "option.standardgeraet": "Default device",
+  "wechsel_fehlgeschlagen": "Switching to '{geraet}' failed"
+}

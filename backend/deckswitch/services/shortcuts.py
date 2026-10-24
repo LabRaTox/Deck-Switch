@@ -35,6 +35,7 @@ from .. import events as ev
 from .input import NAMED_KEYS, parse_combo
 from .portal import GlobalShortcutsPortal
 from .session import GLOBAL_SHORTCUTS
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,10 @@ COMPONENT_FRIENDLY = "DECK//SWITCH"
 #: soll sie nicht beim nächsten Start aus seiner eigenen Datei wieder
 #: hervorholen — maßgeblich ist unsere Konfiguration.
 SET_FLAGS = 2 | 4
+
+#: Höchstdauer eines Aufrufs an kglobalaccel. Ohne Grenze hinge ``sync``
+#: unter seinem Lock, wenn Plasma nicht antwortet, und alle folgenden mit.
+CALL_TIMEOUT_S = 5.0
 
 #: Qt-Modifier, wie ``setShortcut`` sie im Tastencode erwartet.
 _QT_MODIFIERS = {
@@ -104,7 +109,7 @@ def qt_keycode(combo: str) -> int:
     """
     modifiers, key = parse_combo(combo)
     if not key:
-        raise ShortcutError("Es fehlt die eigentliche Taste")
+        raise ShortcutError(texte.t("portal.fehlt_eigentliche_taste"))
 
     code = 0
     for modifier in modifiers:
@@ -112,7 +117,7 @@ def qt_keycode(combo: str) -> int:
         if bit is None:
             # AltGr ist der einzige Fall: Der ist bei Qt keine
             # Modifier-Stufe, die ein globaler Kurzbefehl abbilden kann.
-            raise ShortcutError(f"'{modifier}' geht als globaler Kurzbefehl nicht")
+            raise ShortcutError(texte.t("portal.geht_als_globaler_kurzbefehl", modifier=modifier))
         code |= bit
 
     return code | _key_code(key)
@@ -137,7 +142,7 @@ def _key_code(key: str) -> int:
     if len(name) == 1 and ord(name.upper()) < 0x100:
         return ord(name.upper())
 
-    raise ShortcutError(f"Taste '{key}' ist nicht bekannt")
+    raise ShortcutError(texte.t("shortcuts.taste_nicht_bekannt", key=key))
 
 
 class ShortcutService:
@@ -155,12 +160,15 @@ class ShortcutService:
         self._lock = asyncio.Lock()
         #: Nur auf Desktops ohne kglobalaccel — siehe :meth:`_ueber_portal`.
         self._portal: GlobalShortcutsPortal | None = None
+        #: Laufende Auslöse-Tasks. asyncio hält nur schwache Verweise; ohne
+        #: diese Menge könnte ein Task mitten im Lauf eingesammelt werden.
+        self._tasks: set[asyncio.Task] = set()
 
     # -- Zustand -----------------------------------------------------------
 
     def reason(self, deck_key: str) -> str:
         """Was der Kurzbefehl dieses Decks gerade verhindert. Leer = nichts."""
-        return self._gruende.get(deck_key, "")
+        return texte.aktuell(self._gruende.get(deck_key, ""))
 
     def is_active(self, deck_key: str) -> bool:
         return deck_key in self._angemeldet
@@ -193,7 +201,7 @@ class ShortcutService:
             bus = await self._connect()
             if bus is None:
                 self._angemeldet.clear()
-                grund = "KDE-Kurzbefehle sind nicht erreichbar (kglobalaccel läuft nicht)"
+                grund = texte.t("shortcuts.kde_kurzbefehle_nicht_erreichbar")
                 self._gruende = dict.fromkeys(gewuenscht, grund)
                 return
 
@@ -235,7 +243,12 @@ class ShortcutService:
     def _portal_ausgeloest(self, deck_key: str) -> None:
         # Das Portal meldet aus dem Signal-Handler heraus; von dort darf
         # nichts awaited werden.
-        asyncio.create_task(self._ausloesen(deck_key))
+        self._starte_task(self._ausloesen(deck_key))
+
+    def _starte_task(self, coro) -> None:
+        task = asyncio.create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     def vergebene_kombination(self, deck_key: str) -> str:
         """Womit der Kurzbefehl wirklich ausgelöst wird. Leer = wie gewünscht.
@@ -281,7 +294,7 @@ class ShortcutService:
         # Fenstermanager etwas wegnehmen.
         halter = await self._halter(code)
         if halter is not None:
-            self._gruende[deck_key] = f"'{combo}' ist schon vergeben: {halter}"
+            self._gruende[deck_key] = texte.t("shortcuts.schon_vergeben", combo=combo, halter=halter)
             return
 
         aktion = self._aktion(deck_key, name)
@@ -289,7 +302,7 @@ class ShortcutService:
             KGLOBALACCEL_PATH, KGLOBALACCEL_IFACE, "doRegister", "as", [aktion]
         )
         if antwort is None:
-            self._gruende[deck_key] = "Plasma hat die Anmeldung abgelehnt"
+            self._gruende[deck_key] = texte.t("shortcuts.plasma_hat_anmeldung_abgelehnt")
             return
 
         antwort = await self._ruf(
@@ -308,7 +321,7 @@ class ShortcutService:
             await self._ruf(
                 KGLOBALACCEL_PATH, KGLOBALACCEL_IFACE, "unRegister", "as", [aktion]
             )
-            self._gruende[deck_key] = f"Plasma hat '{combo}' nicht übernommen"
+            self._gruende[deck_key] = texte.t("shortcuts.plasma_hat_nicht_uebernommen", combo=combo)
             return
 
         self._angemeldet[deck_key] = (combo, name)
@@ -342,7 +355,7 @@ class ShortcutService:
             return "von einem anderen Programm"
         # (Aktion, Aktionsname, Komponente, Komponentenname, …)
         eintrag = eintraege[0]
-        return f"{eintrag[3]} — {eintrag[1]}"
+        return f"{eintrag[3]} · {eintrag[1]}"
 
     async def _abmelden(self, deck_key: str) -> None:
         # Mit dem Namen abmelden, unter dem angemeldet wurde — ein
@@ -374,7 +387,7 @@ class ShortcutService:
         aktion = str(msg.body[1])
         if not aktion.startswith("overlay:"):
             return
-        asyncio.create_task(self._ausloesen(aktion.split(":", 1)[1]))
+        self._starte_task(self._ausloesen(aktion.split(":", 1)[1]))
 
     async def _ausloesen(self, deck_key: str) -> None:
         if deck_key not in self.runtime.decks:
@@ -403,15 +416,18 @@ class ShortcutService:
         # Ohne passende Regel bekämen wir das Signal gar nicht zu sehen: Der
         # Bus schickt Broadcasts nur an die, die danach gefragt haben.
         try:
-            await bus.call(
-                Message(
-                    destination="org.freedesktop.DBus",
-                    path="/org/freedesktop/DBus",
-                    interface="org.freedesktop.DBus",
-                    member="AddMatch",
-                    signature="s",
-                    body=[f"type='signal',interface='{COMPONENT_IFACE}'"],
-                )
+            await asyncio.wait_for(
+                bus.call(
+                    Message(
+                        destination="org.freedesktop.DBus",
+                        path="/org/freedesktop/DBus",
+                        interface="org.freedesktop.DBus",
+                        member="AddMatch",
+                        signature="s",
+                        body=[f"type='signal',interface='{COMPONENT_IFACE}'"],
+                    )
+                ),
+                CALL_TIMEOUT_S,
             )
         except Exception as exc:
             log.info("Signalregel ließ sich nicht setzen: %s", exc)
@@ -429,15 +445,18 @@ class ShortcutService:
         if bus is None:
             return None
         try:
-            antwort = await bus.call(
-                Message(
-                    destination=KGLOBALACCEL,
-                    path=path,
-                    interface=interface,
-                    member=member,
-                    signature=signature,
-                    body=body or [],
-                )
+            antwort = await asyncio.wait_for(
+                bus.call(
+                    Message(
+                        destination=KGLOBALACCEL,
+                        path=path,
+                        interface=interface,
+                        member=member,
+                        signature=signature,
+                        body=body or [],
+                    )
+                ),
+                CALL_TIMEOUT_S,
             )
         except Exception as exc:
             log.info("kglobalaccel.%s: %s", member, exc)

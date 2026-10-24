@@ -298,6 +298,44 @@ the interface. If a hook raises, the runtime catches it, shows a red error
 tile on the device and lists the error in the interface — a broken plugin
 therefore never takes the whole application down.
 
+## Translating texts
+
+Everything a person gets to see belongs in language files in the plugin
+folder: error messages, status lines, hints, texts on keys and on the touch
+strip. The manifest is already bilingual, this covers everything else.
+
+```
+counter/
+  locales/
+    de.json
+    en.json
+```
+
+```json
+// locales/de.json
+{ "nicht_erreichbar": "{dienst} ist nicht erreichbar", "zaehler": "Zähler" }
+
+// locales/en.json
+{ "nicht_erreichbar": "{dienst} is not reachable", "zaehler": "Counter" }
+```
+
+The code only names the key:
+
+```python
+self.notify_error(self.t("nicht_erreichbar", dienst="OBS"))
+```
+
+`self.t()` uses the language set in the app. If a text is missing, the
+English one is used, then the German one, and finally the key itself.
+Helper modules without `self` use `plugin_text` from
+`deckswitch.plugins.base` with their own folder and the plugin ID.
+
+Log lines stay untranslated, they only appear in the journal.
+
+`self.t()` exists from DECK//SWITCH 1.4.0 on. A plugin that uses it
+therefore declares `"min_app_version": "1.4.0"` in its manifest, and older
+versions of the app refuse to install it.
+
 ## Rotation directions
 
 A dial can carry a separate action per rotation direction. If one is

@@ -1,0 +1,80 @@
+{
+  "generatedAt": "2026-10-24T07:40:38Z",
+  "staleAfterSeconds": 180,
+  "schemaVersion": 1,
+  "providers": [
+    {
+      "status": null,
+      "cost": {
+        "last30DaysUSD": 0,
+        "todayUSD": null
+      },
+      "enabled": true,
+      "windows": [],
+      "credits": null,
+      "updatedAt": "2026-10-24T07:40:37Z",
+      "source": "auto",
+      "identity": null,
+      "display": {
+        "accentColor": "#49A3B0",
+        "sortKey": 0,
+        "priority": "normal"
+      },
+      "id": "codex",
+      "name": "Codex",
+      "error": {
+        "message": "No available fetch strategy for codex.",
+        "kind": "provider",
+        "code": 1
+      }
+    },
+    {
+      "status": null,
+      "cost": null,
+      "enabled": true,
+      "windows": [
+        {
+          "label": "Session",
+          "kind": "session",
+          "usedPercent": 5,
+          "resetAt": "2026-10-24T11:40:00Z",
+          "remainingPercent": 95
+        },
+        {
+          "label": "Weekly",
+          "kind": "weekly",
+          "usedPercent": 2,
+          "resetAt": "2026-10-30T02:00:00Z",
+          "remainingPercent": 98
+        },
+        {
+          "label": "Fable only",
+          "kind": "claude-weekly-scoped-fable",
+          "usedPercent": 0,
+          "resetAt": "2026-10-30T02:00:00Z",
+          "remainingPercent": 100
+        }
+      ],
+      "credits": null,
+      "updatedAt": "2026-10-24T07:40:37Z",
+      "source": "oauth",
+      "identity": {
+        "accountEmail": null,
+        "plan": "Max 5x"
+      },
+      "display": {
+        "sortKey": 30,
+        "priority": "normal",
+        "accentColor": "#CC7C5E"
+      },
+      "id": "claude",
+      "name": "Claude",
+      "error": null
+    }
+  ],
+  "host": {
+    "usageBarsShowUsed": false,
+    "codexBarVersion": "0.80.0",
+    "refreshIntervalSeconds": 60
+  }
+}

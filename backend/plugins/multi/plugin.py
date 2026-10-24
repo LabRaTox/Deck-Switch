@@ -50,15 +50,13 @@ class MultiPlugin(ActionPlugin):
             runtime.save_config()
             ctx.request_redraw()
             if not steps:
-                self.notify_info(
-                    "Für diese Richtung sind keine Schritte hinterlegt"
-                )
+                self.notify_info(self.t("keine_schritte_richtung"))
                 return
             await runtime.run_steps(steps, ctx)
             return
 
         if not slot.steps:
-            self.notify_error("Diese Multi-Aktion hat noch keine Schritte")
+            self.notify_error(self.t("keine_schritte"))
             return
 
         await runtime.run_steps(
@@ -82,4 +80,4 @@ class MultiPlugin(ActionPlugin):
         if action_id == "switch":
             other = len([s for s in ctx.slot.steps_off if s.enabled])
             return f"{count} / {other}"
-        return f"{count} Schritte" if count != 1 else "1 Schritt"
+        return self.t("label.schritte", anzahl=count) if count != 1 else self.t("label.schritt")

@@ -1,0 +1,31 @@
+[
+  {
+    "provider": "codex",
+    "source": "auto",
+    "error": {
+      "message": "No available fetch strategy for codex.",
+      "code": 1,
+      "kind": "provider"
+    }
+  },
+  {
+    "provider": "claude",
+    "source": "oauth",
+    "pace": {
+      "primary": {
+        "expectedUsedPercent": 20,
+        "deltaPercent": -15,
+        "willLastToReset": true,
+        "summary": "15% in reserve | Expected 20% used | Lasts until reset",
+        "stage": "farBehind"
+      },
+      "secondary": {
+        "expectedUsedPercent": 18,
+        "deltaPercent": -16,
+        "willLastToReset": true,
+        "summary": "16% in reserve | Expected 18% used | Lasts until reset",
+        "stage": "farBehind"
+      }
+    }
+  }
+]

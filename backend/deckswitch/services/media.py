@@ -21,6 +21,7 @@ from typing import Any
 
 from dbus_next import BusType, Message, MessageType, Variant
 from dbus_next.aio import MessageBus
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,12 @@ PROPS_IFACE = "org.freedesktop.DBus.Properties"
 #: Browser-Integration von Plasma spiegelt nur, was der Browser ohnehin
 #: meldet, und kdeconnect steuert das Telefon.
 IGNORED = ("plasma-browser-integration", "kdeconnect")
+
+#: Höchstdauer eines D-Bus-Aufrufs an einen Player.
+CALL_TIMEOUT_S = 4.0
+
+#: Kürzer bei der Frage, wer gerade spielt: Sie läuft bei jedem Neuzeichnen.
+PICK_TIMEOUT_S = 1.5
 
 #: Multimedia-Taste je Kommando — der Rückfallweg ohne MPRIS.
 FALLBACK_KEYS = {
@@ -83,9 +90,13 @@ class MediaService:
     # -- Verbindung --------------------------------------------------------
 
     async def _connect(self) -> MessageBus | None:
-        if self.bus is not None:
+        if self.bus is not None and self.bus.connected:
             return self.bus
         async with self._lock:
+            if self.bus is not None and not self.bus.connected:
+                # Verbindung abgerissen (Sitzungsbus neu gestartet): neu aufbauen
+                # statt bis zum Neustart jeden Aufruf scheitern zu lassen.
+                self.bus = None
             if self.bus is None:
                 try:
                     self.bus = await MessageBus(bus_type=BusType.SESSION).connect()
@@ -147,14 +158,18 @@ class MediaService:
                     return name
             return None
 
-        paused: str | None = None
-        for name in candidates:
-            status = await self._get(name, "PlaybackStatus")
+        # Alle zugleich fragen: Ein hängender Player kostet so einmal die
+        # Wartezeit und nicht einmal je Kandidat.
+        statuses = await asyncio.gather(
+            *(self._get(name, "PlaybackStatus", timeout=PICK_TIMEOUT_S) for name in candidates)
+        )
+        for name, status in zip(candidates, statuses):
             if status == "Playing":
                 return name
-            if status == "Paused" and paused is None:
-                paused = name
-        return paused or candidates[0]
+        for name, status in zip(candidates, statuses):
+            if status == "Paused":
+                return name
+        return candidates[0]
 
     # -- Lesen -------------------------------------------------------------
 
@@ -199,7 +214,7 @@ class MediaService:
         )
         return self.state
 
-    async def _get(self, destination: str, name: str) -> Any:
+    async def _get(self, destination: str, name: str, *, timeout: float = CALL_TIMEOUT_S) -> Any:
         reply = await self._send(
             destination=destination,
             path=OBJECT_PATH,
@@ -207,6 +222,7 @@ class MediaService:
             member="Get",
             signature="ss",
             body=[PLAYER_IFACE, name],
+            timeout=timeout,
         )
         if reply is None or not reply.body:
             return None
@@ -226,7 +242,7 @@ class MediaService:
             "previous": "Previous",
         }.get(command)
         if member is None:
-            raise ValueError(f"Unbekanntes Medienkommando: {command}")
+            raise ValueError(texte.t("media.unbekanntes_medienkommando", command=command))
 
         name = await self._pick(player)
         if name is not None:
@@ -239,15 +255,21 @@ class MediaService:
             if reply is not None:
                 return True
 
-        return self._fallback(command)
+        return await self._fallback(command)
 
-    def _fallback(self, command: str) -> bool:
-        """Kein Player erreichbar — die Multimedia-Taste selbst schicken."""
+    async def _fallback(self, command: str) -> bool:
+        """Kein Player erreichbar — die Multimedia-Taste selbst schicken.
+
+        Im Executor: Die virtuelle Tastatur sperrt, solange sie tippt, und
+        richtet sich beim ersten Mal erst ein. Beides darf den Event-Loop
+        nicht anhalten.
+        """
         key = FALLBACK_KEYS.get(command)
         if key is None or self._input is None:
             return False
+        loop = asyncio.get_running_loop()
         try:
-            self._input.send_combo(key)
+            await loop.run_in_executor(None, self._input.send_combo, key)
         except Exception as exc:
             log.debug("Multimedia-Taste '%s' nicht sendbar: %s", key, exc)
             return False
@@ -264,6 +286,7 @@ class MediaService:
         member: str,
         signature: str = "",
         body: list | None = None,
+        timeout: float = CALL_TIMEOUT_S,
     ) -> Message | None:
         bus = await self._connect()
         if bus is None:
@@ -280,7 +303,7 @@ class MediaService:
                         body=body or [],
                     )
                 ),
-                timeout=4,
+                timeout=timeout,
             )
         except Exception as exc:
             log.debug("D-Bus-Aufruf %s fehlgeschlagen: %s", member, exc)

@@ -1,0 +1,110 @@
+[
+  {
+    "provider": "codex",
+    "kind": "provider",
+    "message": "No available fetch strategy for codex.",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "azureopenai",
+    "kind": "provider",
+    "message": "Azure OpenAI API key not configured. Set AZURE_OPENAI_API_KEY or configure an API key in Settings.",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "cursor",
+    "kind": "provider",
+    "message": "No Cursor session found. Paste a Cookie header copied from cursor.com into ~/.config/codexbar/config.json (legacy: ~/.codexbar/config.json).",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "opencode",
+    "kind": "runtime",
+    "message": "Error: selected source requires web support and is only supported on macOS.",
+    "erwartet": "error"
+  },
+  {
+    "provider": "opencodego",
+    "kind": "provider",
+    "message": "No OpenCode Go session cookies found in browsers.",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "alibabatokenplan",
+    "kind": "provider",
+    "message": "Bailian CLI 'bl' is not installed or not on PATH.",
+    "erwartet": "error"
+  },
+  {
+    "provider": "antigravity",
+    "kind": "provider",
+    "message": "Antigravity language server not detected. Launch Antigravity and retry.",
+    "erwartet": "error"
+  },
+  {
+    "provider": "kilo",
+    "kind": "provider",
+    "message": "Kilo CLI session not found at ~/.local/share/kilo/auth.json. Run `kilo auth login` to create ~/.local/share/kilo/auth.json.",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "kiro",
+    "kind": "provider",
+    "message": "Kiro usage requires the Kiro CLI. Install it from https://kiro.dev/docs/cli/ and run 'kiro-cli login' first.",
+    "erwartet": "error"
+  },
+  {
+    "provider": "augment",
+    "kind": "provider",
+    "message": "Augment is only supported on macOS.",
+    "erwartet": "error"
+  },
+  {
+    "provider": "jetbrains",
+    "kind": "provider",
+    "message": "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant.",
+    "erwartet": "error"
+  },
+  {
+    "provider": "amp",
+    "kind": "provider",
+    "message": "Amp access token not configured. Set AMP_API_KEY or add it in Settings.",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "openrouter",
+    "kind": "provider",
+    "message": "Enter a regular API key or a Management API key in the API key field, or set OPENROUTER_API_KEY. In Settings, the optional Management API key field does not replace it.",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "doubao",
+    "kind": "provider",
+    "message": "arkcli was not found. Install arkcli, run 'arkcli auth login', or configure Doubao API credentials.",
+    "erwartet": "error"
+  },
+  {
+    "provider": "codebuff",
+    "kind": "provider",
+    "message": "Codebuff API token not configured. Set CODEBUFF_API_KEY or run `codebuff login` to populate ~/.config/manicode/credentials.json.",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "wayfinder",
+    "kind": "provider",
+    "message": "Could not reach the Wayfinder gateway. Start it with `wayfinder-router serve` (default http://127.0.0.1:8088) or fix the Gateway URL in Settings.",
+    "erwartet": "error"
+  },
+  {
+    "provider": "futureagi",
+    "kind": "provider",
+    "message": "Future AGI requires both FI_API_KEY and FI_SECRET_KEY.",
+    "erwartet": "login_missing"
+  },
+  {
+    "provider": "llmman",
+    "kind": "provider",
+    "message": "llmman is not reachable at http://127.0.0.1:17434. Start it with llmman serve.",
+    "erwartet": "error"
+  }
+]

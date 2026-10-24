@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import functools
 import logging
 import time
 import traceback
@@ -42,8 +43,10 @@ from .config import (
     TouchWallpaper,
 )
 from .device import StreamDeckDevice
-from .plugins.base import Services, SlotContext
+from .events import im_loop
+from .plugins.base import ActionPlugin, Services, SlotContext
 from .services import screensaver, wallpaper
+from . import texte
 
 if TYPE_CHECKING:  # pragma: no cover
     from .runtime import Runtime
@@ -59,6 +62,27 @@ SWIPE_COOLDOWN_S = 0.6
 
 #: Ersatz-Hintergrund für Segmente, unter denen ein Seitenbild liegt.
 TRANSPARENT_BACKGROUND = Background(kind="solid", color="#00000000")
+
+
+def _im_loop(methode):
+    """Lässt eine Methode immer im Event-Loop laufen.
+
+    Synchrone Plugin-Hooks laufen im Executor und rufen von dort aus
+    ``navigate``, ``step_page`` oder ``switch_profile``. Diese Methoden
+    verändern Zustand des Loops; aus einem Thread heraus weckten sie die
+    Zeichenschleife nicht einmal auf.
+    """
+
+    @functools.wraps(methode)
+    def huelle(self, *args, **kwargs):
+        return im_loop(getattr(self.runtime, "_loop", None), methode, self, *args, **kwargs)
+
+    return huelle
+
+
+def _ueberschrieben(plugin, name: str) -> bool:
+    """Hat das Plugin diesen Hook selbst, oder ist es der leere der Basisklasse?"""
+    return getattr(type(plugin), name, None) is not getattr(ActionPlugin, name, None)
 
 
 def uses_default_background(appearance: Appearance) -> bool:
@@ -212,9 +236,16 @@ class Deck:
     # ======================================================================
 
     def start(self) -> None:
-        """Startet die Schleifen dieses Decks."""
-        if self._tasks:
+        """Startet die Schleifen dieses Decks.
+
+        Ist eine davon unerwartet zu Ende gegangen, werden alle neu
+        gestartet, statt dass das Deck still ohne Tick oder Animation
+        weiterläuft.
+        """
+        if self._tasks and not any(task.done() for task in self._tasks):
             return
+        for task in self._tasks:
+            task.cancel()
         self._tasks = [
             asyncio.create_task(self._render_loop(), name=f"render-{self.key}"),
             asyncio.create_task(self._tick_loop(), name=f"tick-{self.key}"),
@@ -297,10 +328,11 @@ class Deck:
     # Navigation (auch die Plugin-Schnittstelle, über DeckView)
     # ======================================================================
 
+    @_im_loop
     def navigate(self, page_id: str) -> None:
         profile = self.profile
         if page_id not in profile.pages:
-            self.runtime.notify("warning", f"Seite '{page_id}' existiert nicht")
+            self.runtime.notify("warning", texte.t("deck.seite_existiert_nicht", page_id=page_id))
             return
         self.current_page_id_value = page_id
         self._contexts.clear()
@@ -335,6 +367,7 @@ class Deck:
         # in der GUI sortiert, ist auch die Reihenfolge beim Wischen.
         return profile.children(parent_id)
 
+    @_im_loop
     def step_page(self, delta: int, *, wrap: bool = True) -> bool:
         """Blättert innerhalb der Geschwister-Seiten weiter."""
         siblings = self.sibling_pages()
@@ -391,6 +424,7 @@ class Deck:
     def stack_index(self, index: int, page_id: str | None = None) -> int:
         return self._stack_index.get((page_id or self.current_page_id_value, index), 0)
 
+    @_im_loop
     def cycle_stack(self, index: int, delta: int = 1) -> bool:
         """Schaltet einen Dial-Stack weiter. ``False`` = da ist kein Stack."""
         page_id = self.current_page_id_value
@@ -501,7 +535,7 @@ class Deck:
         """
         usable = [s for s in steps if s.enabled]
         if not usable:
-            self.runtime.notify("info", "Die Multi-Aktion hat keine aktiven Schritte")
+            self.runtime.notify("info", texte.t("deck.multi_aktion_hat_keine"))
             return
 
         self.stop_steps(ctx)
@@ -510,8 +544,9 @@ class Deck:
             self._run_chain(usable, ctx, repeat), name=f"chain-{self.key}-{key}"
         )
         self._chains[key] = task
-        task.add_done_callback(lambda _t, k=key: self._chain_finished(k))
+        task.add_done_callback(lambda t, k=key: self._chain_finished(k, t))
 
+    @_im_loop
     def stop_steps(self, ctx: SlotContext) -> bool:
         task = self._chains.pop(ctx.key, None)
         if task is None:
@@ -523,8 +558,12 @@ class Deck:
         task = self._chains.get(ctx.key)
         return task is not None and not task.done()
 
-    def _chain_finished(self, key: str) -> None:
-        self._chains.pop(key, None)
+    def _chain_finished(self, key: str, task: asyncio.Task | None = None) -> None:
+        # Nur austragen, was noch diese Kette ist: Eine abgebrochene Kette
+        # meldet sich womöglich erst, wenn unter demselben Schlüssel schon
+        # die nächste läuft.
+        if task is None or self._chains.get(key) is task:
+            self._chains.pop(key, None)
         self._mark_all_dirty()
 
     async def _run_chain(self, steps: list[Step], ctx: SlotContext, repeat: bool) -> None:
@@ -547,7 +586,7 @@ class Deck:
             # Ketten in Ketten wären eine hübsche Schleife, die niemand mehr
             # anhält. Elgato lässt sie aus demselben Grund nicht zu.
             self.runtime.notify(
-                "warning", "Eine Multi-Aktion kann keine Multi-Aktion enthalten"
+                "warning", texte.t("deck.multi_aktion_kann_keine")
             )
             return
 
@@ -555,7 +594,7 @@ class Deck:
         if plugin is None:
             self.runtime._record_error(
                 step.plugin_id,
-                f"Schritt {position + 1}: Plugin '{step.plugin_id}' nicht geladen",
+                texte.t("deck.schritt_plugin_nicht_geladen", schritt=position + 1, plugin_id=step.plugin_id),
             )
             return
 
@@ -581,7 +620,7 @@ class Deck:
             except Exception as exc:
                 self.runtime._record_error(
                     step.plugin_id,
-                    f"Schritt {position + 1} — {name}({step.action_id}): {exc}",
+                    f"Schritt {position + 1}, {name}({step.action_id}): {exc}",
                     source="plugin",
                     traceback=traceback.format_exc(),
                 )
@@ -672,11 +711,11 @@ class Deck:
                 if slot is None
                 else await self.render_slot(slot, input_type, index, size)
             )
-            self.device.set_key_image(index, image)
+            await self._zeige_taste(index, image)
             return
 
         # Touchstrip: erst das Seitenbild, dann die Belegung darüber.
-        base = self.wallpaper_segment(self.current_page, index, size)
+        base = await self._wallpaper_segment_async(self.current_page, index, size)
 
         if slot is None:
             image = base if base is not None else self.runtime.render.blank(size)
@@ -689,7 +728,46 @@ class Deck:
                 merged.alpha_composite(image.convert("RGBA"))
                 image = merged
 
-        self.device.set_touchscreen_image(image, x=index * size[0], y=0)
+        await self._zeige_streifen(image, index * size[0])
+
+    def _bild_executor(self):
+        return getattr(self.runtime, "_executor", None)
+
+    async def _zeige_taste(self, index: int, image: Image.Image) -> None:
+        """Gibt ein Tastenbild aus. Kodiert wird im Executor.
+
+        Das Umwandeln (JPEG fürs Gerät, PNG fürs Overlay) kostet je Kachel
+        einige Millisekunden; bei einem großen Raster summiert sich das zu
+        einer spürbaren Pause des Loops. Geschrieben wird danach wieder hier,
+        in der Reihenfolge, in der die Zeichenschleife die Kacheln abarbeitet.
+        """
+        device = self.device
+        vorbereiten = getattr(device, "prepare_key_image", None)
+        if vorbereiten is None:
+            device.set_key_image(index, image)
+            return
+        daten = await asyncio.get_running_loop().run_in_executor(
+            self._bild_executor(), vorbereiten, image
+        )
+        # Inzwischen kann der Schoner das Deck übernommen haben oder das
+        # Gerät gewechselt sein; dann gehört dieses Bild nicht mehr dorthin.
+        if daten is None or device is not self.device or self._screensaver_task is not None:
+            return
+        device.write_key_image(index, daten)
+
+    async def _zeige_streifen(self, image: Image.Image, x: int) -> None:
+        """Wie :meth:`_zeige_taste`, für ein Segment des Touchstrips."""
+        device = self.device
+        vorbereiten = getattr(device, "prepare_touchscreen_image", None)
+        if vorbereiten is None:
+            device.set_touchscreen_image(image, x=x, y=0)
+            return
+        daten = await asyncio.get_running_loop().run_in_executor(
+            self._bild_executor(), vorbereiten, image
+        )
+        if daten is None or device is not self.device or self._screensaver_task is not None:
+            return
+        device.write_touchscreen_image(daten, x=x, y=0, width=image.width, height=image.height)
 
     async def render_slot(
         self,
@@ -736,7 +814,7 @@ class Deck:
             return render.error_slot(size, slot.action_id)
 
         if not isinstance(image, Image.Image):
-            return render.error_slot(size, "kein Bild")
+            return render.error_slot(size, texte.t("deck.kein_bild"))
         if image.size != size:
             image = image.resize(size, Image.LANCZOS)
         return image
@@ -764,7 +842,11 @@ class Deck:
         )
         # Das Seitenbild gehört auch in die Vorschau — sonst zeigte die GUI
         # etwas anderes als das Gerät, und genau dafür ist sie da.
-        base = self.wallpaper_segment(page, index, size) if input_type == "dial" else None
+        base = (
+            await self._wallpaper_segment_async(page, index, size)
+            if input_type == "dial"
+            else None
+        )
 
         if slot is None:
             if input_type == "key":
@@ -832,7 +914,37 @@ class Deck:
         self, page: Page, index: int, size: tuple[int, int]
     ) -> Image.Image | None:
         """Der Bildausschnitt für dieses Segment, oder ``None``."""
-        segments = self._wallpaper_segments(page)
+        return self._segment_aus(self._wallpaper_segments(page), index, size)
+
+    async def _wallpaper_segment_async(
+        self, page: Page, index: int, size: tuple[int, int]
+    ) -> Image.Image | None:
+        """Wie :meth:`wallpaper_segment`, baut ein neues Bild aber im Executor.
+
+        Ein Hintergrund-Plugin zeichnet synchron, und eine Bilddatei will
+        geladen und zerlegt werden. Beides gehört nicht in den Loop. Der
+        Zwischenspeicher wird nur hier im Loop gelesen und beschrieben.
+        """
+        bauplan = self._wallpaper_bauplan(page)
+        if bauplan is None:
+            return None
+        key, settings, strip, count = bauplan
+        segments = self._wallpaper_cache.get(key)
+        if segments is None:
+            try:
+                segments = await asyncio.get_running_loop().run_in_executor(
+                    self._bild_executor(), self.build_wallpaper, settings, strip, count
+                )
+            except Exception as exc:
+                segments = self._wallpaper_fehler(settings, key, exc)
+            else:
+                self._wallpaper_cache.put(key, segments)
+        return self._segment_aus(segments, index, size)
+
+    @staticmethod
+    def _segment_aus(
+        segments: list[Image.Image], index: int, size: tuple[int, int]
+    ) -> Image.Image | None:
         if not segments or index >= len(segments):
             return None
         segment = segments[index]
@@ -849,16 +961,16 @@ class Deck:
         path = paths.image_path(name)
         return path.stat().st_mtime if path is not None else 0.0
 
-    def _wallpaper_segments(self, page: Page) -> list[Image.Image]:
-        """Die zerlegten Segmente dieser Seite, ggf. aus dem Zwischenspeicher."""
+    def _wallpaper_bauplan(self, page: Page):
+        """Schlüssel und Eckdaten des Seitenbilds, oder ``None`` ohne Bild."""
         settings = page.touch_wallpaper
         if not settings.enabled or not settings.source:
-            return []
+            return None
 
         strip = self.device.info.touchscreen_size
         count = max(0, self.device.info.dial_count)
         if count <= 0 or strip[0] <= 0 or strip[1] <= 0:
-            return []  # kein Touchstrip, nichts zu zerlegen
+            return None  # kein Touchstrip, nichts zu zerlegen
         # Die Seiten-ID gehört in den Schlüssel: Sonst zeigte der Cache nach
         # einem Seitenwechsel weiter das Bild der vorigen Seite. Die
         # Änderungszeit ebenso — wer eine Bilddatei austauscht, ohne ihren
@@ -872,6 +984,23 @@ class Deck:
             settings.fit,
             settings.opacity,
         )
+        return key, settings, strip, count
+
+    def _wallpaper_fehler(self, settings, key, exc: Exception) -> list:
+        self.runtime._record_error(
+            settings.source, texte.t("deck.hintergrundbild_nicht_ladbar", exc=exc), source="wallpaper"
+        )
+        # Leeres Ergebnis merken, damit nicht jedes Neuzeichnen erneut
+        # scheitert und die Fehlerliste flutet.
+        self._wallpaper_cache.put(key, [])
+        return []
+
+    def _wallpaper_segments(self, page: Page) -> list[Image.Image]:
+        """Die zerlegten Segmente dieser Seite, ggf. aus dem Zwischenspeicher."""
+        bauplan = self._wallpaper_bauplan(page)
+        if bauplan is None:
+            return []
+        key, settings, strip, count = bauplan
 
         cached = self._wallpaper_cache.get(key)
         if cached is not None:
@@ -880,13 +1009,7 @@ class Deck:
         try:
             segments = self.build_wallpaper(settings, strip, count)
         except Exception as exc:
-            self.runtime._record_error(
-                settings.source, f"Hintergrundbild nicht ladbar: {exc}", source="wallpaper"
-            )
-            # Leeres Ergebnis merken, damit nicht jedes Neuzeichnen erneut
-            # scheitert und die Fehlerliste flutet.
-            self._wallpaper_cache.put(key, [])
-            return []
+            return self._wallpaper_fehler(settings, key, exc)
 
         self._wallpaper_cache.put(key, segments)
         return segments
@@ -897,20 +1020,20 @@ class Deck:
         if kind == "plugin":
             loaded = self.runtime.registry.plugins.get(name)
             if loaded is None or not loaded.enabled or loaded.instance is None:
-                raise ValueError(f"Plugin '{name}' ist nicht verfügbar")
+                raise ValueError(texte.t("deck.plugin_nicht_verfuegbar", name=name))
             image = loaded.instance.render(strip, 0.0)
             if image is None:
-                raise ValueError("Das Plugin hat kein Bild geliefert")
+                raise ValueError(texte.t("deck.plugin_hat_kein_bild"))
             return wallpaper.split(image, strip, count, settings.fit, settings.opacity)
 
         if kind == "upload":
             path = paths.image_path(name)
             if path is None:
-                raise FileNotFoundError(f"Datei nicht gefunden: {name}")
+                raise FileNotFoundError(texte.t("deck.datei_nicht_gefunden", name=name))
             with Image.open(path) as image:
                 return wallpaper.load(image, strip, count, settings.fit, settings.opacity)
 
-        raise ValueError(f"Unbekannte Quelle: '{settings.source}'")
+        raise ValueError(texte.t("deck.unbekannte_quelle", source=settings.source))
 
     def wallpaper_preview(
         self, source: str, *, fit: str = "cover", opacity: int = 100
@@ -960,7 +1083,14 @@ class Deck:
             if self._screensaver_task is not None:
                 continue
 
-            targets = self._animated_targets()
+            # Ein einzelner Fehler (etwa eine Datei, die gerade gelöscht
+            # wird) darf die Schleife nicht beenden, sonst stünden alle
+            # Animationen bis zum Neustart.
+            try:
+                targets = self._animated_targets()
+            except Exception:
+                log.exception("Animierte Kacheln nicht ermittelbar")
+                continue
             if not targets:
                 continue
             self._dirty.update(targets)
@@ -995,28 +1125,41 @@ class Deck:
         while True:
             interval = max(0.1, self.settings.tick_interval_s)
             await asyncio.sleep(interval)
-            self.check_idle()
-            if not self.device.connected:
-                continue
+            # Wie bei der Animation: Ein Fehler beendet nur diesen Durchlauf.
+            # Stürbe die Schleife, gäbe es weder Tick noch Abdunkeln noch
+            # Bildschirmschoner mehr, und niemand bekäme es mit.
+            try:
+                await self._tick_once()
+            except Exception:
+                log.exception("Tick von '%s' fehlgeschlagen", self.label)
 
-            page = self.current_page
-            for input_type, mapping in (("key", page.keys), ("dial", page.dials)):
-                for index, slot in list(mapping.items()):
-                    active = self.slot_at(input_type, index) or slot
-                    plugin = self.runtime.registry.instance(active.plugin_id)
-                    if plugin is None:
-                        continue
-                    ctx = self.context(input_type, index, active)
-                    try:
-                        await self.runtime._call_hook(
-                            plugin.on_tick, active.action_id, active.settings, ctx
-                        )
-                    except Exception as exc:
-                        self.runtime._record_error(
-                            active.plugin_id,
-                            f"on_tick({active.action_id}): {exc}",
-                            source="plugin",
-                        )
+    async def _tick_once(self) -> None:
+        self.check_idle()
+        if not self.device.connected:
+            return
+
+        page = self.current_page
+        executor = getattr(self.runtime, "_tick_executor", None)
+        for input_type, mapping in (("key", page.keys), ("dial", page.dials)):
+            for index, slot in list(mapping.items()):
+                active = self.slot_at(input_type, index) or slot
+                plugin = self.runtime.registry.instance(active.plugin_id)
+                # Der leere Hook der Basisklasse muss nicht erst in einen
+                # Thread wandern, nur um nichts zu tun.
+                if plugin is None or not _ueberschrieben(plugin, "on_tick"):
+                    continue
+                ctx = self.context(input_type, index, active)
+                try:
+                    await self.runtime._call_hook(
+                        plugin.on_tick, active.action_id, active.settings, ctx,
+                        executor=executor,
+                    )
+                except Exception as exc:
+                    self.runtime._record_error(
+                        active.plugin_id,
+                        f"on_tick({active.action_id}): {exc}",
+                        source="plugin",
+                    )
 
     def check_idle(self) -> None:
         settings = self.settings
@@ -1089,6 +1232,23 @@ class Deck:
 
     async def _screensaver_loop(self) -> None:
         """Zeigt den Schoner, bis die Aufgabe abgebrochen wird."""
+        try:
+            await self._screensaver_zeigen()
+        finally:
+            # Endet der Schoner von selbst (Fehler im Plugin, keine Bilder),
+            # gehört das Deck wieder seiner Belegung. Ohne das bliebe die
+            # Aufgabe eingetragen, und das Deck zeichnete nichts mehr, bis
+            # jemand eine Taste drückt. Beim Abbrechen hat
+            # :meth:`_stop_screensaver` das schon erledigt.
+            if self._screensaver_task is asyncio.current_task():
+                self._screensaver_task = None
+                self.device.set_brightness(
+                    self.settings.idle_brightness if self._dimmed else self.settings.brightness
+                )
+                self._mark_all_dirty()
+                self._publish_state(screensaver=False)
+
+    async def _screensaver_zeigen(self) -> None:
         settings = self.settings.screensaver
         layout = screensaver.layout(
             self.device.info.key_size,
@@ -1097,16 +1257,17 @@ class Deck:
         )
 
         try:
-            frames, plugin = self.screensaver_source(settings.source, layout)
+            # Im Executor: Ein GIF will Bild für Bild dekodiert werden.
+            frames, plugin = await asyncio.get_running_loop().run_in_executor(
+                self._bild_executor(), self.screensaver_source, settings.source, layout
+            )
         except Exception as exc:
             self.runtime._record_error(
-                settings.source, f"Schoner nicht ladbar: {exc}", source="screensaver"
+                settings.source, texte.t("deck.schoner_nicht_ladbar", exc=exc), source="screensaver"
             )
-            self._screensaver_task = None
             return
 
         if frames is None and plugin is None:
-            self._screensaver_task = None
             return
 
         self.device.set_brightness(settings.brightness)
@@ -1123,7 +1284,7 @@ class Deck:
         except Exception as exc:
             self.runtime._record_error(
                 settings.source,
-                f"Schoner abgebrochen: {exc}",
+                texte.t("deck.schoner_abgebrochen", exc=exc),
                 source="screensaver",
                 traceback=traceback.format_exc(),
             )
@@ -1135,20 +1296,20 @@ class Deck:
         if kind == "plugin":
             loaded = self.runtime.registry.plugins.get(name)
             if loaded is None or not loaded.enabled or loaded.instance is None:
-                raise ValueError(f"Schoner-Plugin '{name}' ist nicht verfügbar")
+                raise ValueError(texte.t("deck.schoner_plugin_nicht_verfuegbar", name=name))
             return None, loaded.instance
 
         if kind == "upload":
             path = paths.image_path(name)
             if path is None:
-                raise FileNotFoundError(f"Datei nicht gefunden: {name}")
+                raise FileNotFoundError(texte.t("deck.datei_nicht_gefunden", name=name))
             with Image.open(path) as image:
                 return (
                     screensaver.load_frames(image, layout, self.settings.screensaver.fit),
                     None,
                 )
 
-        raise ValueError(f"Unbekannte Schoner-Quelle: '{source}'")
+        raise ValueError(texte.t("deck.unbekannte_schoner_quelle", source=source))
 
     async def _run_screensaver_frames(self, frames: list) -> None:
         """Spielt vorbereitete Einzelbilder ab."""
@@ -1170,22 +1331,32 @@ class Deck:
         # Damit ein Plugin etwas pro Taste zeigen kann, muss es wissen, wo
         # die Schnitte verlaufen.
         plugin.deck_layout = layout
+        loop = asyncio.get_running_loop()
+
+        def zeichnen(elapsed: float):
+            # Zeichnen und Zerlegen im Executor: ``render`` ist synchroner
+            # Plugin-Code, und ein langsamer Schoner hielte sonst alles an.
+            image = plugin.render(layout.canvas, elapsed)
+            if image is None:
+                return None
+            canvas = screensaver.fit(image, layout.canvas, settings.fit)
+            return screensaver.split(canvas, layout)
+
         while True:
             elapsed = time.monotonic() - started
             try:
-                image = plugin.render(layout.canvas, elapsed)
+                teile = await loop.run_in_executor(self._bild_executor(), zeichnen, elapsed)
             except Exception as exc:
                 self.runtime._record_error(
                     plugin.manifest.id,
-                    f"Schoner render(): {exc}",
+                    texte.t("deck.schoner_render", exc=exc),
                     source="plugin",
                     traceback=traceback.format_exc(),
                 )
                 return
 
-            if image is not None:
-                canvas = screensaver.fit(image, layout.canvas, settings.fit)
-                keys, strip = screensaver.split(canvas, layout)
+            if teile is not None:
+                keys, strip = teile
                 self._show_screensaver_frame(keys, strip)
 
             interval = getattr(plugin, "interval_s", 0.0)
@@ -1214,12 +1385,12 @@ class Deck:
             plugin.deck_layout = layout
             image = plugin.render(layout.canvas, 0.0)
             if image is None:
-                raise ValueError("Das Plugin hat kein Bild geliefert")
+                raise ValueError(texte.t("deck.plugin_hat_kein_bild"))
             canvas = screensaver.fit(image, layout.canvas, self.settings.screensaver.fit)
             keys, strip = screensaver.split(canvas, layout)
         else:
             if not frames:
-                raise ValueError("Kein Einzelbild gefunden")
+                raise ValueError(texte.t("deck.kein_einzelbild_gefunden"))
             keys, strip = frames[0].keys, frames[0].strip
 
         preview = Image.new("RGBA", layout.canvas, (0, 0, 0, 255))
@@ -1397,7 +1568,7 @@ class Deck:
         plugin = self.runtime.registry.instance(slot.plugin_id)
         if plugin is None:
             self.runtime._record_error(
-                slot.plugin_id, f"Plugin '{slot.plugin_id}' nicht geladen"
+                slot.plugin_id, texte.t("deck.plugin_nicht_geladen", plugin_id=slot.plugin_id)
             )
             return
         # Jeder Zweig einer Taste bekommt seinen eigenen Kontext: Druck,
@@ -1481,7 +1652,7 @@ class Deck:
         plugin = self.runtime.registry.instance(branch.plugin_id)
         if plugin is None:
             self.runtime._record_error(
-                branch.plugin_id, f"Plugin '{branch.plugin_id}' nicht geladen"
+                branch.plugin_id, texte.t("deck.plugin_nicht_geladen", plugin_id=branch.plugin_id)
             )
             return
 
@@ -1668,6 +1839,7 @@ class Deck:
     # Config-Änderungen
     # ======================================================================
 
+    @_im_loop
     def switch_profile(self, name: str = "") -> bool:
         """Auf ein anderes Profil umschalten — nach Namen.
 
@@ -1701,6 +1873,7 @@ class Deck:
         )
         return True
 
+    @_im_loop
     def auto_profil(self, profile_id: str | None) -> bool:
         """Vom Fensterwechsel gesteuerter Profilwechsel.
 
@@ -1729,6 +1902,7 @@ class Deck:
         )
         return True
 
+    @_im_loop
     def apply_config(self) -> None:
         """Nach einer Änderung an der Config alles Abhängige auffrischen."""
         profile = self.profile
@@ -1799,6 +1973,9 @@ class DeckView:
 
     def cycle_stack(self, index: int, delta: int = 1) -> bool:
         return self._deck.cycle_stack(index, delta)
+
+    def switch_profile(self, name: str = "") -> bool:
+        return self._deck.switch_profile(name)
 
     @property
     def deck(self) -> Deck:

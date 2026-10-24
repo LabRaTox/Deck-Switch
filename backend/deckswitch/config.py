@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
+import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -24,6 +27,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from . import paths
+from . import texte
 
 log = logging.getLogger(__name__)
 
@@ -627,6 +631,24 @@ class ConfigStore:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or paths.CONFIG_FILE
         self.config: Config = default_config()
+        #: Speichern kann aus mehreren Threads kommen (Plugin-Hooks laufen im
+        #: Executor). Ohne Sperre schreiben zwei gleichzeitig in dieselbe
+        #: Zwischendatei, und einer von beiden findet sie danach nicht mehr.
+        self._schreibsperre = threading.Lock()
+
+    def peek_app(self) -> AppSettings:
+        """Die App-Einstellungen, nur gelesen.
+
+        Für den Start, der Host und Port wissen muss, bevor die Runtime
+        lädt. Schreibt nichts und legt nichts an: Fehlt die Datei oder ist
+        sie kaputt, gelten die Vorgaben, und das eigentliche Laden meldet
+        den Fehler später dort, wo die Oberfläche ihn sieht.
+        """
+        try:
+            daten = json.loads(self.path.read_text(encoding="utf-8"))
+            return AppSettings.model_validate(daten.get("app") or {})
+        except (OSError, ValueError, AttributeError, ValidationError):
+            return AppSettings()
 
     def load(self) -> Config:
         if not self.path.exists():
@@ -639,13 +661,15 @@ class ConfigStore:
             data = json.loads(raw)
             self.config = Config.model_validate(data)
         except (json.JSONDecodeError, ValidationError) as exc:
-            backup = self.path.with_suffix(".broken.json")
+            # Mit Zeitstempel: Geht die Datei ein zweites Mal kaputt, bliebe
+            # sonst nur die jüngere Kopie übrig.
+            stempel = time.strftime("%Y%m%d-%H%M%S")
+            backup = self.path.with_name(f"{self.path.stem}.broken-{stempel}.json")
             shutil.copy2(self.path, backup)
             self.config = default_config()
             self.save()
             raise ConfigLoadError(
-                f"Config unlesbar ({exc}). Kopie liegt unter {backup}, "
-                f"es wurde eine frische Standard-Config angelegt."
+                texte.t("config.config_unlesbar_kopie_liegt", exc=exc, backup=backup)
             ) from exc
 
         self.config.active_profile()  # Selbstheilung erzwingen
@@ -654,12 +678,24 @@ class ConfigStore:
     def save(self, config: Config | None = None) -> None:
         if config is not None:
             self.config = config
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._rotate_backup()
-        tmp = self.path.with_suffix(".tmp")
-        payload = self.config.model_dump(mode="json", exclude_none=False)
-        tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(self.path)
+        with self._schreibsperre:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._rotate_backup()
+            payload = self.config.model_dump(mode="json", exclude_none=False)
+            text = json.dumps(payload, indent=2, ensure_ascii=False)
+            # Eigene Zwischendatei je Vorgang, im selben Ordner, damit das
+            # Umbenennen atomar bleibt.
+            fd, name = tempfile.mkstemp(
+                prefix=f".{self.path.name}.", suffix=".tmp", dir=self.path.parent
+            )
+            tmp = Path(name)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as datei:
+                    datei.write(text)
+                tmp.replace(self.path)
+            except BaseException:
+                tmp.unlink(missing_ok=True)
+                raise
 
     def _rotate_backup(self) -> None:
         """Legt den bisherigen Stand beiseite, bevor er überschrieben wird.

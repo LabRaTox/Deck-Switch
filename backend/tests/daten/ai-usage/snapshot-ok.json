@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-16T12:00:00Z",
+  "staleAfterSeconds": 180,
+  "host": {
+    "codexBarVersion": "0.80.0",
+    "refreshIntervalSeconds": 60,
+    "usageBarsShowUsed": false
+  },
+  "providers": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "enabled": true,
+      "source": "oauth",
+      "status": {
+        "level": "ok",
+        "label": "Operational",
+        "updatedAt": "2026-07-16T11:59:00Z"
+      },
+      "identity": {
+        "accountEmail": "redacted@example.com",
+        "plan": "Max"
+      },
+      "windows": [
+        {
+          "kind": "session",
+          "label": "Session",
+          "usedPercent": 20,
+          "remainingPercent": 80,
+          "resetAt": "2026-07-16T17:00:00Z"
+        },
+        {
+          "kind": "weekly",
+          "label": "Weekly",
+          "usedPercent": 75,
+          "remainingPercent": 25,
+          "resetAt": "2026-07-18T12:00:00Z"
+        },
+        {
+          "kind": "claude-weekly-scoped-fable",
+          "label": "Fable only",
+          "usedPercent": 33,
+          "remainingPercent": 67,
+          "resetAt": "2026-07-18T12:00:00Z"
+        },
+        {
+          "kind": "claude-weekly-scoped-opus",
+          "label": "Opus only",
+          "usedPercent": 0,
+          "remainingPercent": 100,
+          "resetAt": "2026-07-18T12:00:00Z",
+          "idle": true
+        }
+      ],
+      "credits": null,
+      "cost": {
+        "todayUSD": 1.04,
+        "last30DaysUSD": 18.22
+      },
+      "display": {
+        "accentColor": "#D97757",
+        "sortKey": 1,
+        "priority": "normal"
+      },
+      "error": null,
+      "updatedAt": "2026-07-16T11:59:45Z"
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "enabled": true,
+      "source": "oauth",
+      "status": {
+        "level": "warning",
+        "label": "Degraded",
+        "updatedAt": "2026-07-16T11:59:00Z"
+      },
+      "identity": {
+        "accountEmail": "redacted@example.com",
+        "plan": "Pro 20x"
+      },
+      "windows": [
+        {
+          "kind": "session",
+          "label": "Session",
+          "usedPercent": 92,
+          "remainingPercent": 8,
+          "resetAt": "2026-07-16T13:15:00Z"
+        },
+        {
+          "kind": "weekly",
+          "label": "Weekly",
+          "usedPercent": 41,
+          "remainingPercent": 59,
+          "resetAt": "2026-07-20T09:00:00Z"
+        }
+      ],
+      "credits": {
+        "remaining": 112.4,
+        "unit": "credits"
+      },
+      "cost": {
+        "todayUSD": null,
+        "last30DaysUSD": 7.5
+      },
+      "display": {
+        "accentColor": "#49A3B0",
+        "sortKey": 0,
+        "priority": "normal"
+      },
+      "error": null,
+      "updatedAt": "2026-07-16T11:59:40Z"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "enabled": true,
+      "source": "api",
+      "status": null,
+      "identity": null,
+      "windows": [],
+      "credits": {
+        "remaining": 4.2,
+        "unit": "USD"
+      },
+      "cost": null,
+      "display": {
+        "accentColor": null,
+        "sortKey": 2,
+        "priority": "normal"
+      },
+      "error": null,
+      "updatedAt": "2026-07-16T11:59:30Z"
+    }
+  ]
+}

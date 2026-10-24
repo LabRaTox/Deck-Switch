@@ -298,6 +298,45 @@ GUI. Wirft ein Hook eine Ausnahme, fängt die Runtime sie ab, zeigt eine rote
 Fehlerkachel auf dem Gerät und listet den Fehler in der Oberfläche. Ein
 kaputtes Plugin legt also nie die ganze Anwendung lahm.
 
+## Texte übersetzen
+
+Alles, was ein Mensch zu sehen bekommt, gehört in Sprachdateien im
+Plugin-Ordner: Fehlermeldungen, Statuszeilen, Bedienhinweise, Texte auf
+Tasten und im Touchstrip. Das Manifest ist schon zweisprachig, das gilt
+für alles andere.
+
+```
+counter/
+  locales/
+    de.json
+    en.json
+```
+
+```json
+// locales/de.json
+{ "nicht_erreichbar": "{dienst} ist nicht erreichbar", "zaehler": "Zähler" }
+
+// locales/en.json
+{ "nicht_erreichbar": "{dienst} is not reachable", "zaehler": "Counter" }
+```
+
+Im Code steht nur der Schlüssel:
+
+```python
+self.notify_error(self.t("nicht_erreichbar", dienst="OBS"))
+```
+
+`self.t()` nimmt die Sprache, die in der App eingestellt ist. Fehlt ein
+Text, kommt der englische, dann der deutsche, zuletzt der Schlüssel
+selbst. Hilfsmodule ohne `self` benutzen `plugin_text` aus
+`deckswitch.plugins.base` mit dem eigenen Ordner und der Plugin-ID.
+
+Log-Zeilen bleiben unübersetzt, sie stehen nur im Journal.
+
+`self.t()` gibt es ab DECK//SWITCH 1.4.0. Ein Plugin, das es benutzt,
+trägt deshalb `"min_app_version": "1.4.0"` im Manifest. Ältere Versionen
+der App installieren es dann gar nicht erst.
+
 ## Drehrichtungen
 
 Ein Dial kann je Drehrichtung eine eigene Action tragen. Ist eine belegt,

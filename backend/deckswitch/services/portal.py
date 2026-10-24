@@ -36,6 +36,7 @@ from urllib.parse import unquote, urlparse
 
 from dbus_next import BusType, Message, MessageType, Variant
 from dbus_next.aio import MessageBus
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +55,11 @@ ANTWORT_TIMEOUT_S = 15.0
 
 #: So lange, wenn ein Dialog erscheint, den der Benutzer beantworten muss.
 DIALOG_TIMEOUT_S = 180.0
+
+#: Höchstdauer eines gewöhnlichen Methodenaufrufs (nicht der Antwort, die
+#: danach als Signal kommt). Ohne Grenze hinge ein Aufruf an einem Portal,
+#: das nicht antwortet, für immer.
+AUFRUF_TIMEOUT_S = 25.0
 
 #: Antwortcodes des Portals.
 ERFOLG = 0
@@ -79,13 +85,13 @@ def trigger_aus_combo(combo: str) -> str:
 
     modifiers, key = parse_combo(combo)
     if not key:
-        raise PortalError("Es fehlt die eigentliche Taste")
+        raise PortalError(texte.t("portal.fehlt_eigentliche_taste"))
 
     teile = []
     for modifier in modifiers:
         name = namen.get(modifier)
         if name is None:
-            raise PortalError(f"'{modifier}' geht als globaler Kurzbefehl nicht")
+            raise PortalError(texte.t("portal.geht_als_globaler_kurzbefehl", modifier=modifier))
         teile.append(name)
 
     teile.append(key)
@@ -153,15 +159,18 @@ class PortalConnection:
         if self._bus is None:
             return False
         try:
-            await self._bus.call(
-                Message(
-                    destination="org.freedesktop.DBus",
-                    path="/org/freedesktop/DBus",
-                    interface="org.freedesktop.DBus",
-                    member="AddMatch",
-                    signature="s",
-                    body=[regel],
-                )
+            await asyncio.wait_for(
+                self._bus.call(
+                    Message(
+                        destination="org.freedesktop.DBus",
+                        path="/org/freedesktop/DBus",
+                        interface="org.freedesktop.DBus",
+                        member="AddMatch",
+                        signature="s",
+                        body=[regel],
+                    )
+                ),
+                AUFRUF_TIMEOUT_S,
             )
             return True
         except Exception as exc:  # noqa: BLE001
@@ -186,7 +195,7 @@ class PortalConnection:
         lässt sich die Signalregel setzen, *bevor* der Aufruf herausgeht.
         """
         if self._bus is None:
-            raise PortalError("Keine Verbindung zum Portal")
+            raise PortalError(texte.t("portal.keine_verbindung_zum_portal"))
         sender = self._bus.unique_name[1:].replace(".", "_")
         return f"{PORTAL_PATH}/request/{sender}/{token}"
 
@@ -207,7 +216,7 @@ class PortalConnection:
         Argument angehängt — alle Portal-Methoden enden so.
         """
         if self._bus is None:
-            raise PortalError("Keine Verbindung zum Portal")
+            raise PortalError(texte.t("portal.keine_verbindung_zum_portal"))
 
         token = self._token(zweck)
         pfad = self._antwortpfad(token)
@@ -218,37 +227,45 @@ class PortalConnection:
             if not await self._add_match(
                 f"type='signal',interface='{REQUEST_IFACE}',path='{pfad}'"
             ):
-                raise PortalError("Signalregel für die Antwort ließ sich nicht setzen")
+                raise PortalError(texte.t("portal.signalregel_antwort_liess_nicht"))
 
             vollstaendig = dict(optionen or {})
             vollstaendig["handle_token"] = Variant("s", token)
 
-            antwort = await self._bus.call(
-                Message(
-                    destination=PORTAL_NAME,
-                    path=PORTAL_PATH,
-                    interface=interface,
-                    member=member,
-                    signature=signature,
-                    body=[*body, vollstaendig],
+            try:
+                antwort = await asyncio.wait_for(
+                    self._bus.call(
+                        Message(
+                            destination=PORTAL_NAME,
+                            path=PORTAL_PATH,
+                            interface=interface,
+                            member=member,
+                            signature=signature,
+                            body=[*body, vollstaendig],
+                        )
+                    ),
+                    AUFRUF_TIMEOUT_S,
                 )
-            )
+            except asyncio.TimeoutError as exc:
+                raise PortalError(
+                    texte.t("portal.keine_antwort_binnen_s", member=member, timeout_s=AUFRUF_TIMEOUT_S)
+                ) from exc
             if antwort is None or antwort.message_type is MessageType.ERROR:
                 grund = ""
                 if antwort is not None and antwort.body:
                     grund = str(antwort.body[0])
-                raise PortalError(f"{member} abgelehnt: {grund or 'ohne Angabe'}")
+                raise PortalError(texte.t("portal.abgelehnt", member=member, grund=grund or texte.t("portal.ohne_angabe")))
 
             try:
                 async with asyncio.timeout(timeout_s):
                     code, ergebnis = await warteschlange.get()
             except asyncio.TimeoutError as exc:
-                raise PortalError(f"{member}: keine Antwort binnen {timeout_s:.0f} s") from exc
+                raise PortalError(texte.t("portal.keine_antwort_binnen_s", member=member, timeout_s=timeout_s)) from exc
 
             if code == ABGEBROCHEN:
-                raise PortalError(f"{member} wurde abgebrochen")
+                raise PortalError(texte.t("portal.wurde_abgebrochen", member=member))
             if code != ERFOLG:
-                raise PortalError(f"{member} fehlgeschlagen (Code {code})")
+                raise PortalError(texte.t("portal.fehlgeschlagen_code", member=member, code=code))
 
             return {k: v.value if isinstance(v, Variant) else v for k, v in ergebnis.items()}
         finally:
@@ -262,15 +279,18 @@ class PortalConnection:
         if self._bus is None:
             return None
         try:
-            return await self._bus.call(
-                Message(
-                    destination=PORTAL_NAME,
-                    path=path,
-                    interface=interface,
-                    member=member,
-                    signature=signature,
-                    body=body or [],
-                )
+            return await asyncio.wait_for(
+                self._bus.call(
+                    Message(
+                        destination=PORTAL_NAME,
+                        path=path,
+                        interface=interface,
+                        member=member,
+                        signature=signature,
+                        body=body or [],
+                    )
+                ),
+                AUFRUF_TIMEOUT_S,
             )
         except Exception as exc:  # noqa: BLE001
             log.info("%s.%s: %s", interface, member, exc)
@@ -316,7 +336,7 @@ class GlobalShortcutsPortal:
             return self._session
 
         if not await self._conn.connect():
-            raise PortalError("Sitzungsbus nicht erreichbar")
+            raise PortalError(texte.t("portal.sitzungsbus_nicht_erreichbar"))
 
         await self._conn.match_signal(GLOBAL_SHORTCUTS_IFACE, "Activated")
         self._conn.listen(GLOBAL_SHORTCUTS_IFACE, "Activated", self._on_signal)
@@ -332,7 +352,7 @@ class GlobalShortcutsPortal:
         )
         handle = ergebnis.get("session_handle")
         if not handle:
-            raise PortalError("Das Portal hat keine Sitzung geliefert")
+            raise PortalError(texte.t("portal.portal_hat_keine_sitzung"))
         self._session = str(handle)
         return self._session
 
@@ -354,7 +374,9 @@ class GlobalShortcutsPortal:
 
         Ein leeres Ergebnis heißt: alles gebunden.
         """
-        if gewuenscht == self._gebunden:
+        # Nach einem Verbindungsabbruch ist die Sitzung samt Kurzbefehlen weg,
+        # auch wenn sich an den Wünschen nichts geändert hat.
+        if gewuenscht == self._gebunden and (not gewuenscht or self._conn.connected):
             return {}
 
         if not gewuenscht:
@@ -479,7 +501,7 @@ class ScreenshotPortal:
     async def capture(self, mode: str, ziel: Path) -> str:
         """Nimmt auf und legt das Bild unter ``ziel`` ab. Liefert den Pfad."""
         if not await self._conn.connect():
-            raise PortalError("Sitzungsbus nicht erreichbar")
+            raise PortalError(texte.t("portal.sitzungsbus_nicht_erreichbar"))
 
         interaktiv = mode in self.INTERAKTIV
         ergebnis = await self._conn.request(
@@ -494,17 +516,18 @@ class ScreenshotPortal:
             },
             # Interaktiv wartet auf den Benutzer, das darf dauern. Ohne
             # Auswahl fragt das Portal beim ersten Mal einmalig um
-            # Erlaubnis und merkt sich die Antwort danach.
-            timeout_s=DIALOG_TIMEOUT_S if interaktiv else ANTWORT_TIMEOUT_S,
+            # Erlaubnis; auch darauf muss jemand antworten, also gilt
+            # dieselbe Frist.
+            timeout_s=DIALOG_TIMEOUT_S,
         )
 
         uri = ergebnis.get("uri")
         if not uri:
-            raise PortalError("Das Portal hat kein Bild geliefert")
+            raise PortalError(texte.t("portal.portal_hat_kein_bild"))
 
         quelle = Path(unquote(urlparse(str(uri)).path))
         if not quelle.is_file():
-            raise PortalError(f"Das Bild des Portals fehlt: {quelle}")
+            raise PortalError(texte.t("portal.bild_portals_fehlt", quelle=quelle))
 
         ziel.parent.mkdir(parents=True, exist_ok=True)
         # Verschieben, nicht kopieren: Was das Portal anlegt, räumt es nicht
@@ -513,5 +536,5 @@ class ScreenshotPortal:
         try:
             shutil.move(str(quelle), str(ziel))
         except OSError as exc:
-            raise PortalError(f"Bild ließ sich nicht ablegen: {exc}") from exc
+            raise PortalError(texte.t("portal.bild_liess_nicht_ablegen", exc=exc)) from exc
         return str(ziel)

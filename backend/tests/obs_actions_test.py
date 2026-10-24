@@ -49,7 +49,7 @@ class Probe(obsmod.ObsPlugin):
     async def _connect(self): pass
 
 services = Services(audio=None, icons=None, render=None, runtime=FakeRuntime(),
-                    config=default_config(), plugin_dir=pathlib.Path("."))
+                    config=default_config(), plugin_dir=PLUGIN_DIR)
 
 def ctx_for(action, settings):
     slot=Slot(plugin_id="obs", action_id=action, settings=settings, appearance=Appearance())

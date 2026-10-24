@@ -8,6 +8,8 @@ periodische Tick ist nur das Sicherheitsnetz.
 
 from __future__ import annotations
 
+import time
+
 from PIL import Image
 
 from deckswitch.plugins.base import ActionPlugin, SlotContext
@@ -21,8 +23,16 @@ ACCENT = "#3b82f6"
 #: 1/65536-Schritten rechnet und ein gesetzter Wert selten exakt zurückkommt.
 PRESET_TOLERANZ = 0.01
 
+#: So lange gilt die gelesene Liste der App-Streams. Tick und Zeichnen
+#: fragen kurz nacheinander, und jede Abfrage ist ein Aufruf von ``pactl``.
+STREAMS_TTL_S = 1.0
+
 
 class AudioPlugin(ActionPlugin):
+    def __init__(self, manifest, services):
+        super().__init__(manifest, services)
+        self._streams: tuple[float, list[dict]] | None = None
+
     # -- Eingaben ----------------------------------------------------------
 
     def on_dial_rotate(self, action_id, settings, delta, ctx):
@@ -37,6 +47,7 @@ class AudioPlugin(ActionPlugin):
                 return
             step = float(ctx.setting("step", 5))
             self.services.audio.change_stream_volume(stream["index"], delta * step)
+            self._streams = None
         elif action_id == "mic_mute":
             # Auf einem Dial verhält sich Mic-Mute wie ein Mikrofonpegel.
             step = float(ctx.setting("step", 2))
@@ -83,17 +94,18 @@ class AudioPlugin(ActionPlugin):
         elif action_id == "output_device":
             sink = settings.get("sink")
             if not sink:
-                self.notify_error("Kein Ausgabegerät in den Einstellungen gewählt")
+                self.notify_error(self.t("kein_ausgabegeraet"))
                 return
             ok = audio.switch_output(sink, move_streams=ctx.setting("move_streams", True))
             if not ok:
-                self.notify_error(f"Wechsel zu '{sink}' fehlgeschlagen")
+                self.notify_error(self.t("wechsel_fehlgeschlagen", geraet=sink))
             # Alle Geräte-Tasten neu zeichnen — der Rahmen wandert.
             self.services.runtime.request_redraw()
         elif action_id == "app_volume":
             stream = self._find_stream(settings)
             if stream is not None:
                 audio.toggle_stream_mute(stream["index"])
+                self._streams = None
 
     # -- Zustand -----------------------------------------------------------
 
@@ -260,17 +272,22 @@ class AudioPlugin(ActionPlugin):
         audio = self.services.audio
         if source == "sinks":
             return [
-                {"value": s.name, "label": s.description + (" (Standard)" if s.is_default else "")}
+                {
+                    "value": s.name,
+                    "label": self.t("option.geraet_standard", name=s.description)
+                    if s.is_default
+                    else s.description,
+                }
                 for s in audio.list_sinks()
             ]
         if source == "sinks_with_default":
-            return [{"value": DEFAULT_SINK, "label": "Standardgerät"}] + [
+            return [{"value": DEFAULT_SINK, "label": self.t("option.standardgeraet")}] + [
                 {"value": s.name, "label": s.description} for s in audio.list_sinks()
             ]
         if source == "sources":
             return [{"value": s.name, "label": s.description} for s in audio.list_sources()]
         if source == "sources_with_default":
-            return [{"value": DEFAULT_SOURCE, "label": "Standard-Mikrofon"}] + [
+            return [{"value": DEFAULT_SOURCE, "label": self.t("option.standard_mikrofon")}] + [
                 {"value": s.name, "label": s.description} for s in audio.list_sources()
             ]
         return []
@@ -294,7 +311,11 @@ class AudioPlugin(ActionPlugin):
         name = (settings.get("app_name") or "").strip().lower()
         if not name:
             return None
-        for stream in self.services.audio.list_streams():
+        cached = self._streams
+        if cached is None or time.monotonic() - cached[0] >= STREAMS_TTL_S:
+            cached = (time.monotonic(), self.services.audio.list_streams())
+            self._streams = cached
+        for stream in cached[1]:
             if name in stream["name"].lower():
                 return stream
         return None

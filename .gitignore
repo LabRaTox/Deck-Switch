@@ -28,3 +28,9 @@ gui/src-tauri/gen/schemas/
 # Bleiben lokal.
 streamdeck-app-spec.md
 docs/marketplace-plan.md
+
+# Arbeitsunterlagen für den Entwickler: Spezifikation, Berichte, Ideen.
+# Sie nennen interne Abläufe und offene Punkte und bleiben deshalb lokal.
+AI-Usage-Integration*.md
+Bugsuche *.md
+Plugin-Ideen*.md

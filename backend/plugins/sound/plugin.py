@@ -27,13 +27,13 @@ class SoundPlugin(ActionPlugin):
         try:
             if action_id == "stop_all":
                 stopped = sound.stop_all()
-                self.notify_info(f"{stopped} Klang/Klänge angehalten")
+                self.notify_info(self.t("klaenge_angehalten", anzahl=stopped))
                 self.services.runtime.request_redraw()
                 return
 
             path = (settings.get("path") or "").strip()
             if not path:
-                raise ValueError("Keine Audiodatei eingestellt")
+                raise ValueError(self.t("keine_datei"))
 
             options = {
                 "sink": (settings.get("sink") or "").strip(),
@@ -72,7 +72,7 @@ class SoundPlugin(ActionPlugin):
     def get_dynamic_options(self, source, context=None):
         if source != "sinks":
             return []
-        entries = [{"value": "", "label": "Standardgerät"}]
+        entries = [{"value": "", "label": self.t("standardgeraet")}]
         try:
             entries += [
                 {"value": sink.name, "label": sink.description or sink.name}
@@ -84,4 +84,4 @@ class SoundPlugin(ActionPlugin):
 
     def get_status(self):
         ok, reason = self.services.sound.available()
-        return {"connected": ok, "detail": reason or "bereit"}
+        return {"connected": ok, "detail": reason or self.t("status.bereit")}

@@ -325,8 +325,8 @@
         "en": "Empty"
       },
       "description": {
-        "de": "Tut nichts — Platzhalter, etwa als Grundplatz eines Dials mit belegten Drehrichtungen.",
-        "en": "Does nothing — a placeholder, e.g. the base of a dial whose turn directions are assigned."
+        "de": "Tut nichts. Ein Platzhalter, etwa als Grundplatz eines Dials mit belegten Drehrichtungen.",
+        "en": "Does nothing. A placeholder, e.g. the base of a dial whose turn directions are assigned."
       },
       "inputs": [
         "key",

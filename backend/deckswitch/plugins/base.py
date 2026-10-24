@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from PIL import Image
 from pydantic import BaseModel, Field
+from .. import texte
 
 if TYPE_CHECKING:  # pragma: no cover - nur für Typprüfung
     from ..config import Appearance, Config, Slot
@@ -33,6 +34,23 @@ if TYPE_CHECKING:  # pragma: no cover - nur für Typprüfung
 log = logging.getLogger(__name__)
 
 InputType = Literal["key", "dial"]
+
+
+def plugin_text(plugin_dir: Path, plugin_id: str, schluessel: str, werte: dict) -> str:
+    """Ein Text aus den Sprachdateien eines Plugins, in der eingestellten Sprache.
+
+    Die Dateien liegen als ``locales/de.json`` und ``locales/en.json`` im
+    Plugin-Ordner. Fehlt der Text, kommt der englische, dann der deutsche,
+    zuletzt der Schlüssel selbst. Der mitgegebene Code bekommt die Plugin-ID
+    vorangestellt, damit er sich nicht mit einem Code des Kerns überschneidet.
+    """
+    from .. import texte
+
+    inhalt = texte.uebersetze(texte.lade(plugin_dir / "locales"), schluessel, texte.sprache(), werte)
+    if inhalt is None:
+        log.warning("Plugin '%s': kein Text für '%s'", plugin_id, schluessel)
+        inhalt = schluessel
+    return texte.Text(inhalt, f"{plugin_id}.{schluessel}")
 
 # --------------------------------------------------------------------------
 # Manifest
@@ -160,6 +178,10 @@ class Manifest(BaseModel):
     #: auf — man wählt sie in den Einstellungen.
     type: Literal["action", "iconset", "screensaver", "wallpaper"] = "action"
     description: LocalizedText = ""
+    #: Ein Satz für die Plugin-Übersicht. Die volle ``description`` steht in
+    #: der Detailansicht. Fehlt der Satz, zeigt die Übersicht die
+    #: Beschreibung auf zwei Zeilen gekürzt.
+    summary: LocalizedText = ""
     author: str = ""
     #: Bei allen Typen außer ``iconset``: Python-Datei im Plugin-Ordner.
     entry: str | None = None
@@ -383,6 +405,10 @@ class CanvasPlugin:
     def on_plugin_config_changed(self, config: dict[str, Any]) -> None:
         """Globale Plugin-Einstellungen wurden in der GUI geändert."""
 
+    def t(self, schluessel: str, **werte: Any) -> str:
+        """Text aus ``locales/<sprache>.json`` im Plugin-Ordner. Siehe :func:`plugin_text`."""
+        return plugin_text(self.services.plugin_dir, self.manifest.id, schluessel, werte)
+
     def render(self, size: tuple[int, int], elapsed_s: float) -> Image.Image | None:
         """Das Bild für die Leinwand ``size``.
 
@@ -525,9 +551,26 @@ class ActionPlugin:
         Für Dinge, die in kein Settings-Feld passen — etwa Discords
         „Jetzt verbinden“, das einen Zustimmungs-Dialog öffnet.
         """
-        raise NotImplementedError(f"Plugin kennt kein Kommando '{command}'")
+        raise NotImplementedError(texte.t("base.plugin_kennt_kein_kommando", command=command))
 
     # -- Bequemlichkeit ----------------------------------------------------
+
+    def t(self, schluessel: str, **werte: Any) -> str:
+        """Text für die Oberfläche, in der eingestellten Sprache.
+
+        Gelesen wird aus ``locales/de.json`` und ``locales/en.json`` im
+        Plugin-Ordner, Platzhalter in geschweiften Klammern::
+
+            # locales/de.json: {"nicht_erreichbar": "{dienst} ist nicht erreichbar"}
+            self.notify_error(self.t("nicht_erreichbar", dienst="OBS"))
+
+        Gilt für alles, was ein Mensch sieht: Fehler, Meldungen, Status,
+        Beschriftungen auf Tasten. Log-Zeilen bleiben unübersetzt.
+
+        Neu in DECK//SWITCH 1.4.0. Ein Plugin, das ``t`` benutzt, braucht
+        ``"min_app_version": "1.4.0"`` im Manifest.
+        """
+        return plugin_text(self.services.plugin_dir, self.manifest.id, schluessel, werte)
 
     @property
     def plugin_config(self) -> dict[str, Any]:

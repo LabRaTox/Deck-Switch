@@ -31,6 +31,7 @@ from typing import Any
 
 from .. import paths
 from ..config import Config, ConfigStore, Profile
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +103,31 @@ def _collect_uploads(daten: Any, gefunden: set[str]) -> None:
             gefunden.add(Path(rest).name)
 
 
+def _rewrite_uploads(daten: Any, umbenannt: dict[str, str]) -> Any:
+    """Gibt ``daten`` mit umgeschriebenen Bildverweisen zurück.
+
+    Dasselbe Muster wie :func:`_collect_uploads`: ein Feld ``upload`` oder
+    ein Wert der Form ``upload:<datei>``.
+    """
+    if not umbenannt:
+        return daten
+    if isinstance(daten, dict):
+        neu = {}
+        for schluessel, wert in daten.items():
+            if schluessel == "upload" and isinstance(wert, str) and wert:
+                neu[schluessel] = umbenannt.get(Path(wert).name, wert)
+            else:
+                neu[schluessel] = _rewrite_uploads(wert, umbenannt)
+        return neu
+    if isinstance(daten, list):
+        return [_rewrite_uploads(eintrag, umbenannt) for eintrag in daten]
+    if isinstance(daten, str) and daten.startswith("upload:"):
+        rest = Path(daten.split(":", 1)[1]).name
+        if rest in umbenannt:
+            return f"upload:{umbenannt[rest]}"
+    return daten
+
+
 def _manifest(kind: str, **extra: Any) -> bytes:
     from .. import __version__
 
@@ -122,20 +148,18 @@ def _read_manifest(zf: zipfile.ZipFile, erwartet: str) -> dict[str, Any]:
     try:
         roh = zf.read("manifest.json")
     except KeyError as exc:
-        raise BackupError("Kein Manifest im Paket — das ist keine Sicherung.") from exc
+        raise BackupError(texte.t("backup.kein_manifest_paket_keine")) from exc
     try:
         daten = json.loads(roh)
     except json.JSONDecodeError as exc:
-        raise BackupError(f"Manifest unlesbar: {exc}") from exc
+        raise BackupError(texte.t("backup.manifest_unlesbar", exc=exc)) from exc
     if daten.get("kind") != erwartet:
         raise BackupError(
-            f"Falsche Art von Paket: erwartet '{erwartet}', gefunden "
-            f"'{daten.get('kind')}'."
+            texte.t("backup.falsche_art_paket_erwartet", erwartet=erwartet, gefunden=daten.get('kind'))
         )
     if int(daten.get("format", 0)) > FORMAT_VERSION:
         raise BackupError(
-            "Das Paket stammt aus einer neueren Fassung und lässt sich hier "
-            "nicht einspielen."
+            texte.t("backup.paket_stammt_aus_einer")
         )
     return daten
 
@@ -154,11 +178,70 @@ def _unpack_images(zf: zipfile.ZipFile, praefix: str, ziel: Path) -> int:
             continue
         gesamt += eintrag.file_size
         if gesamt > MAX_UNPACKED_BYTES:
-            raise BackupError("Das Paket entpackt sich zu größer als erlaubt.")
+            raise BackupError(texte.t("backup.paket_entpackt_groesser_als"))
         with zf.open(eintrag) as quelle, (ziel / name).open("wb") as datei:
             shutil.copyfileobj(quelle, datei)
         anzahl += 1
     return anzahl
+
+
+def _freier_name(name: str, belegt: set[str]) -> str:
+    """``logo.png`` → ``logo-2.png``, ``logo-3.png`` … bis einer frei ist."""
+    stamm, endung = Path(name).stem, Path(name).suffix
+    nummer = 2
+    while f"{stamm}-{nummer}{endung}" in belegt:
+        nummer += 1
+    return f"{stamm}-{nummer}{endung}"
+
+
+def _unpack_images_beside(zf: zipfile.ZipFile) -> dict[str, str]:
+    """Packt die Bilder eines Profilpakets aus, ohne Vorhandenes zu ersetzen.
+
+    Liegt unter einem Namen schon eine *andere* Datei, bekommt die neue
+    einen freien Namen. Geprüft wird über alle Ablagen, denn ein Verweis
+    nennt nur den Dateinamen und wird in allen gesucht. Liefert alter Name
+    → neuer Name für alles, was umbenannt wurde.
+    """
+    belegt: set[str] = set()
+    for ordner in BUNDLED_DIRS.values():
+        if ordner.is_dir():
+            belegt.update(d.name for d in ordner.iterdir())
+
+    umbenannt: dict[str, str] = {}
+    gesamt = 0
+    for ordnername, ziel in BUNDLED_DIRS.items():
+        ziel.mkdir(parents=True, exist_ok=True)
+        for eintrag in zf.infolist():
+            if eintrag.is_dir() or not eintrag.filename.startswith(f"{ordnername}/"):
+                continue
+            name = _safe_name(eintrag.filename)
+            if name is None:
+                log.warning("Übergehe Eintrag im Paket: %s", eintrag.filename)
+                continue
+            gesamt += eintrag.file_size
+            if gesamt > MAX_UNPACKED_BYTES:
+                raise BackupError(texte.t("backup.paket_entpackt_groesser_als"))
+            inhalt = zf.read(eintrag)
+            if name in belegt:
+                if _gleicher_inhalt(name, inhalt):
+                    continue  # dieselbe Datei liegt schon da
+                neu = _freier_name(name, belegt)
+                umbenannt[name] = neu
+                name = neu
+            (ziel / name).write_bytes(inhalt)
+            belegt.add(name)
+    return umbenannt
+
+
+def _gleicher_inhalt(name: str, inhalt: bytes) -> bool:
+    for ordner in BUNDLED_DIRS.values():
+        datei = ordner / name
+        if datei.is_file():
+            try:
+                return datei.read_bytes() == inhalt
+            except OSError:
+                return False
+    return False
 
 
 # --------------------------------------------------------- Sicherungspaket
@@ -190,20 +273,20 @@ def restore_archive(daten: bytes, store: ConfigStore) -> Config:
     try:
         zf = zipfile.ZipFile(io.BytesIO(daten))
     except zipfile.BadZipFile as exc:
-        raise BackupError("Das ist keine lesbare ZIP-Datei.") from exc
+        raise BackupError(texte.t("backup.keine_lesbare_zip_datei")) from exc
 
     with zf:
         _read_manifest(zf, ARCHIVE_KIND)
         try:
             roh = zf.read("config.json").decode("utf-8")
         except KeyError as exc:
-            raise BackupError("Im Paket fehlt die Konfiguration.") from exc
+            raise BackupError(texte.t("backup.paket_fehlt_konfiguration")) from exc
 
         # Erst validieren, dann anfassen.
         try:
             Config.model_validate(json.loads(roh))
         except (json.JSONDecodeError, ValueError) as exc:
-            raise BackupError(f"Die Konfiguration im Paket ist ungültig: {exc}") from exc
+            raise BackupError(texte.t("backup.konfiguration_paket_ungueltig", exc=exc)) from exc
 
         for ordnername, ziel in BUNDLED_DIRS.items():
             _unpack_images(zf, ordnername, ziel)
@@ -252,16 +335,16 @@ def restore_snapshot(name: str, store: ConfigStore) -> Config:
     """Spielt einen der automatischen Stände zurück."""
     knapp = Path(name).name
     if knapp != name or not knapp.startswith("config-") or not knapp.endswith(".json"):
-        raise BackupError("Unbekannter Stand.")
+        raise BackupError(texte.t("backup.unbekannter_stand"))
     datei = paths.BACKUP_DIR / knapp
     if not datei.is_file():
-        raise BackupError("Diesen Stand gibt es nicht (mehr).")
+        raise BackupError(texte.t("backup.diesen_stand_gibt_nicht"))
 
     roh = datei.read_text(encoding="utf-8")
     try:
         Config.model_validate(json.loads(roh))
     except (json.JSONDecodeError, ValueError) as exc:
-        raise BackupError(f"Der Stand ist beschädigt: {exc}") from exc
+        raise BackupError(texte.t("backup.stand_beschaedigt", exc=exc)) from exc
     return store.import_json(roh)
 
 
@@ -272,7 +355,7 @@ def export_profile(store: ConfigStore, profile_id: str) -> bytes:
     """Packt ein einzelnes Profil samt der darin verwendeten Bilder."""
     profil = store.config.profiles.get(profile_id)
     if profil is None:
-        raise BackupError("Dieses Profil gibt es nicht.")
+        raise BackupError(texte.t("backup.dieses_profil_gibt_nicht"))
 
     daten = profil.model_dump(mode="json")
     referenziert: set[str] = set()
@@ -308,22 +391,27 @@ def import_profile(daten: bytes, store: ConfigStore) -> Profile:
     try:
         zf = zipfile.ZipFile(io.BytesIO(daten))
     except zipfile.BadZipFile as exc:
-        raise BackupError("Das ist keine lesbare ZIP-Datei.") from exc
+        raise BackupError(texte.t("backup.keine_lesbare_zip_datei")) from exc
 
     with zf:
         _read_manifest(zf, PROFILE_KIND)
         try:
             roh = zf.read("profile.json").decode("utf-8")
         except KeyError as exc:
-            raise BackupError("Im Paket fehlt das Profil.") from exc
+            raise BackupError(texte.t("backup.paket_fehlt_profil")) from exc
 
         try:
-            profil = Profile.model_validate(json.loads(roh))
+            rohdaten = json.loads(roh)
+            profil = Profile.model_validate(rohdaten)
         except (json.JSONDecodeError, ValueError) as exc:
-            raise BackupError(f"Das Profil im Paket ist ungültig: {exc}") from exc
+            raise BackupError(texte.t("backup.profil_paket_ungueltig", exc=exc)) from exc
 
-        for ordnername, ziel in BUNDLED_DIRS.items():
-            _unpack_images(zf, ordnername, ziel)
+        # Ein fremdes Profil darf keine eigenen Bilder ersetzen, die zufällig
+        # gleich heißen. Kollisionen bekommen einen neuen Namen, und die
+        # Verweise im Profil ziehen mit.
+        umbenannt = _unpack_images_beside(zf)
+        if umbenannt:
+            profil = Profile.model_validate(_rewrite_uploads(rohdaten, umbenannt))
 
     # Neue Kennung, damit ein zweiter Import daneben landet statt darüber.
     profil.id = type(profil)().id

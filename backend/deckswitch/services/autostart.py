@@ -30,6 +30,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .. import paths
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ def set_enabled(enabled: bool) -> AutostartStatus:
 
     if result.returncode != 0:
         message = (result.stderr or result.stdout).strip()
-        raise AutostartError(message or "systemctl schlug ohne Meldung fehl")
+        raise AutostartError(message or texte.t("autostart.systemctl_schlug_ohne_meldung"))
 
     return status()
 
@@ -141,12 +142,12 @@ def _unsupported_reason() -> str | None:
         probe = _systemctl("is-system-running")
     except (OSError, subprocess.SubprocessError) as exc:
         log.warning("systemctl nicht ausführbar: %s", exc)
-        return f"systemctl ließ sich nicht ausführen: {exc}"
+        return texte.t("autostart.systemctl_liess_nicht_ausfuehren", exc=exc)
     # Ein Rückgabewert ungleich 0 heißt hier meist nur "degraded" — kein
     # Hinderungsgrund. Fehlt dagegen der Bus, gibt es keine User-Instanz,
     # die eine Unit aktivieren könnte.
     if "bus" in (probe.stderr or "").lower():
-        return "Keine systemd-Sitzung für diesen Benutzer erreichbar."
+        return texte.t("autostart.keine_systemd_sitzung_diesen")
     return None
 
 
@@ -161,8 +162,7 @@ def _write_unit() -> Path:
     if paths.REPO_ROOT is None:
         if not paths.PACKAGED_UNIT.is_file():
             raise AutostartError(
-                f"Weder ein Checkout noch eine mitgelieferte Unit gefunden "
-                f"({paths.PACKAGED_UNIT})"
+                texte.t("autostart.weder_checkout_mitgelieferte_unit", PACKAGED_UNIT=paths.PACKAGED_UNIT)
             )
         log.info("Unit des Pakets wird benutzt: %s", paths.PACKAGED_UNIT)
         return paths.PACKAGED_UNIT
@@ -172,7 +172,7 @@ def _write_unit() -> Path:
     try:
         text = template.read_text(encoding="utf-8")
     except OSError as exc:
-        raise AutostartError(f"Unit-Vorlage nicht lesbar: {template} ({exc})") from exc
+        raise AutostartError(texte.t("autostart.unit_vorlage_nicht_lesbar", template=template, exc=exc)) from exc
 
     text = _use_running_interpreter(text.replace("__REPO__", str(repo)), repo)
 

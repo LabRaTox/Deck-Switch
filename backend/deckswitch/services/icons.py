@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw
 from .. import paths
 from ..config import IconRef
 from .backgrounds import parse_color
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,13 @@ MAX_FRAMES = 60
 #: (800 px) wird nie etwas gebraucht; 512 deckt jede Kachel und jedes
 #: Segment mit Reserve ab.
 MAX_FRAME_EDGE = 512
+
+#: Obergrenzen der Zwischenspeicher, in Einträgen. Ohne sie wüchsen sie mit
+#: jeder Farbe, die beim Ziehen im Farbwähler gerendert wird, und mit jeder
+#: ersetzten Datei. Einzelbildlisten sind teuer (bis zu 60 Bilder mit
+#: 512 px), deshalb dort deutlich weniger.
+MAX_CACHE_ENTRIES = 1024
+MAX_FRAME_ENTRIES = 32
 
 
 class IconService:
@@ -198,7 +206,7 @@ class IconService:
                 animated = getattr(source, "n_frames", 1) > 1
         except Exception:
             animated = False
-        self._animated[key] = animated
+        _ablegen(self._animated, key, animated, MAX_CACHE_ENTRIES)
         return animated
 
     def _raw_frames(self, path: Path) -> list[tuple[Image.Image, float]]:
@@ -242,7 +250,7 @@ class IconService:
                 duration = float(source.info.get("duration", 100) or 100) / 1000
                 frames.append((frame, max(0.02, duration)))
 
-        self._frames[key] = frames
+        _ablegen(self._frames, key, frames, MAX_FRAME_ENTRIES)
         return frames
 
     def placeholder(self, size: int, color: str | None = None) -> Image.Image:
@@ -266,7 +274,7 @@ class IconService:
         dot = max(2, size // 12)
         cx = cy = size // 2
         draw.ellipse((cx - dot, cy - dot, cx + dot, cy + dot), fill=rgba)
-        self._cache[key] = image
+        _ablegen(self._cache, key, image, MAX_CACHE_ENTRIES)
         return image.copy()
 
     # -- Intern ------------------------------------------------------------
@@ -314,7 +322,7 @@ class IconService:
             log.warning("SVG '%s' nicht rasterbar: %s", path, exc)
             return None
 
-        self._cache[key] = image
+        _ablegen(self._cache, key, image, MAX_CACHE_ENTRIES)
         return image.copy()
 
     def _upload_path(self, filename: str) -> Path | None:
@@ -344,7 +352,7 @@ class IconService:
         try:
             if path.suffix.lower() == ".svg":
                 image = self._raster_svg(path.read_text(encoding="utf-8"), size, color)
-                self._cache[key] = image
+                _ablegen(self._cache, key, image, MAX_CACHE_ENTRIES)
                 return image.copy()
 
             frames = self._raw_frames(path)
@@ -352,7 +360,7 @@ class IconService:
                 return None
             if len(frames) == 1:
                 image = _fit_contain(frames[0][0], size)
-                self._cache[key] = image
+                _ablegen(self._cache, key, image, MAX_CACHE_ENTRIES)
                 return image.copy()
 
             # Animiert: alle Einzelbilder einmal auf Zielgröße bringen und
@@ -364,7 +372,7 @@ class IconService:
                 scaled = [
                     (_fit_contain(frame, size), duration) for frame, duration in frames
                 ]
-                self._frames[scaled_key] = scaled
+                _ablegen(self._frames, scaled_key, scaled, MAX_FRAME_ENTRIES)
             return _pick_frame(scaled, frame_time).copy()
         except Exception as exc:
             log.warning("Upload '%s' nicht ladbar: %s", filename, exc)
@@ -390,6 +398,30 @@ class IconService:
         return image
 
 
+#: Schlüsselarten, deren dritte Stelle der Änderungsstempel der Datei ist.
+_GESTEMPELT = {"animated", "frames", "scaled", "upload"}
+
+
+def _ablegen(speicher: dict, key: tuple, wert, grenze: int) -> None:
+    """Legt einen Eintrag ab und räumt dabei auf.
+
+    Fällt weg, was zu einer älteren Fassung derselben Datei gehört: Nach dem
+    Ersetzen eines GIFs bliebe sonst die alte Bildfolge im Speicher, obwohl
+    sie nie wieder gefragt wird. Über der Grenze fliegen die ältesten
+    Einträge (ein Dict behält die Einfügereihenfolge).
+    """
+    if key[0] in _GESTEMPELT:
+        pfad, stempel = key[1], key[2]
+        for alt in list(speicher):
+            if alt[0] in _GESTEMPELT and alt[1] == pfad and alt[2] != stempel:
+                speicher.pop(alt, None)
+    speicher[key] = wert
+    ueberzahl = len(speicher) - grenze
+    if ueberzahl > 0:
+        for alt in list(speicher)[:ueberzahl]:
+            speicher.pop(alt, None)
+
+
 def _pick_frame(
     frames: list[tuple[Image.Image, float]], frame_time: float
 ) -> Image.Image:
@@ -400,7 +432,7 @@ def _pick_frame(
     sonst falsch ab.
     """
     if not frames:
-        raise ValueError("Keine Einzelbilder")
+        raise ValueError(texte.t("icons.keine_einzelbilder"))
     if len(frames) == 1:
         return frames[0][0]
 

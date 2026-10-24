@@ -1,0 +1,6 @@
+{
+  "keine_schritte": "This multi action has no steps yet",
+  "keine_schritte_richtung": "No steps set for this direction",
+  "label.schritt": "1 step",
+  "label.schritte": "{anzahl} steps"
+}

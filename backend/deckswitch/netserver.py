@@ -21,6 +21,7 @@ darf nicht versehentlich offen stehen.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import socket
 from pathlib import Path
@@ -33,11 +34,27 @@ from pydantic import BaseModel
 
 from . import netauth
 from .virtualdeck import VirtualDevice
+from . import texte
 
 log = logging.getLogger(__name__)
 
 #: Die Seite, die der Gast im Browser bekommt.
 CLIENT_HTML = Path(__file__).resolve().parent / "web" / "netdeck.html"
+
+
+class StillerServer(uvicorn.Server):
+    """uvicorn ohne eigene Signal-Handler.
+
+    ``uvicorn.Server.serve`` merkt sich beim Start die gerade gültigen
+    Handler für SIGINT und SIGTERM und setzt sie beim Ende zurück. Laufen
+    mehrere Server in einem Loop und enden sie nicht in umgekehrter
+    Reihenfolge, steht danach ein veralteter Handler da, im schlimmsten Fall
+    der Standard, der den Prozess ohne Aufräumen beendet. Die Signale
+    verwaltet deshalb allein der Einstiegspunkt über den Event-Loop.
+    """
+
+    def capture_signals(self):  # type: ignore[override]
+        return contextlib.nullcontext()
 
 
 class Anmeldung(BaseModel):
@@ -55,7 +72,7 @@ class Eingabe(BaseModel):
 
 def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
     app = FastAPI(
-        title="DECK//SWITCH — Netz-Deck",
+        title="DECK//SWITCH · Netz-Deck",
         # Keine Schnittstellenbeschreibung ins Netz: Sie verrät den Aufbau
         # und lädt zum Stöbern ein.
         docs_url=None,
@@ -73,13 +90,13 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
             token = authorization[7:].strip()
         deck_key = sitzungen.pruefe_token(token)
         if deck_key is None:
-            raise HTTPException(401, "Nicht angemeldet")
+            raise HTTPException(401, texte.t("netserver.nicht_angemeldet"))
         deck = _erreichbares_deck(runtime, deck_key)
         if deck is None:
             # Das Deck wurde abgeschaltet oder entfernt, während jemand
             # angemeldet war. Dann endet die Sitzung sofort mit.
             sitzungen.verwerfen(token)
-            raise HTTPException(403, "Dieses Deck wird nicht mehr angeboten")
+            raise HTTPException(403, texte.t("netserver.dieses_deck_wird_nicht"))
         return deck
 
     # -- Seite -------------------------------------------------------------
@@ -93,7 +110,7 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
             if _erreichbar(deck)
         )
         if not eintraege:
-            eintraege = "<li>Zurzeit wird kein Deck angeboten.</li>"
+            eintraege = "<li>" + texte.t("netserver.zurzeit_kein_deck_angeboten") + "</li>"
         return HTMLResponse(
             "<!doctype html><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -107,9 +124,9 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
     async def client(key: str) -> Response:
         deck = _erreichbares_deck(runtime, key)
         if deck is None:
-            raise HTTPException(404, "Dieses Deck gibt es hier nicht")
+            raise HTTPException(404, texte.t("netserver.dieses_deck_gibt_nicht"))
         if not CLIENT_HTML.is_file():
-            raise HTTPException(500, "Client-Seite fehlt")
+            raise HTTPException(500, texte.t("netserver.client_seite_fehlt"))
         # Der Name wird eingesetzt statt nachgeladen: Vor der Anmeldung gibt
         # es kein Token, und dafür einen zweiten offenen Endpunkt zu bauen
         # wäre mehr Angriffsfläche für einen Namen, der auf der Übersicht
@@ -126,18 +143,24 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
 
         sperre = sitzungen.gesperrt_bis(adresse)
         if sperre:
-            raise HTTPException(429, "Zu viele Fehlversuche. Bitte später erneut.")
+            raise HTTPException(429, texte.t("netserver.viele_fehlversuche_bitte_spaeter"))
 
         deck = _erreichbares_deck(runtime, payload.deck)
-        # Auch bei unbekanntem Deck erst das Passwort prüfen lassen und
-        # dieselbe Meldung geben: Sonst verriete die Antwort, welche Decks
-        # es gibt.
+        # Auch bei unbekanntem Deck dieselbe Meldung geben: Sonst verriete
+        # die Antwort, welche Decks es gibt.
         gespeichert = deck.binding.password_hash if deck is not None else ""
-        if not netauth.pruefe_passwort(payload.password, gespeichert):
-            sitzungen.melde_fehlversuch(adresse)
+        # Der Versuch zählt schon *vor* dem Prüfen. Das Prüfen läuft in einem
+        # Thread, damit der Schlüssel den Loop nicht anhält; ohne Vormerken
+        # kämen parallele Anfragen alle an der Sperre vorbei, bevor die erste
+        # ihren Fehlversuch einträgt.
+        sitzungen.melde_fehlversuch(adresse)
+        stimmt = await asyncio.to_thread(
+            netauth.pruefe_passwort, payload.password, gespeichert
+        )
+        if not stimmt:
             await asyncio.sleep(netauth.STRAFE_S)
             log.warning("Fehlgeschlagene Anmeldung von %s", adresse)
-            raise HTTPException(401, "Deck oder Passwort stimmt nicht")
+            raise HTTPException(401, texte.t("netserver.deck_oder_passwort_stimmt"))
 
         sitzungen.melde_erfolg(adresse)
         token, gueltig = sitzungen.neues_token(deck.key)
@@ -171,7 +194,7 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
     async def kachel(input_type: str, index: int, deck=Depends(deck_aus_token)) -> Response:
         daten = deck.device.image(input_type, index)
         if daten is None:
-            raise HTTPException(404, "Für diese Kachel gibt es noch kein Bild")
+            raise HTTPException(404, texte.t("netserver.diese_kachel_gibt_kein"))
         return Response(daten, media_type="image/png",
                         headers={"Cache-Control": "no-store"})
 
@@ -203,6 +226,9 @@ class NetzService:
         self._server: uvicorn.Server | None = None
         self._task: asyncio.Task | None = None
         self._port: int = 0
+        #: Der tatsächlich belegte Port. Weicht nur bei ``0`` vom
+        #: eingestellten ab.
+        self.bound_port: int = 0
 
     @property
     def running(self) -> bool:
@@ -228,28 +254,48 @@ class NetzService:
     async def start(self, port: int) -> None:
         if self.running:
             return
-        app = create_net_app(self.runtime, self.sitzungen)
-        config = uvicorn.Config(
-            app,
+        # Den Port selbst belegen statt uvicorn das tun zu lassen: Scheitert
+        # dort das Binden, ruft uvicorn ``sys.exit`` auf, und ein
+        # ``SystemExit`` aus einem Task beendet den ganzen Event-Loop samt
+        # Gerätesteuerung. Hier bleibt es ein gewöhnlicher Fehler.
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             # Hier ist ``0.0.0.0`` beabsichtigt: Genau diese Anwendung soll
             # aus dem Netz erreichbar sein. Der Server mit der vollen API
             # bleibt davon unberührt auf 127.0.0.1.
-            host="0.0.0.0",  # noqa: S104
-            port=port,
-            log_level="warning",
-            access_log=False,
-        )
-        self._server = uvicorn.Server(config)
+            sock.bind(("0.0.0.0", port))  # noqa: S104
+            sock.setblocking(False)
+        except OSError as exc:
+            sock.close()
+            log.error("Netz-Server auf Port %s ließ sich nicht starten: %s", port, exc)
+            return
+
+        app = create_net_app(self.runtime, self.sitzungen)
+        config = uvicorn.Config(app, log_level="warning", access_log=False)
+        self._server = StillerServer(config)
         self._port = port
-        self._task = asyncio.create_task(self._server.serve())
-        # Kurz Luft lassen, damit ein belegter Port sofort auffällt statt
-        # erst beim ersten Zugriff.
+        self.bound_port = sock.getsockname()[1]
+        self._task = asyncio.create_task(self._serve(self._server, sock), name="netz-server")
+        # Kurz Luft lassen, damit ein Fehler beim Hochfahren sofort auffällt.
         await asyncio.sleep(0.2)
         if self._task.done():
             self._task = None
+            self._server = None
+            self._port = 0
             log.error("Netz-Server auf Port %s ließ sich nicht starten", port)
             return
-        log.info("Netz-Decks erreichbar auf Port %s", port)
+        log.info("Netz-Decks erreichbar auf Port %s", self.bound_port)
+
+    @staticmethod
+    async def _serve(server: uvicorn.Server, sock: socket.socket) -> None:
+        """Lässt den Server laufen. Ein ``SystemExit`` von uvicorn endet hier."""
+        try:
+            await server.serve(sockets=[sock])
+        except SystemExit as exc:
+            log.error("Netz-Server hat sich beendet (Code %s)", exc.code)
+        finally:
+            sock.close()
 
     async def stop(self) -> None:
         if self._server is not None:
@@ -262,6 +308,7 @@ class NetzService:
         self._server = None
         self._task = None
         self._port = 0
+        self.bound_port = 0
 
     # -- Auskunft für die Oberfläche ---------------------------------------
 
@@ -269,13 +316,13 @@ class NetzService:
         """Adressen, unter denen das Deck im Netz zu erreichen ist."""
         if not self.running:
             return []
-        return [f"http://{ip}:{self._port}/deck/{deck_key}" for ip in lan_adressen()]
+        return [f"http://{ip}:{self.bound_port}/deck/{deck_key}" for ip in lan_adressen()]
 
     def set_password(self, deck_key: str, passwort: str) -> bool:
         """Setzt oder entfernt das Passwort. Wirft alle Sitzungen raus."""
         deck = self.runtime.decks.get(deck_key)
         if deck is None or not deck.binding.is_network:
-            raise RuntimeError("Kein Netz-Deck")
+            raise RuntimeError(texte.t("netserver.kein_netz_deck"))
         deck.binding.password_hash = netauth.hash_passwort(passwort) if passwort else ""
         # Ein Passwortwechsel muss auch die trennen, die schon drin sind —
         # sonst wechselt man es genau in dem Moment umsonst, in dem es zählt.

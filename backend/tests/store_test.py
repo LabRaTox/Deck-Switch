@@ -275,8 +275,20 @@ def main() -> None:
             ]
             check("und liegt im Plugin-Verzeichnis", len(gefunden) == 1,
                   gefunden[0].name if gefunden else "nicht gefunden")
-            check("die Prüfsumme stimmt mit der des Archivs überein",
-                  ergebnis["sha256"] == hashlib.sha256(archiv).hexdigest())
+            # Der Store packt jedes Archiv aus dem geprüften Inhalt neu. Die
+            # Summe gehört deshalb zu seinem Archiv, nicht zum hochgeladenen.
+            # Dass sie zum Download passt, prüft schon die Installation.
+            # Hier zählt, dass derselbe Inhalt angekommen ist.
+            hochgeladen = zipfile.ZipFile(io.BytesIO(archiv))
+            gleich = all(
+                (gefunden[0] / Path(name).relative_to(Path(name).parts[0])).read_bytes()
+                == hochgeladen.read(name)
+                for name in hochgeladen.namelist()
+                if not name.endswith("/") and len(Path(name).parts) > 1
+            ) if gefunden else False
+            check("installiert ist genau der hochgeladene Inhalt", gleich)
+            check("die Prüfsumme ist eine vollständige SHA-256",
+                  len(ergebnis["sha256"]) == 64, ergebnis["sha256"])
 
             print("\nNeu laden macht den Katalog wieder frisch")
             # Der Katalog wird fünf Minuten festgehalten. Wer gerade etwas
@@ -326,7 +338,9 @@ def main() -> None:
             check("der Katalog zeigt dieselbe Zahl", im_katalog["up"] == 1,
                   json.dumps(im_katalog))
 
-            umentschieden = store.bewerte(slug, -1)
+            check("ein Daumen nach unten ohne Begründung wird abgelehnt",
+                  _wirft(lambda: store.bewerte(slug, -1), store.StoreError))
+            umentschieden = store.bewerte(slug, -1, "Stürzt bei mir ab.")
             check("eine zweite Stimme ersetzt die erste, statt sich zu addieren",
                   (umentschieden["up"], umentschieden["down"]) == (0, 1),
                   json.dumps(umentschieden))
@@ -338,22 +352,28 @@ def main() -> None:
             check("und ein zweites Mal ist kein Fehler",
                   store.bewertung_zuruecknehmen(slug)["mine"] is None)
 
-            store.bewerte(slug, 1, "Von der Moderation.")
+            erste = store.bewerte(slug, 1, "Von der Moderation.")
+            check("wer nicht der Autor ist, gilt nicht als Autor", erste.get("own") is False,
+                  json.dumps(erste))
             store.schreib_token(token)
-            zweite = store.bewerte(slug, 1, "Und vom Autor.")
-            check("zwei Leute sind zwei Stimmen", zweite["up"] == 2, json.dumps(zweite))
-            check("jeder sieht nur die eigene als seine", zweite["mine"] == 1)
-            fremde = [k for k in zweite["comments"] if k["author"] != autor]
+            check("der Autor darf sein eigenes Plugin nicht bewerten",
+                  _wirft(lambda: store.bewerte(slug, 1, "Und vom Autor."), store.StoreError))
+            beim_autor = store.bewertung(slug)
+            check("der Store sagt ihm, dass es seines ist", beim_autor.get("own") is True,
+                  json.dumps(beim_autor))
+            check("er sieht die fremde Stimme, aber keine eigene",
+                  (beim_autor["up"], beim_autor["mine"]) == (1, None), json.dumps(beim_autor))
+            fremde = [k for k in beim_autor["comments"] if k["author"] != autor]
             check("der Kommentar des anderen ist zu lesen",
                   any(k["comment"] == "Von der Moderation." for k in fremde),
-                  json.dumps(zweite["comments"]))
+                  json.dumps(beim_autor["comments"]))
 
             check("etwas anderes als 1 oder -1 nimmt er nicht",
                   _wirft(lambda: store.bewerte(slug, 5), store.StoreError))
 
             store.schreib_token("")
             check("ohne Anmeldung lässt sich lesen",
-                  store.bewertung(slug)["up"] == 2)
+                  store.bewertung(slug)["up"] == 1)
             check("aber nicht abstimmen",
                   _wirft(lambda: store.bewerte(slug, 1), store.StoreError))
             check("und die eigene Stimme ist dann keine",

@@ -33,6 +33,7 @@ from PIL import Image
 from . import paths
 
 from .services import brand
+from . import texte
 
 log = logging.getLogger(__name__)
 
@@ -266,13 +267,13 @@ class SystemTray:
         self.connected = False
         self.dimmed = False
         self.device_name = ""
-        self.detail = "Backend läuft"
+        self.detail = texte.t("tray.backend_laeuft")
 
     # -- Anmelden ----------------------------------------------------------
 
     async def start(self) -> bool:
         if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
-            log.info("Kein Sitzungsbus — Tray-Symbol übersprungen")
+            log.info("Kein Sitzungsbus, Tray-Symbol übersprungen")
             return False
 
         try:
@@ -339,22 +340,22 @@ class SystemTray:
 
     def tooltip(self) -> str:
         if self.connected:
-            state = f"{self.device_name or 'Gerät'} verbunden"
+            state = texte.t("tray.verbunden", geraet=self.device_name or texte.t("tray.geraet"))
             if self.dimmed:
-                state += " (abgedunkelt)"
+                state += " " + texte.t("tray.abgedunkelt")
         else:
-            state = "Kein Gerät verbunden"
+            state = texte.t("tray.kein_geraet_verbunden")
         return f"{state}\n{self.url}"
 
     # -- Menüaktionen ------------------------------------------------------
 
     def _entries(self) -> list[dict]:
         return [
-            {"label": "Oberfläche öffnen", "action": self.open_gui},
+            {"label": texte.t("tray.oberflaeche_oeffnen"), "action": self.open_gui},
             {"separator": True, "label": ""},
-            {"label": "Gerät neu verbinden", "action": self._reconnect},
+            {"label": texte.t("tray.geraet_neu_verbinden"), "action": self._reconnect},
             {"separator": True, "label": ""},
-            {"label": "Beenden", "action": self._quit},
+            {"label": texte.t("tray.beenden"), "action": self._quit},
         ]
 
     def open_gui(self) -> None:

@@ -17,6 +17,7 @@ Software), kommt sofort ein Neuzeichnen — nicht erst beim nächsten Tick.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -26,6 +27,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from .. import texte
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +40,25 @@ _EVENT_RE = re.compile(r"Event '(\w+)' on (\S+) #(\d+)")
 #: Wie lange ein gelesener Lautstärkewert als frisch gilt. Verhindert, dass
 #: acht Kacheln pro Tick je einen Subprozess starten.
 CACHE_TTL_S = 0.25
+
+#: Dasselbe für Geräteliste und Quellennamen.
+LIST_TTL_S = 2.0
+
+#: Solange ``pactl subscribe`` läuft, meldet es jede Änderung und leert den
+#: Zwischenspeicher selbst. Dann darf ein Wert deutlich länger gelten; die
+#: kurzen Fristen oben greifen nur ohne Watcher.
+WATCHED_TTL_S = 10.0
+
+#: So lange muss ``pactl subscribe`` gelaufen sein, damit es als verbunden
+#: gilt. Ohne Pulse-Server endet es sofort wieder.
+SUBSCRIBE_STABLE_S = 3.0
+
+#: Was pactl unter den Standardgeräten versteht. Die wpctl-Namen kennt es
+#: nicht und antwortet darauf mit „No such entity".
+_PACTL_DEFAULTS = {
+    "@DEFAULT_AUDIO_SINK@": "@DEFAULT_SINK@",
+    "@DEFAULT_AUDIO_SOURCE@": "@DEFAULT_SOURCE@",
+}
 
 COMMAND_TIMEOUT_S = 3.0
 
@@ -68,6 +89,12 @@ class AudioService:
         self._cache: dict[str, tuple[float, VolumeState]] = {}
         self._sinks_cache: tuple[float, list[SinkInfo]] | None = None
         self._sources_cache: tuple[float, list[SinkInfo]] | None = None
+        self._source_names_cache: tuple[float, set[str]] | None = None
+        #: Zählt jede Invalidierung. Ein Lesevorgang, der vor einer
+        #: Änderung begann, darf sein Ergebnis danach nicht mehr ablegen.
+        self._generation = 0
+        #: Seit wann der aktuelle ``pactl subscribe`` läuft (monotonic).
+        self._subscriber_since = 0.0
         self._lock = threading.Lock()
         self._listeners: list[Callable[[str, str], None]] = []
         self._subscriber: subprocess.Popen | None = None
@@ -99,9 +126,10 @@ class AudioService:
 
     def stop_watcher(self) -> None:
         self._stop.set()
-        if self._subscriber is not None:
-            self._subscriber.terminate()
-            self._subscriber = None
+        subscriber = self._subscriber
+        if subscriber is not None:
+            with contextlib.suppress(OSError):
+                subscriber.terminate()
         if self._thread is not None:
             self._thread.join(timeout=2)
             self._thread = None
@@ -109,17 +137,20 @@ class AudioService:
     def _watch(self) -> None:
         backoff = 1.0
         while not self._stop.is_set():
+            proc: subprocess.Popen | None = None
+            started = time.monotonic()
             try:
-                self._subscriber = subprocess.Popen(
+                proc = subprocess.Popen(
                     ["pactl", "subscribe"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                     text=True,
                     bufsize=1,
                 )
-                backoff = 1.0
-                assert self._subscriber.stdout is not None
-                for line in self._subscriber.stdout:
+                self._subscriber = proc
+                self._subscriber_since = started
+                assert proc.stdout is not None
+                for line in proc.stdout:
                     if self._stop.is_set():
                         break
                     match = _EVENT_RE.search(line)
@@ -135,33 +166,62 @@ class AudioService:
                         except Exception:
                             log.exception("Audio-Listener hat geworfen")
             except FileNotFoundError:
-                log.error("pactl nicht gefunden — Audio-Events deaktiviert")
+                log.error("pactl nicht gefunden, Audio-Events deaktiviert")
                 return
             except Exception as exc:
                 log.warning("pactl subscribe abgebrochen: %s", exc)
+            finally:
+                self._subscriber = None
+                if proc is not None:
+                    _reap(proc)
 
+            # Nur wer eine Weile lief, war wirklich verbunden. Endet pactl
+            # sofort wieder (kein Server), wächst der Abstand weiter.
+            if time.monotonic() - started >= SUBSCRIBE_STABLE_S:
+                backoff = 1.0
+            else:
+                log.debug("pactl subscribe endete sofort, nächster Versuch in %.0f s", backoff)
+            # Was während der Lücke passiert ist, hat niemand gemeldet.
+            self.invalidate()
             if self._stop.wait(backoff):
                 return
             backoff = min(backoff * 2, 30.0)
 
+    def _watched(self) -> bool:
+        """Meldet ``pactl subscribe`` gerade zuverlässig jede Änderung?"""
+        proc = self._subscriber
+        return (
+            proc is not None
+            and proc.poll() is None
+            and time.monotonic() - self._subscriber_since >= SUBSCRIBE_STABLE_S
+        )
+
+    def _ttl(self, kurz: float) -> float:
+        return WATCHED_TTL_S if self._watched() else kurz
+
     def invalidate(self) -> None:
         with self._lock:
+            self._generation += 1
             self._cache.clear()
             self._sinks_cache = None
             self._sources_cache = None
+            self._source_names_cache = None
 
     # -- Lautstärke --------------------------------------------------------
 
     def get_volume(self, target: str = DEFAULT_SINK) -> VolumeState:
         now = time.monotonic()
+        ttl = self._ttl(CACHE_TTL_S)
         with self._lock:
             cached = self._cache.get(target)
-            if cached is not None and now - cached[0] < CACHE_TTL_S:
+            if cached is not None and now - cached[0] < ttl:
                 return cached[1]
+            generation = self._generation
 
         state = self._read_volume(target)
         with self._lock:
-            self._cache[target] = (now, state)
+            if self._generation == generation:
+                self._cache[target] = (now, state)
         return state
 
     def _read_volume(self, target: str) -> VolumeState:
@@ -174,8 +234,16 @@ class AudioService:
                 return VolumeState()
             return VolumeState(float(match.group(1)), bool(match.group(2)), True)
 
-        # Benanntes Gerät: aus der JSON-Liste ziehen.
-        kind = "sources" if self._is_source(target) else "sinks"
+        # Benanntes Gerät: aus der JSON-Liste ziehen. Die Standardgeräte
+        # ohne wpctl erst in ihren echten Namen auflösen.
+        source = self._is_source(target)
+        if target == DEFAULT_SINK:
+            target = self.get_default_sink()
+        elif target == DEFAULT_SOURCE:
+            target = self.get_default_source()
+        if not target:
+            return VolumeState()
+        kind = "sources" if source else "sinks"
         for entry in self._list_raw(kind):
             if entry.get("name") == target or str(entry.get("index")) == target:
                 volumes = entry.get("volume") or {}
@@ -194,7 +262,7 @@ class AudioService:
             self._run(["wpctl", "set-volume", "-l", "1.5", target, f"{value:.3f}"])
         else:
             command = "set-source-volume" if self._is_source(target) else "set-sink-volume"
-            self._run(["pactl", command, target, f"{round(value * 100)}%"])
+            self._run(["pactl", command, _pactl_target(target), f"{round(value * 100)}%"])
         self.invalidate()
 
     def change_volume(self, target: str, delta_percent: float) -> VolumeState:
@@ -207,7 +275,7 @@ class AudioService:
             )
         else:
             command = "set-source-volume" if self._is_source(target) else "set-sink-volume"
-            self._run(["pactl", command, target, f"{sign}{step:.0f}%"])
+            self._run(["pactl", command, _pactl_target(target), f"{sign}{step:.0f}%"])
         self.invalidate()
         return self.get_volume(target)
 
@@ -216,7 +284,7 @@ class AudioService:
             self._run(["wpctl", "set-mute", target, "toggle"])
         else:
             command = "set-source-mute" if self._is_source(target) else "set-sink-mute"
-            self._run(["pactl", command, target, "toggle"])
+            self._run(["pactl", command, _pactl_target(target), "toggle"])
         self.invalidate()
         return self.get_volume(target).muted
 
@@ -226,16 +294,18 @@ class AudioService:
             self._run(["wpctl", "set-mute", target, flag])
         else:
             command = "set-source-mute" if self._is_source(target) else "set-sink-mute"
-            self._run(["pactl", command, target, flag])
+            self._run(["pactl", command, _pactl_target(target), flag])
         self.invalidate()
 
     # -- Geräte ------------------------------------------------------------
 
     def list_sinks(self, include_monitors: bool = False) -> list[SinkInfo]:
         now = time.monotonic()
+        ttl = self._ttl(LIST_TTL_S)
         with self._lock:
-            if self._sinks_cache and now - self._sinks_cache[0] < 2.0:
+            if self._sinks_cache and now - self._sinks_cache[0] < ttl:
                 return self._sinks_cache[1]
+            generation = self._generation
 
         default = self.get_default_sink()
         sinks = [
@@ -252,14 +322,17 @@ class AudioService:
             sinks = [s for s in sinks if not s.name.endswith(".monitor")]
 
         with self._lock:
-            self._sinks_cache = (now, sinks)
+            if self._generation == generation:
+                self._sinks_cache = (now, sinks)
         return sinks
 
     def list_sources(self, include_monitors: bool = False) -> list[SinkInfo]:
         now = time.monotonic()
+        ttl = self._ttl(LIST_TTL_S)
         with self._lock:
-            if self._sources_cache and now - self._sources_cache[0] < 2.0:
+            if self._sources_cache and now - self._sources_cache[0] < ttl:
                 return self._sources_cache[1]
+            generation = self._generation
 
         default = self.get_default_source()
         sources = [
@@ -282,7 +355,8 @@ class AudioService:
             ]
 
         with self._lock:
-            self._sources_cache = (now, sources)
+            if self._generation == generation:
+                self._sources_cache = (now, sources)
         return sources
 
     def get_default_sink(self) -> str:
@@ -300,7 +374,7 @@ class AudioService:
         mitgezogen.
         """
         if not self.has_pactl:
-            raise AudioUnavailable("pactl nicht verfügbar")
+            raise AudioUnavailable(texte.t("audio.pactl_nicht_verfuegbar"))
 
         ok = self._run(["pactl", "set-default-sink", sink_name]) is not None
         if ok and move_streams:
@@ -371,9 +445,42 @@ class AudioService:
             return []
         return data if isinstance(data, list) else []
 
-    @staticmethod
-    def _is_source(target: str) -> bool:
-        return target == DEFAULT_SOURCE or ".monitor" in target or "alsa_input" in target
+    def _is_source(self, target: str) -> bool:
+        """Ist ``target`` ein Eingang?
+
+        Am Namen allein lässt sich das nicht sicher ablesen: ``alsa_input.*``
+        ist eindeutig, ``easyeffects_source`` oder ``bluez_input.*`` folgen
+        keinem gemeinsamen Muster. Im Zweifel entscheidet die Quellenliste.
+        """
+        if target == DEFAULT_SOURCE:
+            return True
+        if target == DEFAULT_SINK:
+            return False
+        if ".monitor" in target or target.startswith(("alsa_input.", "bluez_input.")):
+            return True
+        if target.startswith(("alsa_output.", "bluez_output.")):
+            return False
+        return target in self._source_names()
+
+    def _source_names(self) -> set[str]:
+        """Namen und Indizes aller Eingänge, kurz zwischengespeichert."""
+        now = time.monotonic()
+        ttl = self._ttl(LIST_TTL_S)
+        with self._lock:
+            cached = self._source_names_cache
+            if cached is not None and now - cached[0] < ttl:
+                return cached[1]
+            generation = self._generation
+        names: set[str] = set()
+        for entry in self._list_raw("sources"):
+            if entry.get("name"):
+                names.add(str(entry["name"]))
+            if entry.get("index") is not None:
+                names.add(str(entry["index"]))
+        with self._lock:
+            if self._generation == generation:
+                self._source_names_cache = (now, names)
+        return names
 
     def _run(self, command: list[str]) -> str | None:
         try:
@@ -402,6 +509,28 @@ class AudioService:
             )
             return None
         return result.stdout
+
+
+def _pactl_target(target: str) -> str:
+    """Gerätename so, wie pactl ihn versteht."""
+    return _PACTL_DEFAULTS.get(target, target)
+
+
+def _reap(proc: subprocess.Popen) -> None:
+    """Beendeten oder abgebrochenen Unterprozess abholen, Pipe schließen."""
+    with contextlib.suppress(OSError):
+        if proc.stdout is not None:
+            proc.stdout.close()
+    if proc.poll() is None:
+        with contextlib.suppress(OSError):
+            proc.terminate()
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(OSError):
+            proc.kill()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=1)
 
 
 def _clean_description(entry: dict) -> str:
