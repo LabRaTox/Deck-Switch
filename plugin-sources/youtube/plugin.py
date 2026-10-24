@@ -56,16 +56,6 @@ STANDARD_TAKT_S = 30.0
 FARBE_LIVE = "#22c55e"
 FARBE_AUS = "#6b7280"
 
-WOERTER = {
-    "de": {"offline": "nicht live", "live": "live", "viewers": "Zuschauer",
-           "no_login": "nicht verbunden", "no_keys": "keine Zugangsdaten",
-           "no_broadcast": "keine Sendung", "ready": "bereit", "ask": "noch mal drücken"},
-    "en": {"offline": "not live", "live": "live", "viewers": "viewers",
-           "no_login": "not connected", "no_keys": "no credentials",
-           "no_broadcast": "no broadcast", "ready": "ready", "ask": "press again"},
-}
-
-
 def _lade_token() -> dict[str, Any]:
     try:
         return json.loads(TOKEN_DATEI.read_text(encoding="utf-8"))
@@ -84,9 +74,10 @@ def _schreib_token(daten: dict[str, Any]) -> None:
 
 
 def _oeffne(adresse: str) -> None:
-    """Eine Adresse im Browser — abgekoppelt, damit sie uns nicht anhängt."""
-    if not adresse.startswith("https://"):
-        raise YouTubeError(f"Keine sichere Adresse: {adresse}")
+    """Eine Adresse im Browser — abgekoppelt, damit sie uns nicht anhängt.
+
+    Die Adresse muss mit ``https://`` beginnen. Das prüft der Aufrufer.
+    """
     subprocess.Popen(
         ["xdg-open", adresse],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -109,7 +100,7 @@ class YouTubePlugin(ActionPlugin):
         super().__init__(manifest, services)
         self.api = YouTubeApi()
         self.api.beim_aendern = lambda anmeldung: _schreib_token(anmeldung.als_dict())
-        self.fehler = ""
+        self._fehler = ""
 
         # Gespiegelter Zustand — nur daraus zeichnet render().
         self.sendung = None
@@ -120,9 +111,12 @@ class YouTubePlugin(ActionPlugin):
         self._laufende_anmeldung: dict[str, Any] = {}
         self._auffrischer: asyncio.Task | None = None
         self._holt = asyncio.Lock()
-        #: Ob überhaupt jemand hinsieht. Ohne sichtbare Kachel wird nicht
-        #: gefragt — jede Abfrage kostet eine Einheit vom Tagesvorrat.
-        self._gefragt = False
+        #: Wann zuletzt eine Anzeige-Kachel einen Tick bekam. Ohne sichtbare
+        #: Kachel wird nicht gefragt, jede Abfrage kostet eine Einheit vom
+        #: Tagesvorrat.
+        self._gesehen = 0.0
+        #: Zuletzt gemeldeter Fehler; derselbe kommt nicht jede Runde erneut.
+        self._letzter_fehler = ""
 
     # -- Lebenszyklus ------------------------------------------------------
 
@@ -154,8 +148,17 @@ class YouTubePlugin(ActionPlugin):
         # braucht, steht als Hilfe am Feld selbst und in der Doku — dort
         # sucht man es auch.
         self.fehler = "" if (self.api.client_id and self.api.client_secret) else (
-            "Zugangsdaten fehlen — siehe Plugin-Einstellungen"
+            "plugin.zugangsdaten_fehlen"
         )
+
+    @property
+    def fehler(self) -> str:
+        """Warum das Plugin nicht arbeiten kann, in der aktuellen Sprache."""
+        return self.t(self._fehler) if self._fehler else ""
+
+    @fehler.setter
+    def fehler(self, schluessel: str) -> None:
+        self._fehler = schluessel
 
     @property
     def takt(self) -> float:
@@ -168,21 +171,21 @@ class YouTubePlugin(ActionPlugin):
         if self.fehler:
             return {"connected": False, "detail": self.fehler}
         if not self.api.angemeldet:
-            return {"connected": False, "detail": "nicht mit YouTube verbunden"}
-        kanal = self.api.anmeldung.kanal or "verbunden"
+            return {"connected": False, "detail": self.t("status.nicht_verbunden")}
+        kanal = self.api.anmeldung.kanal or self.t("status.verbunden")
         if self.sendung is None:
-            return {"connected": True, "detail": f"{kanal} — keine Sendung"}
+            return {"connected": True, "detail": self.t("status.keine_sendung", kanal=kanal)}
         if self.sendung.laeuft:
             zahl = self.zuschauer if self.zuschauer is not None else "?"
-            return {"connected": True, "detail": f"{kanal} — live, {zahl} Zuschauer"}
-        return {"connected": True, "detail": f"{kanal} — Sendung bereit"}
+            return {"connected": True, "detail": self.t("status.live", kanal=kanal, zahl=zahl)}
+        return {"connected": True, "detail": self.t("status.bereit", kanal=kanal)}
 
     # -- Hintergrund -------------------------------------------------------
 
     async def _schleife(self) -> None:
         while True:
             await asyncio.sleep(self.takt)
-            if not self.api.angemeldet or not self._gefragt:
+            if not self.api.angemeldet or not self._sichtbar():
                 continue
             try:
                 await self._hole_stand()
@@ -198,13 +201,22 @@ class YouTubePlugin(ActionPlugin):
                 zuschauer = self.api.zuschauer() if sendung and sendung.laeuft else None
                 return sendung, zuschauer
 
+            # Auch ein Fehlschlag zählt als Versuch. Sonst fragte jeder Tick
+            # sofort wieder nach, und bei „Kontingent erschöpft" verbrauchte
+            # genau das den Rest des Vorrats.
+            self.stand_geholt = time.monotonic()
             try:
                 sendung, zuschauer = await asyncio.to_thread(arbeit)
             except (NichtAngemeldet, KeineZugangsdaten):
                 return
             except YouTubeError as exc:
-                self.notify_error(f"YouTube: {exc}")
+                meldung = f"YouTube: {exc}"
+                if meldung != self._letzter_fehler:
+                    self._letzter_fehler = meldung
+                    self.notify_error(meldung)
                 return
+
+            self._letzter_fehler = ""
 
             self.sendung = sendung
             self.zuschauer = zuschauer
@@ -242,7 +254,7 @@ class YouTubePlugin(ActionPlugin):
             self.zuschauer = None
             self.services.runtime.request_redraw()
             return {"angemeldet": False}
-        raise NotImplementedError(f"YouTube kennt kein Kommando '{command}'")
+        raise NotImplementedError(self.t("gui.unbekanntes_kommando", command=command))
 
     async def _nachfragen(self) -> dict[str, Any]:
         laufend = self._laufende_anmeldung
@@ -250,7 +262,7 @@ class YouTubePlugin(ActionPlugin):
             return {"angemeldet": self.api.angemeldet, "wartet": False}
         if time.monotonic() > laufend["endet"]:
             self._laufende_anmeldung = {}
-            raise YouTubeError("Der Code ist abgelaufen — bitte neu anfangen")
+            raise YouTubeError(self.t("anmeldung.code_abgelaufen"))
 
         anmeldung = await asyncio.to_thread(
             self.api.code_einloesen, laufend["device_code"]
@@ -276,7 +288,7 @@ class YouTubePlugin(ActionPlugin):
             self.notify_error(self.fehler)
             return
         if not self.api.angemeldet:
-            self.notify_error("Für YouTube ist niemand verbunden — Plugin-Einstellungen")
+            self.notify_error(self.t("aktion.nicht_verbunden"))
             return
 
         # Was sich nicht zurücknehmen lässt, fragt einmal nach. Beim Stream
@@ -287,7 +299,7 @@ class YouTubePlugin(ActionPlugin):
                 self.sendung and self.sendung.laeuft
             )
         if braucht_rueckfrage and not self._bestaetigt(ctx.key):
-            self.notify_info("Noch einmal drücken zum Auslösen")
+            self.notify_info(self.t("aktion.nochmal_druecken"))
             ctx.request_redraw()
             return
 
@@ -317,7 +329,7 @@ class YouTubePlugin(ActionPlugin):
         elif action_id == "chat":
             text = str(settings.get("message") or "").strip()
             if not text:
-                raise YouTubeError("Für diese Taste ist keine Nachricht eingetragen")
+                raise YouTubeError(self.t("aktion.keine_nachricht"))
             self.api.schicke_chat(text)
 
         elif action_id == "ad":
@@ -325,33 +337,34 @@ class YouTubePlugin(ActionPlugin):
 
         elif action_id == "dashboard":
             self.api.sendung()
-            _oeffne(self.api.dashboard_adresse())
+            adresse = self.api.dashboard_adresse()
+            if not adresse.startswith("https://"):
+                raise YouTubeError(self.t("aktion.unsichere_adresse", adresse=adresse))
+            _oeffne(adresse)
 
         elif action_id == "stream":
             laufend = self.api.sendung(erneut=True)
             if laufend is None:
-                raise YouTubeError(
-                    "Es gibt keine Sendung. Eine muss in YouTube Studio angelegt "
-                    "sein, bevor sie sich von hier starten lässt."
-                )
+                raise YouTubeError(self.t("aktion.keine_sendung"))
             self.api.wechsle("complete" if laufend.laeuft else "live")
 
     # -- Anzeige -----------------------------------------------------------
 
+    def _sichtbar(self) -> bool:
+        """Hat in letzter Zeit eine Anzeige-Kachel einen Tick bekommen?"""
+        return time.monotonic() - self._gesehen <= 2 * self.takt
+
     async def on_tick(self, action_id, settings, ctx):
         """Merkt, dass jemand hinsieht, und frischt im Takt auf."""
-        self._gefragt = True
+        # Nur Kacheln, die einen Stand zeigen. Chat, Werbung und Dashboard
+        # brauchen keinen, und für sie soll kein Vorrat draufgehen.
+        if action_id not in ("viewers", "stream"):
+            return
+        self._gesehen = time.monotonic()
         if not self.api.angemeldet or self.fehler:
             return
         if time.monotonic() - self.stand_geholt >= self.takt:
             await self._hole_stand()
-
-    def _wort(self, name: str) -> str:
-        try:
-            sprache = self.services.config.app.language
-        except AttributeError:
-            sprache = "de"
-        return WOERTER.get(sprache, WOERTER["de"]).get(name, name)
 
     def get_state(self, action_id, settings, ctx):
         if action_id == "viewers":
@@ -374,22 +387,22 @@ class YouTubePlugin(ActionPlugin):
         breite, hoehe = ctx.size
 
         if self.fehler:
-            gross, klein = "—", self._wort("no_keys")
+            gross, klein = "---", self.t("kachel.keine_zugangsdaten")
         elif not self.api.angemeldet:
-            gross, klein = "—", self._wort("no_login")
+            gross, klein = "---", self.t("kachel.nicht_verbunden")
         elif action_id == "stream":
             if self.sendung is None:
-                gross, klein = "—", self._wort("no_broadcast")
+                gross, klein = "---", self.t("kachel.keine_sendung")
             elif live:
-                gross, klein = self._wort("live"), self.sendung.titel
+                gross, klein = self.t("kachel.live"), self.sendung.titel
             else:
-                gross, klein = self._wort("ready"), self.sendung.titel
+                gross, klein = self.t("kachel.bereit"), self.sendung.titel
         elif not live:
-            gross, klein = "—", self._wort("offline")
+            gross, klein = "---", self.t("kachel.offline")
         elif self.zuschauer is None:
-            gross, klein = "…", self._wort("viewers")
+            gross, klein = "…", self.t("kachel.zuschauer")
         else:
-            gross, klein = _zahl(self.zuschauer), self._wort("viewers")
+            gross, klein = _zahl(self.zuschauer), self.t("kachel.zuschauer")
 
         beschriftung = ctx.appearance.label_text or ""
 
@@ -397,7 +410,7 @@ class YouTubePlugin(ActionPlugin):
             render.draw_text_at(bild, beschriftung or "YouTube", x=10, y=8, size=13,
                                 color="#c7c7d1", max_width=breite - 70)
             if self.api.angemeldet:
-                render.draw_text_at(bild, self._wort("live") if live else self._wort("offline"),
+                render.draw_text_at(bild, self.t("kachel.live") if live else self.t("kachel.offline"),
                                     x=breite - 10, y=8, size=13, color=farbe, align="right")
             render.draw_text_at(bild, gross, x=10, y=30, size=38, bold=True,
                                 color=ctx.appearance.label_color)

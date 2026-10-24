@@ -203,7 +203,7 @@ async def _erzeuge(ziel: Path, werkzeug) -> list[str]:
 
     _setze(werkzeug, blatt, male(laufend), 1, 0, "läuft")
     _setze(werkzeug, blatt, male(pausiert), 2, 0, "pausiert")
-    _setze(werkzeug, blatt, male(abgelaufen), 3, 0, "abgelaufen — es klingelt")
+    _setze(werkzeug, blatt, male(abgelaufen), 3, 0, "abgelaufen, es klingelt")
 
     _setze(werkzeug, blatt, male(ctx("stopwatch")), 0, 1, "Stoppuhr, bereit")
     _setze(werkzeug, blatt, male(uhr_laeuft), 1, 1, "läuft")

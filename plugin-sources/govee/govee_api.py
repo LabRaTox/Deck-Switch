@@ -40,7 +40,10 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+
+from deckswitch.plugins.base import plugin_text
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +82,10 @@ NEU_NAMEN = {
 }
 
 
+def _t(schluessel: str, **werte: Any) -> str:
+    return plugin_text(Path(__file__).resolve().parent, "govee", schluessel, werte)
+
+
 def rgb_zu_zahl(rot: int, gruen: int, blau: int) -> int:
     return (max(0, min(255, rot)) << 16) + (max(0, min(255, gruen)) << 8) + max(0, min(255, blau))
 
@@ -94,11 +101,11 @@ def hex_zu_zahl(farbe: str) -> int:
     if len(roh) == 3:
         roh = "".join(z * 2 for z in roh)
     if len(roh) != 6:
-        raise GoveeError(f"'{farbe}' ist keine Farbe der Form #rrggbb")
+        raise GoveeError(_t("api.keine_farbe", farbe=farbe))
     try:
         return int(roh, 16)
     except ValueError as exc:
-        raise GoveeError(f"'{farbe}' ist keine Farbe der Form #rrggbb") from exc
+        raise GoveeError(_t("api.keine_farbe", farbe=farbe)) from exc
 
 
 def zahl_zu_hex(wert: int) -> str:
@@ -169,9 +176,9 @@ class Zustand:
 
 def _fehlertext(exc: urllib.error.HTTPError) -> str:
     if exc.code == 429:
-        return "Zu viele Anfragen — Govee bremst. In einer Minute noch einmal."
+        return _t("api.zu_viele_anfragen")
     if exc.code in (401, 403):
-        return "Govee nimmt den Schlüssel nicht an. Steht er richtig in den Einstellungen?"
+        return _t("api.schluessel_abgelehnt")
     try:
         daten = json.loads(exc.read().decode("utf-8"))
         for feld in ("message", "msg", "errorMessage"):
@@ -180,7 +187,7 @@ def _fehlertext(exc: urllib.error.HTTPError) -> str:
                 return f"{text} ({exc.code})"
     except Exception:  # noqa: BLE001 — dann eben ohne Begründung
         pass
-    return f"Govee antwortet mit {exc.code}"
+    return _t("api.status_code", code=exc.code)
 
 
 class GoveeApi:
@@ -201,10 +208,7 @@ class GoveeApi:
              rumpf: dict[str, Any] | None = None,
              abfrage: dict[str, str] | None = None) -> dict[str, Any]:
         if not self.schluessel:
-            raise KeinSchluessel(
-                "Es fehlt der Govee-Schlüssel. Er steht in den Plugin-Einstellungen "
-                "und kommt aus der Govee-Home-App."
-            )
+            raise KeinSchluessel(_t("api.schluessel_fehlt"))
         adresse = basis + pfad
         if abfrage:
             adresse += "?" + urllib.parse.urlencode(abfrage)
@@ -225,16 +229,16 @@ class GoveeApi:
         except urllib.error.HTTPError as exc:
             raise GoveeError(_fehlertext(exc)) from exc
         except urllib.error.URLError as exc:
-            raise GoveeError(f"Govee ist nicht erreichbar: {exc.reason}") from exc
+            raise GoveeError(_t("api.nicht_erreichbar", grund=exc.reason)) from exc
         except (TimeoutError, OSError) as exc:
-            raise GoveeError(f"Verbindung abgebrochen: {exc}") from exc
+            raise GoveeError(_t("api.verbindung_abgebrochen", fehler=exc)) from exc
 
         if not roh:
             return {}
         try:
             antwort_daten = json.loads(roh.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise GoveeError("Govee hat etwas Unlesbares geschickt") from exc
+            raise GoveeError(_t("api.unlesbar")) from exc
 
         # Beide Schnittstellen antworten auch bei Fehlern mit 200 und einem
         # Code im Rumpf. Die Begründung steht je nach Aufruf anderswo.
@@ -246,17 +250,20 @@ class GoveeApi:
                     grund = str(antwort_daten[feld]).strip()
                     break
             if not grund:
-                grund = f"Code {code}, Antwort: {json.dumps(antwort_daten)[:300]}"
-            log.warning("Govee lehnt ab: %s — geschickt wurde: %s",
+                grund = _t("api.code_antwort", code=code,
+                           antwort=json.dumps(antwort_daten)[:300])
+            log.warning("Govee lehnt ab: %s (geschickt wurde: %s)",
                         grund, json.dumps(rumpf)[:400])
-            raise GoveeError(f"{grund} (geschickt: {json.dumps(rumpf)[:200]})"
-                             if rumpf else grund)
+            raise GoveeError(_t("api.abgelehnt_mit_rumpf", grund=grund,
+                                rumpf=json.dumps(rumpf)[:200]) if rumpf else grund)
         return antwort_daten
 
     # -- Geräte ------------------------------------------------------------
 
     def geraete(self, *, erneut: bool = False) -> list[Geraet]:
-        if not erneut and self._geraete and \
+        # Am Zeitstempel und nicht an der Liste: Auch „keine Geräte" ist
+        # eine Antwort, die nicht bei jedem Blick neu erfragt werden soll.
+        if not erneut and self._geraete_geholt and \
                 time.monotonic() - self._geraete_geholt < LISTE_FRISCH_S:
             return self._geraete
 
@@ -285,7 +292,7 @@ class GoveeApi:
             geraet = Geraet(
                 model=str(eintrag.get("model") or ""),
                 kennung=str(eintrag.get("device") or ""),
-                name=str(eintrag.get("deviceName") or eintrag.get("model") or "Gerät"),
+                name=str(eintrag.get("deviceName") or eintrag.get("model") or _t("geraet.ohne_name")),
                 kann=set(eintrag.get("supportCmds") or []),
                 steuerbar=bool(eintrag.get("controllable", True)),
                 abfragbar=bool(eintrag.get("retrievable", True)),
@@ -310,7 +317,7 @@ class GoveeApi:
             geraet = Geraet(
                 model=str(eintrag.get("sku") or ""),
                 kennung=str(eintrag.get("device") or ""),
-                name=str(eintrag.get("deviceName") or eintrag.get("sku") or "Gerät"),
+                name=str(eintrag.get("deviceName") or eintrag.get("sku") or _t("geraet.ohne_name")),
             )
             for faehigkeit in eintrag.get("capabilities") or []:
                 typ = str(faehigkeit.get("type") or "")
@@ -329,6 +336,10 @@ class GoveeApi:
             if geraet.kennung:
                 gefunden.append(geraet)
         return gefunden
+
+    def bekannte_geraete(self) -> list[Geraet] | None:
+        """Die zuletzt geholte Liste, ohne zu fragen. ``None``: noch nie geholt."""
+        return self._geraete if self._geraete_geholt else None
 
     def geraet(self, schluessel: str) -> Geraet | None:
         for eintrag in self.geraete():
@@ -433,12 +444,12 @@ class GoveeApi:
         eine einzige Zahl.
         """
         if befehl not in geraet.kann:
-            raise GoveeError(
-                f"'{geraet.name}' kann das nicht — Govee nennt für dieses Gerät "
-                f"nur {', '.join(sorted(geraet.kann)) or 'gar nichts'}."
-            )
+            raise GoveeError(_t(
+                "api.kann_nicht", name=geraet.name,
+                befehle=", ".join(sorted(geraet.kann)) or _t("api.gar_nichts"),
+            ))
         if not geraet.steuerbar:
-            raise GoveeError(f"'{geraet.name}' lässt sich über die API nicht steuern")
+            raise GoveeError(_t("api.nicht_steuerbar", name=geraet.name))
 
         if self.modus == "alt":
             self._alt_befehl(geraet, befehl, alt_wert)
@@ -505,14 +516,11 @@ class GoveeApi:
     def szene(self, geraet: Geraet, name: str) -> None:
         """Szenen kennt nur die neue Schnittstelle."""
         if not self.nutzt_neue:
-            raise GoveeError(
-                "Szenen gibt es nur über die neue Schnittstelle — umstellen "
-                "in den Plugin-Einstellungen unter „Schnittstelle“."
-            )
+            raise GoveeError(_t("api.szenen_nur_neu"))
         if not geraet.szenen_feld:
-            raise GoveeError(f"'{geraet.name}' kennt keine Szenen")
+            raise GoveeError(_t("api.keine_szenen", name=geraet.name))
         if name not in geraet.szenen:
-            raise GoveeError(f"'{geraet.name}' kennt die Szene '{name}' nicht")
+            raise GoveeError(_t("api.szene_unbekannt", name=geraet.name, szene=name))
         typ, feld = geraet.szenen_feld
         self._ruf(NEU_BASIS, "/device/control", methode="POST", rumpf={
             "requestId": str(uuid.uuid4()),

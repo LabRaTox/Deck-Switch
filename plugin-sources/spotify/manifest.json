@@ -1,19 +1,19 @@
 {
   "id": "spotify",
   "name": "Spotify",
-  "version": "1.1.3",
-  "min_app_version": "1.3.0",
+  "version": "1.2.0",
+  "min_app_version": "1.4.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "music",
   "accent": "#1db954",
   "description": {
-    "de": "Musiksteuerung ohne Fensterwechsel: abspielen, pausieren, Titel überspringen, Shuffle, Wiederholung und Lautstärke — direkt vom Deck.",
-    "en": "Music control without switching windows: play, pause, skip tracks, shuffle, repeat and volume — straight from the deck."
+    "de": "Musiksteuerung direkt vom Deck, ohne Fensterwechsel. Abspielen, pausieren, Titel überspringen, Shuffle, Wiederholung und Lautstärke.",
+    "en": "Music control straight from the deck, without switching windows. Play, pause, skip tracks, shuffle, repeat and volume."
   },
   "changelog": {
-    "de": "1.1.3 — Das Plugin las die Einstellung „Standard-Iconset“, die es seit DECK//SWITCH 1.3.0 nicht mehr gibt. Die Ersatzsymbole für Wiedergabe und Pause kommen jetzt aus den eingebauten Symbolen der App. Braucht DECK//SWITCH 1.3.0 oder neuer.",
-    "en": "1.1.3 — The plugin read the “default icon set” setting, which DECK//SWITCH no longer has since 1.3.0. The fallback symbols for play and pause now come from the app's built-in symbols. Needs DECK//SWITCH 1.3.0 or newer."
+    "de": "Titel und Status kommen nur noch von Spotify. Vorher konnte etwa ein Video im Browser die Spotify-Taste übernehmen. Das Plugin fragt seltener nach, solange Spotify verbunden ist. Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "Title and status now come from Spotify only. Before, a video in the browser could take over the Spotify key. The plugin polls less often while Spotify is connected. The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
@@ -293,7 +293,7 @@
             }
           ],
           "help": {
-            "de": "Wird vor dem Start gesetzt. Spotify nimmt das über MPRIS nicht immer an — dann bleibt es beim bisherigen Modus.",
+            "de": "Wird vor dem Start gesetzt. Spotify nimmt das über MPRIS nicht immer an. Dann bleibt es beim bisherigen Modus.",
             "en": "Applied before starting. Spotify does not always accept this over MPRIS; the previous mode then stays."
           }
         }
@@ -475,8 +475,8 @@
             }
           ],
           "help": {
-            "de": "Am Dial wird immer gedreht — diese Einstellung gilt nur für Tasten.",
-            "en": "On a dial you simply turn it — this setting only applies to keys."
+            "de": "Am Dial wird immer gedreht. Diese Einstellung gilt nur für Tasten.",
+            "en": "On a dial you simply turn it. This setting only applies to keys."
           }
         },
         {

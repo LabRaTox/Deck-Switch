@@ -26,13 +26,10 @@ DIGIT_HEIGHT = 0.72
 #: Höhe der Beschriftung im Touchstrip, als Anteil der Streifenhöhe.
 STRIP_TEXT_HEIGHT = 0.5
 
-#: Wochentage selbst übersetzt, statt ``locale.setlocale`` zu rufen: Das
-#: wirkt prozessweit und würde auch die Formatierung in allen anderen
-#: Plugins verändern — ein hoher Preis für ein Wort.
-DAYS = {
-    "de": ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"],
-    "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-}
+#: Schlüssel der Wochentage in den Sprachdateien, Montag zuerst. Selbst
+#: übersetzt, statt ``locale.setlocale`` zu rufen: Das wirkt prozessweit
+#: und würde auch die Formatierung in allen anderen Plugins verändern.
+DAYS = ("tag_mo", "tag_di", "tag_mi", "tag_do", "tag_fr", "tag_sa", "tag_so")
 
 
 class ClockScreensaver(ScreensaverPlugin):
@@ -86,8 +83,7 @@ class ClockScreensaver(ScreensaverPlugin):
 
         if config.get("show_weekday", True):
             x, y, width, height = layout.strip
-            language = self.services.config.app.language
-            weekday = DAYS.get(language, DAYS["en"])[now.tm_wday]
+            weekday = self.t(DAYS[now.tm_wday])
             self._centered(
                 draw,
                 weekday,

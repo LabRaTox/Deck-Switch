@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import io
 import re
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -31,6 +32,14 @@ from .mpris import LOOP_CYCLE, MprisPlayer
 
 ACCENT = "#1db954"
 RECONNECT_INTERVAL_S = 5.0
+
+#: Läuft der Player, kommen Änderungen per Signal; nachgesehen wird dann
+#: nur noch selten, als Sicherheitsnetz.
+RECHECK_INTERVAL_S = 60.0
+
+#: So lange gilt die gelesene Liste der PipeWire-Streams. Tick und Zeichnen
+#: fragen kurz nacheinander, und jede Abfrage ist ein Aufruf von ``pactl``.
+STREAM_TTL_S = 1.0
 
 #: Was hinter ``spotify:<typ>:<id>`` stehen darf. Alles davon lässt sich
 #: über ``OpenUri`` starten — die Taste heißt nur nach dem häufigsten Fall.
@@ -51,6 +60,7 @@ class SpotifyPlugin(ActionPlugin):
         self.mpris = MprisPlayer(self._player_name())
         self._task: asyncio.Task | None = None
         self._art_cache: dict[str, Image.Image | None] = {}
+        self._stream_cache: tuple[float, dict | None] | None = None
 
     # ======================================================================
     # Lebenszyklus
@@ -78,8 +88,16 @@ class SpotifyPlugin(ActionPlugin):
 
     async def _connection_loop(self):
         was_available = False
+        checked = 0.0
         while True:
-            available = await self.mpris.connect()
+            now = time.monotonic()
+            # Verbunden reicht ein seltener Blick: Start und Ende des Players
+            # meldet ``NameOwnerChanged``, alles andere ``PropertiesChanged``.
+            if not self.mpris.state.available or now - checked >= RECHECK_INTERVAL_S:
+                checked = now
+                available = await self.mpris.connect()
+            else:
+                available = True
             if available != was_available:
                 was_available = available
                 self.services.runtime.request_redraw()
@@ -98,7 +116,7 @@ class SpotifyPlugin(ActionPlugin):
         if not state.available:
             return {
                 "connected": False,
-                "detail": f"{self._player_name()} läuft nicht",
+                "detail": self.t("laeuft_nicht", player=self._player_name()),
             }
         playing = state.title or state.status
         return {"connected": True, "detail": playing}
@@ -140,7 +158,7 @@ class SpotifyPlugin(ActionPlugin):
     async def _activate(self, action_id, settings, ctx):
         if not self.mpris.state.available:
             if not await self.mpris.connect():
-                self.notify_info(f"{self._player_name()} läuft nicht")
+                self.notify_info(self.t("laeuft_nicht", player=self._player_name()))
                 return
 
         if action_id in ("play_pause", "multimedia"):
@@ -152,7 +170,7 @@ class SpotifyPlugin(ActionPlugin):
         elif action_id == "shuffle":
             if not await self.mpris.set_shuffle(not self.mpris.state.shuffle):
                 self.notify_error(
-                    f"{self._player_name()} unterstützt keine Zufallswiedergabe über MPRIS"
+                    self.t("keine_zufallswiedergabe", player=self._player_name())
                 )
         elif action_id == "repeat":
             await self._cycle_repeat(1)
@@ -167,10 +185,7 @@ class SpotifyPlugin(ActionPlugin):
         """Startet die eingestellte Playlist (oder was sonst verlinkt ist)."""
         uri = spotify_uri(ctx.setting("uri", ""))
         if uri is None:
-            self.notify_error(
-                "Kein gültiger Spotify-Link — in Spotify auf die Playlist "
-                "rechtsklicken, Teilen → Link kopieren"
-            )
+            self.notify_error(self.t("kein_link"))
             return
 
         # Vor dem Start gesetzt, damit die Playlist gleich gemischt beginnt.
@@ -178,12 +193,10 @@ class SpotifyPlugin(ActionPlugin):
         # weil ein Player ihn auch mit dem neuen Kontext überschreiben könnte.
         mode = ctx.setting("shuffle", "keep")
         if mode in ("on", "off") and not await self.mpris.set_shuffle(mode == "on"):
-            self.notify_info(
-                f"{self._player_name()} nimmt die Zufallswiedergabe über MPRIS nicht an"
-            )
+            self.notify_info(self.t("zufall_abgelehnt", player=self._player_name()))
 
         if not await self.mpris.open_uri(uri):
-            self.notify_error(f"{self._player_name()} hat '{uri}' nicht angenommen")
+            self.notify_error(self.t("uri_abgelehnt", player=self._player_name(), uri=uri))
 
     async def _cycle_repeat(self, direction: int) -> None:
         try:
@@ -192,9 +205,7 @@ class SpotifyPlugin(ActionPlugin):
             position = 0
         target = LOOP_CYCLE[(position + direction) % len(LOOP_CYCLE)]
         if not await self.mpris.set_loop(target):
-            self.notify_error(
-                f"{self._player_name()} unterstützt keine Wiederholung über MPRIS"
-            )
+            self.notify_error(self.t("keine_wiederholung", player=self._player_name()))
 
     async def _key_volume(self, ctx) -> None:
         step = float(ctx.setting("step", 5))
@@ -213,11 +224,17 @@ class SpotifyPlugin(ActionPlugin):
 
     def _stream(self) -> dict | None:
         """Der PipeWire-Stream des Players, falls er gerade Ton ausgibt."""
+        cached = self._stream_cache
+        if cached is not None and time.monotonic() - cached[0] < STREAM_TTL_S:
+            return cached[1]
         needle = self._player_name().lower()
+        found = None
         for stream in self.services.audio.list_streams():
             if needle in stream["name"].lower():
-                return stream
-        return None
+                found = stream
+                break
+        self._stream_cache = (time.monotonic(), found)
+        return found
 
     async def _change_volume(self, delta_percent: float) -> None:
         if self._use_pipewire():
@@ -226,6 +243,7 @@ class SpotifyPlugin(ActionPlugin):
                 await self._in_thread(
                     self.services.audio.change_stream_volume, stream["index"], delta_percent
                 )
+                self._stream_cache = None
                 self.services.runtime.request_redraw()
                 return
 
@@ -235,7 +253,7 @@ class SpotifyPlugin(ActionPlugin):
             await self.mpris.refresh()
             current = self.mpris.state.volume
         if current is None:
-            self.notify_error("Lautstärke lässt sich für diesen Player nicht regeln")
+            self.notify_error(self.t("lautstaerke_nicht_regelbar"))
             return
         await self.mpris.set_volume(current + delta_percent / 100)
         self.services.runtime.request_redraw()
@@ -244,6 +262,7 @@ class SpotifyPlugin(ActionPlugin):
         stream = self._stream() if self._use_pipewire() else None
         if stream is not None:
             await self._in_thread(self.services.audio.toggle_stream_mute, stream["index"])
+            self._stream_cache = None
             self.services.runtime.request_redraw()
             return
 
@@ -305,7 +324,8 @@ class SpotifyPlugin(ActionPlugin):
             return None
 
         if action_id == "repeat":
-            return {"Playlist": "Playlist", "Track": "Titel"}.get(state.loop, "Aus")
+            schluessel = {"Playlist": "playlist", "Track": "titel"}.get(state.loop, "aus")
+            return self.t(f"label.wiederholung_{schluessel}")
         return None
 
     def on_tick(self, action_id, settings, ctx):
@@ -376,7 +396,7 @@ class SpotifyPlugin(ActionPlugin):
         if player.available:
             render.draw_text_at(
                 image,
-                player.title or "—",
+                player.title or "---",
                 x=text_left,
                 y=14,
                 size=ctx.appearance.label_size,
@@ -460,7 +480,7 @@ class SpotifyPlugin(ActionPlugin):
         if command == "status":
             state = self.mpris.state
             return {"player": self._player_name(), **state.as_dict()}
-        raise NotImplementedError(f"Spotify kennt kein Kommando '{command}'")
+        raise NotImplementedError(self.t("unbekanntes_kommando", kommando=command))
 
 
 def spotify_uri(value: str) -> str | None:

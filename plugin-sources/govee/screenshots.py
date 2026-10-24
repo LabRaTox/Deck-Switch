@@ -237,7 +237,7 @@ async def _erzeuge(ziel: Path, werkzeug) -> list[str]:
         (werkzeug.RAND, werkzeug.RAND))
     zeichner = ImageDraw.Draw(blatt)
     schrift = werkzeug._schrift(15)
-    text = "Auf den Dials — hier ohne Verbindung zu Govee"
+    text = "Auf den Dials, hier ohne Verbindung zu Govee"
     kasten = zeichner.textbbox((0, 0), text, font=schrift)
     zeichner.text(((breite - (kasten[2] - kasten[0])) // 2,
                    werkzeug.RAND + hoehe_streifen + 8),

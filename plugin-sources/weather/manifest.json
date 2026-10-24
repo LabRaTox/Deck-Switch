@@ -4,19 +4,19 @@
     "de": "Wetter",
     "en": "Weather"
   },
-  "version": "1.0.3",
-  "min_app_version": "1.3.0",
+  "version": "1.1.0",
+  "min_app_version": "1.4.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "monitoring",
   "accent": "#0ea5e9",
   "description": {
-    "de": "Aktuelles Wetter, Vorhersage und Luftqualität auf Tasten und Dials — ohne Konto und ohne API-Schlüssel.",
-    "en": "Current weather, forecast and air quality on keys and dials — no account, no API key."
+    "de": "Aktuelles Wetter, Vorhersage und Luftqualität auf Tasten und Dials, ohne Konto und ohne API-Schlüssel.",
+    "en": "Current weather, forecast and air quality on keys and dials, with no account and no API key."
   },
   "changelog": {
-    "de": "1.0.3 — Das Plugin las die Einstellung „Standard-Iconset“, die es seit DECK//SWITCH 1.3.0 nicht mehr gibt. Die Wettersymbole kommen jetzt aus den eingebauten Symbolen der App. Braucht DECK//SWITCH 1.3.0 oder neuer.",
-    "en": "1.0.3 — The plugin read the “default icon set” setting, which DECK//SWITCH no longer has since 1.3.0. The weather symbols now come from the app's built-in symbols. Needs DECK//SWITCH 1.3.0 or newer."
+    "de": "Stunden, 24-Stunden-Diagramm und Regen beziehen sich auf die aktuelle Uhrzeit am Ort, auch in einer anderen Zeitzone. Bei der US-Skala passen Farbe und Bewertung der Luftqualität jetzt zur Zahl. Ein Ort ohne Treffer meldet seinen Fehler nur einmal. Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "Hours, the 24 hour chart and rain refer to the current local time at the place, also in another time zone. On the US scale, the colour and rating of the air quality now match the number. A place without a match reports its error only once. The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
@@ -138,8 +138,8 @@
             "en": "empty = location from plugin settings"
           },
           "help": {
-            "de": "Stadt, Postleitzahl oder „Breite,Länge“ — für eine zweite Stadt auf einer anderen Taste.",
-            "en": "City, postal code or “lat,lon” — for a second city on another key."
+            "de": "Stadt, Postleitzahl oder „Breite,Länge“, zum Beispiel für eine zweite Stadt auf einer anderen Taste.",
+            "en": "City, postal code or “lat,lon”, for example for a second city on another key."
           }
         },
         {

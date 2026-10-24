@@ -1,7 +1,8 @@
 {
   "id": "clock-saver",
   "name": "Uhr-Schoner",
-  "version": "1.0.1",
+  "version": "1.1.0",
+  "min_app_version": "1.4.0",
   "type": "screensaver",
   "author": "LabRaTox",
   "category": "screensaver",
@@ -11,8 +12,8 @@
     "en": "Time and date as one digit per key."
   },
   "changelog": {
-    "de": "1.0.1 — Das Bild in der Detailansicht zeichnet der Schoner jetzt selbst, statt es nachzubauen.",
-    "en": "1.0.1 — The image in the detail view is now drawn by the screensaver itself instead of being recreated."
+    "de": "Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
@@ -32,8 +33,8 @@
       },
       "default": false,
       "help": {
-        "de": "Die Anzeige selbst zeigt keine Sekunden — nur wie schnell der Minutenwechsel ankommt. Aus reicht in aller Regel.",
-        "en": "The display itself shows no seconds — this only affects how quickly a minute change appears. Off is usually fine."
+        "de": "Die Anzeige selbst zeigt keine Sekunden. Die Einstellung betrifft nur, wie schnell der Minutenwechsel ankommt. Aus reicht in aller Regel.",
+        "en": "The display itself shows no seconds. This only affects how quickly a minute change appears. Off is usually fine."
       }
     },
     {

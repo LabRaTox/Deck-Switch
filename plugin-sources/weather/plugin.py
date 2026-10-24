@@ -18,6 +18,7 @@ from datetime import datetime
 
 from PIL import Image, ImageDraw
 
+from deckswitch import texte
 from deckswitch.plugins.base import ActionPlugin
 from deckswitch.services.backgrounds import parse_color
 
@@ -31,6 +32,10 @@ DETAIL_S = 4.0
 #: Am Dial wird in Dreistundenschritten geblättert.
 HOUR_STEP = 3
 
+#: So lange wartet ein Ort nach einem Fehlschlag, bevor das Zeichnen ihn
+#: erneut anfragt. Der regelmäßige Abruf und ein Tastendruck gehen vor.
+RETRY_S = 60.0
+
 
 class WeatherPlugin(ActionPlugin):
     def __init__(self, manifest, services):
@@ -40,6 +45,11 @@ class WeatherPlugin(ActionPlugin):
         self._data: dict[str, WeatherData] = {}
         self._locations: dict[str, Location] = {}
         self._last_error: str | None = None
+        #: Orte, die gerade geholt werden — ein Ort, ein Abruf.
+        self._fetching: set[str] = set()
+        #: Wann ein Ort zuletzt erfolglos war. Bis ``RETRY_S`` vorbei ist,
+        #: löst das Zeichnen keinen neuen Versuch aus.
+        self._failed_at: dict[str, float] = {}
 
     # ======================================================================
     # Lebenszyklus
@@ -85,6 +95,20 @@ class WeatherPlugin(ActionPlugin):
             self.services.runtime.publish_plugin_status(self.manifest.id)
 
     async def _fetch(self, key: str, *, force: bool = False) -> bool:
+        if key in self._fetching:
+            return False
+        self._fetching.add(key)
+        try:
+            ok = await self._fetch_once(key, force=force)
+        finally:
+            self._fetching.discard(key)
+        if key in self._data:
+            self._failed_at.pop(key, None)
+        else:
+            self._failed_at[key] = time.monotonic()
+        return ok
+
+    async def _fetch_once(self, key: str, *, force: bool = False) -> bool:
         location = self._locations.get(key) or await self._resolve(key)
         if location is None:
             return False
@@ -97,7 +121,7 @@ class WeatherPlugin(ActionPlugin):
         except WeatherError as exc:
             if self._last_error != str(exc):
                 self._last_error = str(exc)
-                self.notify_error(f"Wetter: {exc}")
+                self.notify_error(self.t("fehler", fehler=exc))
             return False
 
         self._last_error = None
@@ -111,13 +135,19 @@ class WeatherPlugin(ActionPlugin):
                 lambda: self.api.resolve(key, language=self._language())
             )
         except WeatherError as exc:
-            self.notify_error(f"Ort '{key}' nicht auflösbar: {exc}")
+            self._notify_once(self.t("ort_nicht_aufloesbar", ort=key, fehler=exc))
             return None
         if location is None:
-            self.notify_error(f"Ort '{key}' nicht gefunden")
+            self._notify_once(self.t("ort_nicht_gefunden", ort=key))
             return None
         self._locations[key] = location
         return location
+
+    def _notify_once(self, message: str) -> None:
+        """Meldet einen Fehler nur, wenn er sich vom letzten unterscheidet."""
+        if self._last_error != message:
+            self._last_error = message
+            self.notify_error(message)
 
     async def _in_thread(self, function):
         return await asyncio.get_running_loop().run_in_executor(None, function)
@@ -130,10 +160,7 @@ class WeatherPlugin(ActionPlugin):
         return "imperial" if self.plugin_config.get("units") == "imperial" else "metric"
 
     def _language(self) -> str:
-        try:
-            return self.services.config.app.language
-        except AttributeError:
-            return "de"
+        return texte.sprache()
 
     def _location_key(self, settings) -> str:
         """Welcher Ort gilt für diese Belegung — eigener oder der globale."""
@@ -145,7 +172,8 @@ class WeatherPlugin(ActionPlugin):
         if not key:
             return None
         data = self._data.get(key)
-        if data is None:
+        if data is None and key not in self._fetching and \
+                time.monotonic() - self._failed_at.get(key, -RETRY_S) >= RETRY_S:
             # Noch nie geholt (z. B. frisch belegte Taste) — im Hintergrund
             # nachziehen, diesmal aber ohne Daten zeichnen.
             self.run_async(self._fetch_and_redraw(key))
@@ -158,10 +186,10 @@ class WeatherPlugin(ActionPlugin):
     def get_status(self):
         key = str(self.plugin_config.get("location") or "").strip()
         if not key:
-            return {"connected": False, "detail": "kein Ort eingestellt"}
+            return {"connected": False, "detail": self.t("status_kein_ort")}
         data = self._data.get(key)
         if data is None:
-            return {"connected": False, "detail": self._last_error or "noch keine Daten"}
+            return {"connected": False, "detail": self._last_error or self.t("status_keine_daten")}
         temperature = data.current.get("temperature_2m")
         return {
             "connected": True,
@@ -252,7 +280,7 @@ class WeatherPlugin(ActionPlugin):
         )
         image.alpha_composite(icon, ((ctx.size[0] - icon.width) // 2,
                                      (ctx.size[1] - icon.height) // 2 - 8))
-        render.draw_text(image, "kein Ort" if not self.plugin_config.get("location")
+        render.draw_text(image, self.t("kein_ort") if not self.plugin_config.get("location")
                          else "…", y=ctx.size[1] - 24, size=13, color="#9ca3af")
         return image
 
@@ -293,7 +321,7 @@ class WeatherPlugin(ActionPlugin):
         elif mode == "temp":
             second = ""
         else:
-            second = describe(code, self._language())
+            second = describe(code)
 
         if second:
             render.draw_text_at(image, second, x=width // 2, y=height - 18, size=12,
@@ -317,7 +345,7 @@ class WeatherPlugin(ActionPlugin):
         index = self._hour_index(data, ctx.scratch.get("hour_offset", 0))
         hourly = data.hourly
         if index is None:
-            render.draw_text(image, "—", y=height // 2 - 10, size=20, color="#9ca3af")
+            render.draw_text(image, "---", y=height // 2 - 10, size=20, color="#9ca3af")
             return image
 
         temperature = hourly["temperature_2m"][index]
@@ -340,9 +368,9 @@ class WeatherPlugin(ActionPlugin):
         render.draw_text_at(image, f"{_round(temperature)}{self._degree()}", x=left, y=30,
                             size=24, color=ctx.appearance.label_color, bold=True)
         if rain is not None:
-            render.draw_text_at(image, f"{_round(rain)}% Regen", x=width - 12, y=36,
+            render.draw_text_at(image, self.t("regen_prozent", wert=_round(rain)), x=width - 12, y=36,
                                 size=12, color="#93c5fd", align="right")
-        _hint(render, image, "drehen: Stunden · drücken: Ansicht")
+        _hint(render, image, self.t("hinweis_stunden"))
         return image
 
     def _render_details(self, ctx, data: WeatherData):
@@ -355,10 +383,13 @@ class WeatherPlugin(ActionPlugin):
         render.draw_text_at(image, data.location.name, x=10, y=6, size=12,
                             color="#c7c7d1", max_width=width - 20)
 
+        now_index = self._hour_index(data, 0)
+        rain_now = (data.hourly.get("precipitation_probability") or [])
+        rain_now = rain_now[now_index] if now_index is not None and now_index < len(rain_now) else None
         entries = [
-            ("Gefühlt", f"{_round(current.get('apparent_temperature'))}{self._degree()}"),
-            ("Regen", f"{_round((data.hourly.get('precipitation_probability') or [0])[0])}%"),
-            ("Wind", f"{_round(current.get('wind_speed_10m'))}"),
+            (self.t("detail_gefuehlt"), f"{_round(current.get('apparent_temperature'))}{self._degree()}"),
+            (self.t("detail_regen"), f"{_round(rain_now)}%"),
+            (self.t("detail_wind"), f"{_round(current.get('wind_speed_10m'))}"),
             ("UV", f"{_round((daily.get('uv_index_max') or [None])[0])}"),
         ]
         column = width // len(entries)
@@ -368,7 +399,7 @@ class WeatherPlugin(ActionPlugin):
                                 align="center")
             render.draw_text_at(image, value, x=x, y=46, size=17,
                                 color=ctx.appearance.label_color, align="center", bold=True)
-        _hint(render, image, "drücken: Ansicht")
+        _hint(render, image, self.t("hinweis_ansicht"))
         return image
 
     def _render_chart(self, ctx, data: WeatherData):
@@ -378,10 +409,13 @@ class WeatherPlugin(ActionPlugin):
         width, height = ctx.size
 
         hourly = data.hourly
-        temperatures = (hourly.get("temperature_2m") or [])[:24]
-        times = (hourly.get("time") or [])[:24]
+        # Ab der aktuellen Stunde, nicht ab Mitternacht: Die Liste beginnt
+        # mit 00:00 des heutigen Tages.
+        start = self._hour_index(data, 0) or 0
+        temperatures = (hourly.get("temperature_2m") or [])[start:start + 24]
+        times = (hourly.get("time") or [])[start:start + 24]
         if len(temperatures) < 2:
-            render.draw_text(image, "—", y=height // 2 - 10, size=18, color="#9ca3af")
+            render.draw_text(image, "---", y=height // 2 - 10, size=18, color="#9ca3af")
             return image
 
         low, high = min(temperatures), max(temperatures)
@@ -442,7 +476,7 @@ class WeatherPlugin(ActionPlugin):
         )
         image.alpha_composite(icon, ((width - icon.width) // 2, 20))
 
-        render.draw_text_at(image, _day_label(daily["time"][index], self._language()),
+        render.draw_text_at(image, self._day_label(daily["time"][index]),
                             x=width // 2, y=4, size=12, color="#c7c7d1", align="center")
         render.draw_text_at(
             image,
@@ -455,7 +489,7 @@ class WeatherPlugin(ActionPlugin):
         if ctx.setting("show_rain", True):
             rain = (daily.get("precipitation_probability_max") or [None])[index]
             if rain is not None:
-                render.draw_text_at(image, f"{_round(rain)}% Regen", x=width // 2,
+                render.draw_text_at(image, self.t("regen_prozent", wert=_round(rain)), x=width // 2,
                                     y=height - 16, size=11, color="#93c5fd", align="center")
         return image
 
@@ -486,7 +520,7 @@ class WeatherPlugin(ActionPlugin):
 
         for i in range(days):
             centre = i * column + column // 2
-            render.draw_text_at(image, _day_label(daily["time"][i], self._language(), short=True),
+            render.draw_text_at(image, self._day_label(daily["time"][i], short=True),
                                 x=centre, y=6, size=10, color="#c7c7d1", align="center")
 
             icon = self.services.icons.resolve(
@@ -514,16 +548,18 @@ class WeatherPlugin(ActionPlugin):
 
     # -- Luftqualität ------------------------------------------------------
 
+    @staticmethod
+    def _aqi_scale(settings) -> str:
+        return "us" if settings.get("scale") == "us" else "eu"
+
     def _aqi_value(self, settings, data: WeatherData):
-        field = "us_aqi" if settings.get("scale") == "us" else "european_aqi"
+        field = "us_aqi" if self._aqi_scale(settings) == "us" else "european_aqi"
         return data.air.get(field)
 
     def _render_air_key(self, settings, ctx, data: WeatherData):
         render = self.services.render
         value = self._aqi_value(settings, data)
-        label, color = aqi_band(
-            data.air.get("european_aqi"), self._language()
-        )
+        label, color = aqi_band(value, self._aqi_scale(settings))
         use_color = ctx.setting("color_by_severity", True)
 
         image = render.background(ctx.size, ctx.appearance, accent=color if use_color else ACCENT)
@@ -551,14 +587,14 @@ class WeatherPlugin(ActionPlugin):
     def _render_air_segment(self, settings, ctx, data: WeatherData):
         render = self.services.render
         value = self._aqi_value(settings, data)
-        label, color = aqi_band(data.air.get("european_aqi"), self._language())
+        label, color = aqi_band(value, self._aqi_scale(settings))
         image = render.background(ctx.size, ctx.appearance,
                                   accent=color if ctx.setting("color_by_severity", True) else ACCENT)
         width, height = ctx.size
         if value is None:
             return self._render_missing(ctx)
 
-        render.draw_text_at(image, f"{data.location.name} · Luftqualität", x=10, y=8,
+        render.draw_text_at(image, self.t("luftqualitaet", ort=data.location.name), x=10, y=8,
                             size=12, color="#c7c7d1", max_width=width - 20)
         render.draw_text_at(image, str(_round(value)), x=14, y=28, size=30,
                             color=color, bold=True)
@@ -598,9 +634,19 @@ class WeatherPlugin(ActionPlugin):
         if command == "refresh":
             await self._refresh_all(force=True)
             return {"ok": True, "locations": len(self._data)}
-        raise NotImplementedError(f"Wetter kennt kein Kommando '{command}'")
+        raise NotImplementedError(self.t("unbekanntes_kommando", kommando=command))
 
     # -- Intern ------------------------------------------------------------
+
+    def _day_label(self, stamp: str, short: bool = False) -> str:
+        try:
+            date = datetime.fromisoformat(stamp)
+        except (ValueError, TypeError):
+            return "---"
+        if date.date() == datetime.now().date():
+            return self.t("heute")
+        name = self.t(DAYS[date.weekday()])
+        return name if short else self.t("tag_mit_datum", tag=name, nummer=date.day)
 
     @staticmethod
     def _hour_index(data: WeatherData, offset: int) -> int | None:
@@ -608,7 +654,12 @@ class WeatherPlugin(ActionPlugin):
         times = data.hourly.get("time") or []
         if not times:
             return None
-        now = datetime.now().strftime("%Y-%m-%dT%H:00")
+        # Die Zeiten stehen in der Zone des Ortes. Dessen aktuelle Stunde
+        # liefert ``current.time``; die Systemuhr passt nur, wenn Ort und
+        # Rechner in derselben Zone liegen.
+        current = str(data.current.get("time") or "")
+        now = f"{current[:13]}:00" if len(current) >= 13 else \
+            datetime.now().strftime("%Y-%m-%dT%H:00")
         try:
             base = times.index(now)
         except ValueError:
@@ -623,18 +674,18 @@ class WeatherPlugin(ActionPlugin):
 
 def _round(value) -> str:
     if value is None:
-        return "—"
+        return "---"
     try:
         return str(round(float(value)))
     except (TypeError, ValueError):
-        return "—"
+        return "---"
 
 
 def _hour_label(stamp: str) -> str:
     try:
         return datetime.fromisoformat(stamp).strftime("%H:%M")
     except (ValueError, TypeError):
-        return "—"
+        return "---"
 
 
 def _is_daytime(stamp: str) -> bool:
@@ -645,21 +696,8 @@ def _is_daytime(stamp: str) -> bool:
     return 6 <= hour < 20
 
 
-DAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
-DAYS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
-
-def _day_label(stamp: str, language: str = "de", short: bool = False) -> str:
-    try:
-        date = datetime.fromisoformat(stamp)
-    except (ValueError, TypeError):
-        return "—"
-    today = datetime.now().date()
-    if date.date() == today:
-        return "Heute" if language.startswith("de") else "Today"
-    names = DAYS_DE if language.startswith("de") else DAYS_EN
-    name = names[date.weekday()]
-    return name if short else f"{name} {date.day}."
+#: Schlüssel der kurzen Wochentagsnamen, Montag zuerst.
+DAYS = ("tag_mo", "tag_di", "tag_mi", "tag_do", "tag_fr", "tag_sa", "tag_so")
 
 
 def _hint(render, image: Image.Image, text: str) -> None:

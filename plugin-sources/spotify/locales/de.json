@@ -1,0 +1,13 @@
+{
+  "kein_link": "Kein gültiger Spotify-Link. In Spotify auf die Playlist rechtsklicken, Teilen → Link kopieren",
+  "keine_wiederholung": "{player} unterstützt keine Wiederholung über MPRIS",
+  "keine_zufallswiedergabe": "{player} unterstützt keine Zufallswiedergabe über MPRIS",
+  "label.wiederholung_aus": "Aus",
+  "label.wiederholung_playlist": "Playlist",
+  "label.wiederholung_titel": "Titel",
+  "laeuft_nicht": "{player} läuft nicht",
+  "lautstaerke_nicht_regelbar": "Lautstärke lässt sich für diesen Player nicht regeln",
+  "unbekanntes_kommando": "Spotify kennt kein Kommando '{kommando}'",
+  "uri_abgelehnt": "{player} hat '{uri}' nicht angenommen",
+  "zufall_abgelehnt": "{player} nimmt die Zufallswiedergabe über MPRIS nicht an"
+}

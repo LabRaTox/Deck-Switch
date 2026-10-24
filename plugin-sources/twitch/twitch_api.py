@@ -23,12 +23,16 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+
+from deckswitch.plugins.base import plugin_text
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +67,10 @@ SCOPES = [
     "channel:manage:polls",
     "channel:manage:predictions",
 ]
+
+
+def _t(schluessel: str, **werte: Any) -> str:
+    return plugin_text(Path(__file__).resolve().parent, "twitch", schluessel, werte)
 
 
 class TwitchError(RuntimeError):
@@ -149,7 +157,7 @@ def _lies(antwort) -> Any:
     try:
         return json.loads(roh.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise TwitchError("Twitch hat etwas Unlesbares geschickt") from exc
+        raise TwitchError(_t("api.unlesbar")) from exc
 
 
 #: Womit Twitch „noch nicht, frag später" ausdrückt.
@@ -161,7 +169,7 @@ def _fehlertext(exc: urllib.error.HTTPError) -> str:
     try:
         return _fehlertext_aus(exc, exc.read())
     except Exception:  # noqa: BLE001
-        return f"Twitch antwortet mit {exc.code}"
+        return _t("api.status_code", code=exc.code)
 
 
 def _fehlertext_aus(exc: urllib.error.HTTPError, roh: bytes) -> str:
@@ -178,7 +186,7 @@ def _fehlertext_aus(exc: urllib.error.HTTPError, roh: bytes) -> str:
             return f"{text} ({exc.code})"
     except Exception:  # noqa: BLE001 — dann eben ohne Begründung
         pass
-    return f"Twitch antwortet mit {exc.code}"
+    return _t("api.status_code", code=exc.code)
 
 
 def _kennung(roh: bytes) -> str:
@@ -196,6 +204,10 @@ class TwitchApi:
         self.client_id = client_id
         self.anmeldung = Anmeldung()
         self._cache = Zwischenspeicher()
+        #: Twitch tauscht beim Erneuern das Refresh-Token aus. Erneuern zwei
+        #: Threads gleichzeitig mit demselben, scheitert einer — deshalb
+        #: immer nur einer, und der zweite nimmt dessen Ergebnis.
+        self._erneuern = threading.RLock()
         #: Wird gerufen, sobald sich die Anmeldung geändert hat. Muss gesetzt
         #: werden, sonst geht ein erneuertes Token beim nächsten Start
         #: verloren — siehe :meth:`erneuere`.
@@ -206,10 +218,7 @@ class TwitchApi:
     def geraetecode(self) -> dict[str, Any]:
         """Startet die Anmeldung. Zurück kommt der Code für den Benutzer."""
         if not self.client_id:
-            raise TwitchError(
-                "Es fehlt die Client-ID. Sie steht in den Plugin-Einstellungen "
-                "und stammt aus einer App auf dev.twitch.tv."
-            )
+            raise TwitchError(_t("api.client_id_fehlt"))
         return self._id_aufruf("/device", {
             "client_id": self.client_id,
             "scopes": " ".join(SCOPES),
@@ -244,7 +253,7 @@ class TwitchApi:
         „Invalid refresh token". Genau so passiert am 2026-08-24.
         """
         if not self.anmeldung.refresh_token:
-            raise NichtAngemeldet("Keine Anmeldung, die sich erneuern ließe")
+            raise NichtAngemeldet(_t("api.nicht_erneuerbar"))
         daten = self._id_aufruf("/token", {
             "client_id": self.client_id,
             "refresh_token": self.anmeldung.refresh_token,
@@ -252,6 +261,17 @@ class TwitchApi:
         })
         self._uebernimm(daten)
         self._melde_aenderung()
+
+    def _erneuere_falls(self, gesehen: str) -> None:
+        """Erneuert, sofern nicht ein anderer Thread es schon getan hat.
+
+        ``gesehen`` ist das Zugriffstoken, mit dem der Aufrufer gescheitert
+        ist oder das er für abgelaufen hält.
+        """
+        with self._erneuern:
+            if self.anmeldung.access_token != gesehen:
+                return
+            self.erneuere()
 
     def _melde_aenderung(self) -> None:
         if self.beim_aendern is None:
@@ -291,7 +311,7 @@ class TwitchApi:
         daten = self.helix("GET", "/users")
         eintraege = daten.get("data") or []
         if not eintraege:
-            raise TwitchError("Twitch nennt kein Konto zu diesem Token")
+            raise TwitchError(_t("api.kein_konto"))
         konto = eintraege[0]
         self.anmeldung.login = str(konto.get("login") or "")
         self.anmeldung.anzeigename = str(konto.get("display_name") or "")
@@ -314,13 +334,13 @@ class TwitchApi:
     ) -> dict[str, Any]:
         """Ein Aufruf gegen Helix. Antwort als Dict, ``{}`` bei 204."""
         if not self.anmeldung.access_token:
-            raise NichtAngemeldet("Für Twitch ist noch niemand angemeldet")
+            raise NichtAngemeldet(_t("api.nicht_angemeldet"))
 
         # Zehn Minuten Vorlauf: Ein Token, das während des Aufrufs abläuft,
         # kostet einen unnötigen Fehlversuch.
         if self.anmeldung.laeuft_ab and time.time() > self.anmeldung.laeuft_ab - 600:
             if self.anmeldung.refresh_token:
-                self.erneuere()
+                self._erneuere_falls(self.anmeldung.access_token)
 
         adresse = HELIX + pfad
         if abfrage:
@@ -338,6 +358,7 @@ class TwitchApi:
             daten = json.dumps(rumpf).encode("utf-8")
             kopf["Content-Type"] = "application/json"
 
+        gesendet = self.anmeldung.access_token
         anfrage = urllib.request.Request(adresse, data=daten, headers=kopf, method=methode)
         try:
             with urllib.request.urlopen(anfrage, timeout=ZEITLIMIT_S) as antwort:
@@ -348,14 +369,14 @@ class TwitchApi:
             # Ein abgelaufenes Token merkt man erst hier, wenn die Uhr des
             # Rechners falsch geht. Einmal erneuern und noch einmal fragen.
             if exc.code == 401 and erneut and self.anmeldung.refresh_token:
-                self.erneuere()
+                self._erneuere_falls(gesendet)
                 return self.helix(methode, pfad, abfrage=abfrage, rumpf=rumpf,
                                   erneut=False)
             raise TwitchError(_fehlertext(exc)) from exc
         except urllib.error.URLError as exc:
-            raise TwitchError(f"Twitch ist nicht erreichbar: {exc.reason}") from exc
+            raise TwitchError(_t("api.nicht_erreichbar", grund=exc.reason)) from exc
         except (TimeoutError, OSError) as exc:
-            raise TwitchError(f"Verbindung abgebrochen: {exc}") from exc
+            raise TwitchError(_t("api.verbindung_abgebrochen", fehler=exc)) from exc
 
     def _id_aufruf(self, pfad: str, felder: dict[str, str]) -> dict[str, Any]:
         rumpf = urllib.parse.urlencode(felder).encode("utf-8")
@@ -378,7 +399,9 @@ class TwitchApi:
                 raise NochNichtBestaetigt(_kennung(roh)) from exc
             raise TwitchError(_fehlertext_aus(exc, roh)) from exc
         except urllib.error.URLError as exc:
-            raise TwitchError(f"Twitch ist nicht erreichbar: {exc.reason}") from exc
+            raise TwitchError(_t("api.nicht_erreichbar", grund=exc.reason)) from exc
+        except (TimeoutError, OSError) as exc:
+            raise TwitchError(_t("api.verbindung_abgebrochen", fehler=exc)) from exc
 
     # -- Was das Plugin abfragt -------------------------------------------
 
@@ -448,7 +471,7 @@ class TwitchApi:
         """Die Kennung zu einem Kanalnamen."""
         name = login.strip().lstrip("@").lower()
         if not name:
-            raise TwitchError("Kein Kanal angegeben")
+            raise TwitchError(_t("api.kein_kanal"))
         schluessel = f"id:{name}"
         zwischen = self._cache.hol(schluessel, KANAL_FRISCH_S)
         if zwischen is not None:
@@ -456,7 +479,7 @@ class TwitchApi:
         daten = self.helix("GET", "/users", abfrage={"login": name})
         eintraege = daten.get("data") or []
         if not eintraege:
-            raise TwitchError(f"Kanal '{name}' gibt es nicht")
+            raise TwitchError(_t("api.kanal_unbekannt", name=name))
         kennung = str(eintraege[0].get("id") or "")
         self._cache.leg_ab(schluessel, kennung)
         return kennung

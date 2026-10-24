@@ -1,7 +1,8 @@
 {
   "id": "discord",
   "name": "Discord",
-  "version": "1.0.1",
+  "version": "1.1.0",
+  "min_app_version": "1.4.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "engagement",
@@ -11,8 +12,8 @@
     "en": "Controls the running Discord client: mute, deafen, voice and text channels."
   },
   "changelog": {
-    "de": "1.0.1 — Nur innen drin: Das Plugin holt seine Hilfsdatei jetzt relativ. Damit können zwei Plugins Dateien gleich benennen, ohne sich gegenseitig auszubremsen.",
-    "en": "1.0.1 — Under the hood only: the plugin now imports its helper file relatively, so two plugins can name files alike without getting in each other's way."
+    "de": "Die Anmeldung erneuert sich selbst, bevor sie nach 7 Tagen abläuft. Nach einem Neustart von Discord verbindet sich das Plugin wieder, statt auf dem alten Stand stehen zu bleiben. Die Token-Datei ist von Anfang an nur für dich lesbar. Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "The sign-in renews itself before it expires after 7 days. After Discord restarts, the plugin connects again instead of staying on the old state. The token file is readable only by you from the start. The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
@@ -142,8 +143,8 @@
             }
           ],
           "help": {
-            "de": "Push-to-Talk öffnet das Mikrofon nur solange gedrückt, Push-to-Mute schließt es nur solange gedrückt. Beides braucht eine Taste — auf einem Dial wird immer umgeschaltet.",
-            "en": "Push-to-talk opens the microphone only while held, push-to-mute closes it only while held. Both need a key — a dial always toggles."
+            "de": "Push-to-Talk öffnet das Mikrofon nur solange gedrückt, Push-to-Mute schließt es nur solange gedrückt. Beides braucht eine Taste, auf einem Dial wird immer umgeschaltet.",
+            "en": "Push-to-talk opens the microphone only while held, push-to-mute closes it only while held. Both need a key. A dial always toggles."
           }
         }
       ]
@@ -313,7 +314,7 @@
           },
           "options_source": "text_channels",
           "help": {
-            "de": "Discord kennt keinen Weg, den gerade offenen Textkanal abzufragen — die Taste zeigt deshalb keinen Aktiv-Zustand.",
+            "de": "Discord kennt keinen Weg, den gerade offenen Textkanal abzufragen. Die Taste zeigt deshalb keinen Aktiv-Zustand.",
             "en": "Discord offers no way to query the currently open text channel, so this key has no active state."
           }
         },

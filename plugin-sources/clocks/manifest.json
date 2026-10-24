@@ -1,0 +1,984 @@
+{
+  "id": "clocks",
+  "name": {
+    "de": "Clocks",
+    "en": "Clocks"
+  },
+  "version": "1.1.0",
+  "min_app_version": "1.4.0",
+  "type": "action",
+  "author": "LabRaTox",
+  "category": "utilities",
+  "accent": "#14b8a6",
+  "description": {
+    "de": "Uhren auf Tasten und Dials: die eigene Uhrzeit und eine Weltuhr mit bis zu sechs Zonen. Analog oder digital, 22 Zifferblätter, 9 Farbschemata oder eigene Farben, 12 oder 24 Stunden, Datum und Wochentag. Am Dial ein eingebauter Editor und ein Countdown.",
+    "en": "Clocks on keys and dials: your own time and a world clock with up to six zones. Analog or digital, 22 clock faces, 9 colour schemes or your own colours, 12- or 24-hour, date and weekday. On a dial, a built-in editor and a countdown."
+  },
+  "changelog": {
+    "de": "Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
+  },
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/Deck-Switch",
+  "icon": "icon.png",
+  "screenshots": [
+    "screenshots/uhren.png",
+    "screenshots/dials.png"
+  ],
+  "entry": "plugin.py",
+  "class": "ClocksPlugin",
+  "actions": [
+    {
+      "id": "my_clock",
+      "name": {
+        "de": "Meine Uhr",
+        "en": "My Clock"
+      },
+      "description": {
+        "de": "Eine Uhr in der Systemzeit oder einer gewählten Zone. Taste: Drücken zeigt Datum und Zone. Dial: Drehen wechselt das Zifferblatt, Drücken öffnet den Editor samt Countdown, Tippen schaltet zwischen analog und digital.",
+        "en": "A clock in system time or a chosen zone. Key: press to show date and zone. Dial: turn to change the face, push to open the editor with a countdown, tap to switch between analog and digital."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "clock",
+      "settings_schema": [
+        {
+          "key": "timezone",
+          "type": "select",
+          "label": {
+            "de": "Zeitzone",
+            "en": "Time zone"
+          },
+          "default": "",
+          "options_source": "zones",
+          "help": {
+            "de": "Leer heißt Systemzeit. Am Dial lässt sich die Zone auch im Editor wechseln.",
+            "en": "Empty means system time. On a dial the zone can also be changed in the editor."
+          }
+        },
+        {
+          "key": "place_name",
+          "type": "text",
+          "label": {
+            "de": "Ortsname",
+            "en": "Place name"
+          },
+          "placeholder": {
+            "de": "leer = Stadt der Zeitzone",
+            "en": "empty = city of the time zone"
+          }
+        },
+        {
+          "key": "display",
+          "type": "select",
+          "label": {
+            "de": "Anzeige",
+            "en": "Display"
+          },
+          "default": "analog",
+          "options": [
+            {
+              "value": "analog",
+              "label": {
+                "de": "Analog",
+                "en": "Analog"
+              }
+            },
+            {
+              "value": "digital",
+              "label": {
+                "de": "Digital",
+                "en": "Digital"
+              }
+            }
+          ]
+        },
+        {
+          "key": "face_analog",
+          "type": "select",
+          "label": {
+            "de": "Zifferblatt",
+            "en": "Clock face"
+          },
+          "default": "classic",
+          "depends_on": {
+            "display": "analog"
+          },
+          "options": [
+            {
+              "value": "classic",
+              "label": {
+                "de": "Klassisch",
+                "en": "Classic"
+              }
+            },
+            {
+              "value": "numbers",
+              "label": {
+                "de": "Zahlen",
+                "en": "Numbers"
+              }
+            },
+            {
+              "value": "roman",
+              "label": {
+                "de": "Römisch",
+                "en": "Roman"
+              }
+            },
+            {
+              "value": "minimal",
+              "label": {
+                "de": "Minimal",
+                "en": "Minimal"
+              }
+            },
+            {
+              "value": "dots",
+              "label": {
+                "de": "Punkte",
+                "en": "Dots"
+              }
+            },
+            {
+              "value": "railway",
+              "label": {
+                "de": "Bahnhof",
+                "en": "Railway"
+              }
+            },
+            {
+              "value": "bauhaus",
+              "label": {
+                "de": "Bauhaus",
+                "en": "Bauhaus"
+              }
+            },
+            {
+              "value": "ring",
+              "label": {
+                "de": "Ring",
+                "en": "Ring"
+              }
+            },
+            {
+              "value": "modern",
+              "label": {
+                "de": "Modern",
+                "en": "Modern"
+              }
+            },
+            {
+              "value": "chrono",
+              "label": {
+                "de": "Chronograph",
+                "en": "Chronograph"
+              }
+            },
+            {
+              "value": "hands",
+              "label": {
+                "de": "Nur Zeiger",
+                "en": "Hands only"
+              }
+            }
+          ]
+        },
+        {
+          "key": "face_digital",
+          "type": "select",
+          "label": {
+            "de": "Zifferblatt",
+            "en": "Clock face"
+          },
+          "default": "classic",
+          "depends_on": {
+            "display": "digital"
+          },
+          "options": [
+            {
+              "value": "classic",
+              "label": {
+                "de": "Klassisch",
+                "en": "Classic"
+              }
+            },
+            {
+              "value": "light",
+              "label": {
+                "de": "Schmal",
+                "en": "Light"
+              }
+            },
+            {
+              "value": "mono",
+              "label": {
+                "de": "Monospace",
+                "en": "Monospace"
+              }
+            },
+            {
+              "value": "serif",
+              "label": {
+                "de": "Serif",
+                "en": "Serif"
+              }
+            },
+            {
+              "value": "segment",
+              "label": {
+                "de": "7-Segment",
+                "en": "7-segment"
+              }
+            },
+            {
+              "value": "matrix",
+              "label": {
+                "de": "Punktmatrix",
+                "en": "Dot matrix"
+              }
+            },
+            {
+              "value": "stacked",
+              "label": {
+                "de": "Gestapelt",
+                "en": "Stacked"
+              }
+            },
+            {
+              "value": "flip",
+              "label": {
+                "de": "Klappzahlen",
+                "en": "Flip"
+              }
+            },
+            {
+              "value": "binary",
+              "label": {
+                "de": "Binär",
+                "en": "Binary"
+              }
+            },
+            {
+              "value": "dayarc",
+              "label": {
+                "de": "Tagesbogen",
+                "en": "Day arc"
+              }
+            },
+            {
+              "value": "words",
+              "label": {
+                "de": "In Worten",
+                "en": "In words"
+              }
+            }
+          ]
+        },
+        {
+          "key": "scheme",
+          "type": "select",
+          "label": {
+            "de": "Farbschema",
+            "en": "Colour scheme"
+          },
+          "default": "night",
+          "options": [
+            {
+              "value": "night",
+              "label": {
+                "de": "Nacht",
+                "en": "Night"
+              }
+            },
+            {
+              "value": "light",
+              "label": {
+                "de": "Hell",
+                "en": "Light"
+              }
+            },
+            {
+              "value": "ocean",
+              "label": {
+                "de": "Ozean",
+                "en": "Ocean"
+              }
+            },
+            {
+              "value": "forest",
+              "label": {
+                "de": "Wald",
+                "en": "Forest"
+              }
+            },
+            {
+              "value": "amber",
+              "label": {
+                "de": "Bernstein",
+                "en": "Amber"
+              }
+            },
+            {
+              "value": "red",
+              "label": {
+                "de": "Rotlicht",
+                "en": "Red light"
+              }
+            },
+            {
+              "value": "violet",
+              "label": {
+                "de": "Violett",
+                "en": "Violet"
+              }
+            },
+            {
+              "value": "teal",
+              "label": {
+                "de": "Türkis",
+                "en": "Teal"
+              }
+            },
+            {
+              "value": "none",
+              "label": {
+                "de": "Ohne Blatt",
+                "en": "No face"
+              }
+            }
+          ],
+          "help": {
+            "de": "„Ohne Blatt“ setzt die Uhr direkt auf den Hintergrund der Taste.",
+            "en": "“No face” puts the clock straight onto the key background."
+          }
+        },
+        {
+          "key": "hour_format",
+          "type": "select",
+          "label": {
+            "de": "Format",
+            "en": "Format"
+          },
+          "default": "24",
+          "options": [
+            {
+              "value": "24",
+              "label": {
+                "de": "24 Stunden",
+                "en": "24-hour"
+              }
+            },
+            {
+              "value": "12",
+              "label": {
+                "de": "12 Stunden (AM/PM)",
+                "en": "12-hour (AM/PM)"
+              }
+            }
+          ]
+        },
+        {
+          "key": "seconds",
+          "type": "bool",
+          "label": {
+            "de": "Sekunden zeigen",
+            "en": "Show seconds"
+          },
+          "default": false
+        },
+        {
+          "key": "date",
+          "type": "select",
+          "label": {
+            "de": "Datum",
+            "en": "Date"
+          },
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": {
+                "de": "Nicht zeigen",
+                "en": "Hide"
+              }
+            },
+            {
+              "value": "date",
+              "label": {
+                "de": "Datum",
+                "en": "Date"
+              }
+            },
+            {
+              "value": "weekday",
+              "label": {
+                "de": "Wochentag",
+                "en": "Weekday"
+              }
+            },
+            {
+              "value": "both",
+              "label": {
+                "de": "Wochentag und Datum",
+                "en": "Weekday and date"
+              }
+            }
+          ]
+        },
+        {
+          "key": "custom_colors",
+          "type": "bool",
+          "label": {
+            "de": "Eigene Farben",
+            "en": "Custom colours"
+          },
+          "default": false
+        },
+        {
+          "key": "color_face",
+          "type": "color",
+          "label": {
+            "de": "Blatt",
+            "en": "Face"
+          },
+          "depends_on": {
+            "custom_colors": true
+          },
+          "help": {
+            "de": "Leer lassen, dann gilt die Farbe des Schemas.",
+            "en": "Leave empty to use the scheme's colour."
+          }
+        },
+        {
+          "key": "color_text",
+          "type": "color",
+          "label": {
+            "de": "Zeiger und Ziffern",
+            "en": "Hands and digits"
+          },
+          "depends_on": {
+            "custom_colors": true
+          }
+        },
+        {
+          "key": "color_accent",
+          "type": "color",
+          "label": {
+            "de": "Akzent und Sekunden",
+            "en": "Accent and seconds"
+          },
+          "depends_on": {
+            "custom_colors": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "world_clock",
+      "name": {
+        "de": "Weltuhr",
+        "en": "World Clock"
+      },
+      "description": {
+        "de": "Bis zu sechs Zeitzonen mit Abstand zur Ortszeit. Taste: Drücken zeigt die nächste Zone. Dial: Drehen blättert durch die Zonen, Drücken öffnet den Editor, Tippen springt weiter.",
+        "en": "Up to six time zones with the difference to local time. Key: press for the next zone. Dial: turn to scroll through the zones, push to open the editor, tap to move on."
+      },
+      "inputs": [
+        "key",
+        "dial"
+      ],
+      "default_icon": "world",
+      "settings_schema": [
+        {
+          "key": "zone_1",
+          "type": "select",
+          "label": {
+            "de": "Zone 1",
+            "en": "Zone 1"
+          },
+          "default": "America/New_York",
+          "options_source": "zones_world"
+        },
+        {
+          "key": "zone_2",
+          "type": "select",
+          "label": {
+            "de": "Zone 2",
+            "en": "Zone 2"
+          },
+          "default": "Europe/London",
+          "options_source": "zones_world"
+        },
+        {
+          "key": "zone_3",
+          "type": "select",
+          "label": {
+            "de": "Zone 3",
+            "en": "Zone 3"
+          },
+          "default": "Asia/Tokyo",
+          "options_source": "zones_world"
+        },
+        {
+          "key": "zone_4",
+          "type": "select",
+          "label": {
+            "de": "Zone 4",
+            "en": "Zone 4"
+          },
+          "default": "",
+          "options_source": "zones_world"
+        },
+        {
+          "key": "zone_5",
+          "type": "select",
+          "label": {
+            "de": "Zone 5",
+            "en": "Zone 5"
+          },
+          "default": "",
+          "options_source": "zones_world"
+        },
+        {
+          "key": "zone_6",
+          "type": "select",
+          "label": {
+            "de": "Zone 6",
+            "en": "Zone 6"
+          },
+          "default": "",
+          "options_source": "zones_world"
+        },
+        {
+          "key": "show_city",
+          "type": "bool",
+          "label": {
+            "de": "Stadt zeigen",
+            "en": "Show city"
+          },
+          "default": true
+        },
+        {
+          "key": "show_difference",
+          "type": "bool",
+          "label": {
+            "de": "Abstand zur Ortszeit zeigen",
+            "en": "Show difference to local time"
+          },
+          "default": true,
+          "help": {
+            "de": "Statt des Datums: „+7 h · morgen“.",
+            "en": "Instead of the date: “+7 h · tomorrow”."
+          }
+        },
+        {
+          "key": "display",
+          "type": "select",
+          "label": {
+            "de": "Anzeige",
+            "en": "Display"
+          },
+          "default": "digital",
+          "options": [
+            {
+              "value": "analog",
+              "label": {
+                "de": "Analog",
+                "en": "Analog"
+              }
+            },
+            {
+              "value": "digital",
+              "label": {
+                "de": "Digital",
+                "en": "Digital"
+              }
+            }
+          ]
+        },
+        {
+          "key": "face_analog",
+          "type": "select",
+          "label": {
+            "de": "Zifferblatt",
+            "en": "Clock face"
+          },
+          "default": "classic",
+          "depends_on": {
+            "display": "analog"
+          },
+          "options": [
+            {
+              "value": "classic",
+              "label": {
+                "de": "Klassisch",
+                "en": "Classic"
+              }
+            },
+            {
+              "value": "numbers",
+              "label": {
+                "de": "Zahlen",
+                "en": "Numbers"
+              }
+            },
+            {
+              "value": "roman",
+              "label": {
+                "de": "Römisch",
+                "en": "Roman"
+              }
+            },
+            {
+              "value": "minimal",
+              "label": {
+                "de": "Minimal",
+                "en": "Minimal"
+              }
+            },
+            {
+              "value": "dots",
+              "label": {
+                "de": "Punkte",
+                "en": "Dots"
+              }
+            },
+            {
+              "value": "railway",
+              "label": {
+                "de": "Bahnhof",
+                "en": "Railway"
+              }
+            },
+            {
+              "value": "bauhaus",
+              "label": {
+                "de": "Bauhaus",
+                "en": "Bauhaus"
+              }
+            },
+            {
+              "value": "ring",
+              "label": {
+                "de": "Ring",
+                "en": "Ring"
+              }
+            },
+            {
+              "value": "modern",
+              "label": {
+                "de": "Modern",
+                "en": "Modern"
+              }
+            },
+            {
+              "value": "chrono",
+              "label": {
+                "de": "Chronograph",
+                "en": "Chronograph"
+              }
+            },
+            {
+              "value": "hands",
+              "label": {
+                "de": "Nur Zeiger",
+                "en": "Hands only"
+              }
+            }
+          ]
+        },
+        {
+          "key": "face_digital",
+          "type": "select",
+          "label": {
+            "de": "Zifferblatt",
+            "en": "Clock face"
+          },
+          "default": "classic",
+          "depends_on": {
+            "display": "digital"
+          },
+          "options": [
+            {
+              "value": "classic",
+              "label": {
+                "de": "Klassisch",
+                "en": "Classic"
+              }
+            },
+            {
+              "value": "light",
+              "label": {
+                "de": "Schmal",
+                "en": "Light"
+              }
+            },
+            {
+              "value": "mono",
+              "label": {
+                "de": "Monospace",
+                "en": "Monospace"
+              }
+            },
+            {
+              "value": "serif",
+              "label": {
+                "de": "Serif",
+                "en": "Serif"
+              }
+            },
+            {
+              "value": "segment",
+              "label": {
+                "de": "7-Segment",
+                "en": "7-segment"
+              }
+            },
+            {
+              "value": "matrix",
+              "label": {
+                "de": "Punktmatrix",
+                "en": "Dot matrix"
+              }
+            },
+            {
+              "value": "stacked",
+              "label": {
+                "de": "Gestapelt",
+                "en": "Stacked"
+              }
+            },
+            {
+              "value": "flip",
+              "label": {
+                "de": "Klappzahlen",
+                "en": "Flip"
+              }
+            },
+            {
+              "value": "binary",
+              "label": {
+                "de": "Binär",
+                "en": "Binary"
+              }
+            },
+            {
+              "value": "dayarc",
+              "label": {
+                "de": "Tagesbogen",
+                "en": "Day arc"
+              }
+            },
+            {
+              "value": "words",
+              "label": {
+                "de": "In Worten",
+                "en": "In words"
+              }
+            }
+          ]
+        },
+        {
+          "key": "scheme",
+          "type": "select",
+          "label": {
+            "de": "Farbschema",
+            "en": "Colour scheme"
+          },
+          "default": "night",
+          "options": [
+            {
+              "value": "night",
+              "label": {
+                "de": "Nacht",
+                "en": "Night"
+              }
+            },
+            {
+              "value": "light",
+              "label": {
+                "de": "Hell",
+                "en": "Light"
+              }
+            },
+            {
+              "value": "ocean",
+              "label": {
+                "de": "Ozean",
+                "en": "Ocean"
+              }
+            },
+            {
+              "value": "forest",
+              "label": {
+                "de": "Wald",
+                "en": "Forest"
+              }
+            },
+            {
+              "value": "amber",
+              "label": {
+                "de": "Bernstein",
+                "en": "Amber"
+              }
+            },
+            {
+              "value": "red",
+              "label": {
+                "de": "Rotlicht",
+                "en": "Red light"
+              }
+            },
+            {
+              "value": "violet",
+              "label": {
+                "de": "Violett",
+                "en": "Violet"
+              }
+            },
+            {
+              "value": "teal",
+              "label": {
+                "de": "Türkis",
+                "en": "Teal"
+              }
+            },
+            {
+              "value": "none",
+              "label": {
+                "de": "Ohne Blatt",
+                "en": "No face"
+              }
+            }
+          ],
+          "help": {
+            "de": "„Ohne Blatt“ setzt die Uhr direkt auf den Hintergrund der Taste.",
+            "en": "“No face” puts the clock straight onto the key background."
+          }
+        },
+        {
+          "key": "hour_format",
+          "type": "select",
+          "label": {
+            "de": "Format",
+            "en": "Format"
+          },
+          "default": "24",
+          "options": [
+            {
+              "value": "24",
+              "label": {
+                "de": "24 Stunden",
+                "en": "24-hour"
+              }
+            },
+            {
+              "value": "12",
+              "label": {
+                "de": "12 Stunden (AM/PM)",
+                "en": "12-hour (AM/PM)"
+              }
+            }
+          ]
+        },
+        {
+          "key": "seconds",
+          "type": "bool",
+          "label": {
+            "de": "Sekunden zeigen",
+            "en": "Show seconds"
+          },
+          "default": false
+        },
+        {
+          "key": "date",
+          "type": "select",
+          "label": {
+            "de": "Datum",
+            "en": "Date"
+          },
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": {
+                "de": "Nicht zeigen",
+                "en": "Hide"
+              }
+            },
+            {
+              "value": "date",
+              "label": {
+                "de": "Datum",
+                "en": "Date"
+              }
+            },
+            {
+              "value": "weekday",
+              "label": {
+                "de": "Wochentag",
+                "en": "Weekday"
+              }
+            },
+            {
+              "value": "both",
+              "label": {
+                "de": "Wochentag und Datum",
+                "en": "Weekday and date"
+              }
+            }
+          ]
+        },
+        {
+          "key": "custom_colors",
+          "type": "bool",
+          "label": {
+            "de": "Eigene Farben",
+            "en": "Custom colours"
+          },
+          "default": false
+        },
+        {
+          "key": "color_face",
+          "type": "color",
+          "label": {
+            "de": "Blatt",
+            "en": "Face"
+          },
+          "depends_on": {
+            "custom_colors": true
+          },
+          "help": {
+            "de": "Leer lassen, dann gilt die Farbe des Schemas.",
+            "en": "Leave empty to use the scheme's colour."
+          }
+        },
+        {
+          "key": "color_text",
+          "type": "color",
+          "label": {
+            "de": "Zeiger und Ziffern",
+            "en": "Hands and digits"
+          },
+          "depends_on": {
+            "custom_colors": true
+          }
+        },
+        {
+          "key": "color_accent",
+          "type": "color",
+          "label": {
+            "de": "Akzent und Sekunden",
+            "en": "Accent and seconds"
+          },
+          "depends_on": {
+            "custom_colors": true
+          }
+        }
+      ]
+    }
+  ]
+}

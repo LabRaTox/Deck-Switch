@@ -46,14 +46,6 @@ FARBE_AN = "#facc15"
 FARBE_AUS = "#6b7280"
 FARBE_WEG = "#ef4444"
 
-WOERTER = {
-    "de": {"off": "aus", "unreachable": "weg", "no_key": "kein Schlüssel",
-           "no_device": "kein Gerät", "all": "alle"},
-    "en": {"off": "off", "unreachable": "gone", "no_key": "no key",
-           "no_device": "no device", "all": "all"},
-}
-
-
 def _kelvin_farbe(kelvin: int) -> str:
     """Ungefähr die Farbe, die eine Temperatur ergibt — für die Kachel.
 
@@ -75,13 +67,18 @@ class GoveePlugin(ActionPlugin):
     def __init__(self, manifest, services) -> None:
         super().__init__(manifest, services)
         self.api = GoveeApi(modus=STANDARD_MODUS)
-        self.fehler = ""
+        self._fehler = ""
         self._auffrischer: asyncio.Task | None = None
         self._holt = asyncio.Lock()
         self._zuletzt = 0.0
-        #: Welche Geräte gerade auf einer sichtbaren Kachel liegen. Nur die
-        #: werden abgefragt — Govee zählt je Gerät mit.
-        self._gefragt: set[str] = set()
+        #: Welche Geräte gerade auf einer sichtbaren Kachel liegen, mit dem
+        #: Zeitpunkt des letzten Ticks. Nur die werden abgefragt, Govee zählt
+        #: je Gerät mit. Wer länger nicht zu sehen war, fällt heraus.
+        self._gefragt: dict[str, float] = {}
+        #: Läuft gerade ein Abruf der Geräteliste für die Statusanzeige?
+        self._liste_laedt = False
+        self._liste_fehler = ""
+        self._liste_versucht = 0.0
 
     # -- Lebenszyklus ------------------------------------------------------
 
@@ -107,28 +104,58 @@ class GoveePlugin(ActionPlugin):
         # Zwischenspeicher muss deshalb weg, nicht nur die Einstellung.
         self.api.modus = str(self.plugin_config.get("api") or "alt")
         self.api.vergiss()
-        self.fehler = "" if self.api.schluessel else (
-            "Es fehlt der API-Schlüssel. Er kommt aus der Govee-Home-App "
-            "(Profil → Einstellungen → „Apply for API Key“)."
-        )
+        self.fehler = "" if self.api.schluessel else "plugin.schluessel_fehlt"
+
+    @property
+    def fehler(self) -> str:
+        """Warum das Plugin nicht arbeiten kann, in der aktuellen Sprache."""
+        return self.t(self._fehler) if self._fehler else ""
+
+    @fehler.setter
+    def fehler(self, schluessel: str) -> None:
+        self._fehler = schluessel
 
     def get_status(self) -> dict[str, Any] | None:
         if self.fehler:
             return {"connected": False, "detail": self.fehler}
-        try:
-            anzahl = len(self.api.geraete())
-        except GoveeError as exc:
-            return {"connected": False, "detail": str(exc)}
+        # Nur aus dem Gemerkten: Dieser Hook läuft im Event-Loop und darf
+        # nicht auf Govee warten. Fehlt die Liste, wird sie nebenher geholt.
+        geraete = self.api.bekannte_geraete()
+        if geraete is None:
+            self._liste_nachholen()
+            if self._liste_fehler:
+                return {"connected": False, "detail": self._liste_fehler}
+            return {"connected": False, "detail": self.t("status.laedt")}
+        anzahl = len(geraete)
         if not anzahl:
-            return {"connected": True, "detail": "verbunden, aber kein Gerät gefunden"}
-        return {"connected": True, "detail": f"{anzahl} Gerät(e)"}
+            return {"connected": True, "detail": self.t("status.kein_geraet")}
+        return {"connected": True, "detail": self.t("status.geraete", anzahl=anzahl)}
+
+    def _liste_nachholen(self) -> None:
+        """Holt die Geräteliste im Hintergrund und meldet danach den Status neu."""
+        if self._liste_laedt or time.monotonic() - self._liste_versucht < AUFFRISCHEN_S:
+            return
+        self._liste_laedt = True
+        self._liste_versucht = time.monotonic()
+
+        async def holen():
+            try:
+                await asyncio.to_thread(self.api.geraete)
+                self._liste_fehler = ""
+            except GoveeError as exc:
+                self._liste_fehler = str(exc)
+            finally:
+                self._liste_laedt = False
+            self.services.runtime.publish_plugin_status(self.manifest.id)
+
+        self.run_async(holen())
 
     # -- Hintergrund -------------------------------------------------------
 
     async def _schleife(self) -> None:
         while True:
             await asyncio.sleep(AUFFRISCHEN_S)
-            if not self.api.schluessel or not self._gefragt:
+            if not self.api.schluessel or not self._sichtbar():
                 continue
             try:
                 await self._hole_stand()
@@ -139,7 +166,7 @@ class GoveePlugin(ActionPlugin):
         if self._holt.locked():
             return
         async with self._holt:
-            gefragt = sorted(self._gefragt)
+            gefragt = self._sichtbar()
 
             def arbeit():
                 for schluessel in gefragt:
@@ -147,6 +174,9 @@ class GoveePlugin(ActionPlugin):
                     if geraet is not None:
                         self.api.zustand(geraet, erneut=True)
 
+            # Auch ein Fehlschlag zählt als Versuch. Sonst fragte jeder Tick
+            # sofort wieder nach und brauchte das Kontingent bei Govee auf.
+            self._zuletzt = time.monotonic()
             try:
                 await asyncio.to_thread(arbeit)
             except KeinSchluessel:
@@ -154,7 +184,6 @@ class GoveePlugin(ActionPlugin):
             except GoveeError as exc:
                 log.debug("Govee: %s", exc)
                 return
-            self._zuletzt = time.monotonic()
             self.services.runtime.request_redraw()
 
     # -- Auswahllisten -----------------------------------------------------
@@ -171,7 +200,7 @@ class GoveePlugin(ActionPlugin):
                 ]
             if source == "szenen":
                 if not self.api.nutzt_neue:
-                    return [{"value": "", "label": "nur über die neue Schnittstelle"}]
+                    return [{"value": "", "label": self.t("optionen.nur_neue_schnittstelle")}]
                 geraet = self.api.geraet(str(context.get("device") or ""))
                 if geraet is None:
                     return []
@@ -226,13 +255,13 @@ class GoveePlugin(ActionPlugin):
         elif action_id == "scene":
             name = str(settings.get("scene") or "").strip()
             if not name:
-                raise GoveeError("Für diese Taste ist keine Szene eingetragen")
+                raise GoveeError(self.t("aktion.keine_szene"))
             self.api.szene(geraet, name)
 
     def _alle(self, modus: str) -> None:
         geraete = self.api.geraete()
         if not geraete:
-            raise GoveeError("Govee meldet kein Gerät")
+            raise GoveeError(self.t("aktion.keine_geraete"))
         if modus == "toggle":
             # Umschalten heißt hier: Brennt irgendwo Licht, geht alles aus.
             # Die andere Lesart — jedes Gerät für sich umschalten — ergäbe
@@ -254,10 +283,10 @@ class GoveePlugin(ActionPlugin):
     def _geraet(self, settings: dict[str, Any]):
         schluessel = str(settings.get("device") or "").strip()
         if not schluessel:
-            raise GoveeError("Für diese Taste ist kein Gerät eingetragen")
+            raise GoveeError(self.t("aktion.kein_geraet"))
         geraet = self.api.geraet(schluessel)
         if geraet is None:
-            raise GoveeError("Das eingetragene Gerät meldet sich nicht mehr bei Govee")
+            raise GoveeError(self.t("aktion.geraet_weg"))
         return geraet
 
     async def on_dial_rotate(self, action_id, settings, delta, ctx):
@@ -283,29 +312,32 @@ class GoveePlugin(ActionPlugin):
 
     # -- Anzeige -----------------------------------------------------------
 
+    def _sichtbar(self) -> list[str]:
+        """Geräte, deren Kachel in letzter Zeit einen Tick bekommen hat."""
+        grenze = time.monotonic() - 2 * AUFFRISCHEN_S
+        for schluessel in [s for s, zeit in self._gefragt.items() if zeit < grenze]:
+            self._gefragt.pop(schluessel, None)
+        return sorted(self._gefragt)
+
     async def on_tick(self, action_id, settings, ctx):
         """Merkt sich, welche Geräte sichtbar sind, und frischt sie auf."""
         schluessel = str(settings.get("device") or "").strip()
         if schluessel:
-            self._gefragt.add(schluessel)
+            self._gefragt[schluessel] = time.monotonic()
         if not self.api.schluessel:
             return
         if time.monotonic() - self._zuletzt >= AUFFRISCHEN_S:
             await self._hole_stand()
-
-    def _wort(self, name: str) -> str:
-        try:
-            sprache = self.services.config.app.language
-        except AttributeError:
-            sprache = "de"
-        return WOERTER.get(sprache, WOERTER["de"]).get(name, name)
 
     def _stand(self, settings: dict[str, Any]):
         """Der bekannte Zustand — ohne zu fragen. ``None``, wenn unbekannt."""
         schluessel = str(settings.get("device") or "").strip()
         if not schluessel or not self.api.schluessel:
             return None, None
-        geraet = self.api.geraet(schluessel) if self.api._geraete else None
+        # Nur in der gemerkten Liste suchen: ``geraet()`` holte nach Ablauf
+        # des Zwischenspeichers die Liste neu, und das mitten im Zeichnen.
+        geraet = next((g for g in self.api.bekannte_geraete() or []
+                       if g.schluessel == schluessel), None)
         if geraet is None:
             return None, None
         gemerkt = self.api._zustand.get(geraet.schluessel)
@@ -350,9 +382,9 @@ class GoveePlugin(ActionPlugin):
                                  frame_time=ctx.frame_time)
 
         if not self.api.schluessel:
-            gross, klein = "—", self._wort("no_key")
+            gross, klein = "---", self.t("kachel.kein_schluessel")
         elif not str(settings.get("device") or "").strip():
-            gross, klein = "—", self._wort("no_device")
+            gross, klein = "---", self.t("kachel.kein_geraet")
         elif action_id == "brightness":
             wenn_unbekannt = int(settings.get("value") or 60)
             wert = stand.helligkeit if stand and stand.helligkeit is not None else wenn_unbekannt
@@ -367,12 +399,13 @@ class GoveePlugin(ActionPlugin):
         elif stand is None:
             gross, klein = "…", geraet.name if geraet else ""
         elif not stand.erreichbar:
-            gross, klein = "!", self._wort("unreachable")
+            gross, klein = "!", self.t("kachel.weg")
         elif stand.an:
-            gross = f"{stand.helligkeit}%" if stand.helligkeit is not None else "an"
+            gross = f"{stand.helligkeit}%" if stand.helligkeit is not None \
+                else self.t("kachel.an")
             klein = geraet.name if geraet else ""
         else:
-            gross, klein = self._wort("off"), geraet.name if geraet else ""
+            gross, klein = self.t("kachel.aus"), geraet.name if geraet else ""
 
         beschriftung = ctx.appearance.label_text or ""
 

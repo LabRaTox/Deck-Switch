@@ -1,0 +1,16 @@
+{
+  "fehler": "Timer: {fehler}",
+  "fehler_keine_datei": "Timer: keine Audiodatei eingestellt",
+  "name_alarm": "Wecker",
+  "name_countdown": "Timer",
+  "name_stopwatch": "Stoppuhr",
+  "rest_jetzt": "jetzt",
+  "rest_minuten": "in {minuten} min",
+  "rest_stunden": "in {stunden} h {minuten} min",
+  "rest_tag": "in {tage} Tag {stunden} h",
+  "rest_tage": "in {tage} Tagen {stunden} h",
+  "wort_done": "fertig",
+  "wort_off": "aus",
+  "wort_paused": "pausiert",
+  "wort_ringing": "klingelt"
+}

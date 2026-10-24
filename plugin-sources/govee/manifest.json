@@ -4,18 +4,19 @@
     "de": "Govee",
     "en": "Govee"
   },
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "min_app_version": "1.4.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "lighting",
   "accent": "#7c3aed",
   "description": {
-    "de": "Govee-Lampen schalten, dimmen, einfärben und Szenen abrufen — über Govees Cloud-API.",
-    "en": "Switch, dim and colour your Govee lights and call up scenes — through Govee's cloud API."
+    "de": "Govee-Lampen schalten, dimmen, einfärben und Szenen abrufen. Das Plugin nutzt Govees Cloud-API.",
+    "en": "Switch, dim and colour your Govee lights and call up scenes. The plugin uses Govee's cloud API."
   },
   "changelog": {
-    "de": "Erste Fassung: An und aus, Helligkeit am Dial, Farbe, Farbtemperatur, Szenen und eine Taste für alle Geräte auf einmal.",
-    "en": "First release: on and off, brightness on a dial, colour, colour temperature, scenes, and one key for every device at once."
+    "de": "Bei einem Fehler fragt das Plugin nicht mehr jede Sekunde neu bei Govee nach, und gefragt wird nur, solange eine Taste zu sehen ist. Das Öffnen der Plugin-Liste wartet nicht mehr auf das Netz. Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "After an error the plugin no longer asks Govee again every second, and it only asks while a key is visible. Opening the plugin list no longer waits for the network. The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
@@ -61,8 +62,8 @@
         {
           "value": "beide",
           "label": {
-            "de": "Beide — neue zuerst",
-            "en": "Both — new one first"
+            "de": "Beide, neue zuerst",
+            "en": "Both, new one first"
           }
         }
       ],
@@ -347,8 +348,8 @@
         "en": "All devices"
       },
       "description": {
-        "de": "Schaltet jedes Gerät auf einmal — für den Weg zur Tür.",
-        "en": "Switches every device at once — for the way to the door."
+        "de": "Schaltet jedes Gerät auf einmal, etwa auf dem Weg zur Tür.",
+        "en": "Switches every device at once, for example on your way out."
       },
       "inputs": [
         "key"

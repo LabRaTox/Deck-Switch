@@ -35,6 +35,10 @@ from deckswitch.plugins.base import ActionPlugin
 #: nichts zu kosten — ohne laufende Uhr tut die Schleife gar nichts.
 WACHINTERVALL = 0.25
 
+#: So oft sucht der Wächter in der Konfiguration nach Weckern. Sonst
+#: kennte er nur die, deren Seite seit dem Start einmal zu sehen war.
+SUCHINTERVALL = 30.0
+
 #: Der mitgelieferte Klang.
 KLINGEL = Path(__file__).resolve().parent / "sounds" / "klingel.wav"
 
@@ -45,18 +49,6 @@ FARBE_LAEUFT = "#f59e0b"
 FARBE_PAUSE = "#9ca3af"
 FARBE_FERTIG = "#ef4444"
 FARBE_BEREIT = "#6b7280"
-
-#: Die wenigen Wörter, die auf einer Kachel stehen. Ein Plugin bekommt vom
-#: Rahmenwerk keine Übersetzung mitgeliefert; für sechs Begriffe lohnt kein
-#: Apparat, aber deutsche Wörter in einer englischen Oberfläche fallen auf.
-WOERTER = {
-    "de": {"paused": "pausiert", "done": "fertig", "off": "aus",
-           "ringing": "klingelt", "now": "jetzt", "in": "in",
-           "day": "Tag", "days": "Tagen", "min": "min"},
-    "en": {"paused": "paused", "done": "done", "off": "off",
-           "ringing": "ringing", "now": "now", "in": "in",
-           "day": "day", "days": "days", "min": "min"},
-}
 
 #: Der Rahmen um die Stoppuhr. Sie hat kein Ziel und deshalb auch keinen
 #: Balken, an dem man ihren Zustand ablesen könnte — zwei Farben am Rand
@@ -193,7 +185,7 @@ class TimerPlugin(ActionPlugin):
         self._waechter: asyncio.Task | None = None
         #: Zuletzt gezeigte Sekunde je Belegung — verhindert, dass die
         #: Anzeige viermal je Sekunde neu gezeichnet wird.
-        self._gezeigt: dict[str, str] = {}
+        self._gezeigt: dict[str, tuple] = {}
 
     # -- Lebenszyklus ------------------------------------------------------
 
@@ -213,13 +205,38 @@ class TimerPlugin(ActionPlugin):
 
     async def _wache(self) -> None:
         """Sieht nach, ob eine Uhr abgelaufen ist oder ein Wecker fällig."""
+        gesucht = 0.0
         while True:
             await asyncio.sleep(WACHINTERVALL)
             try:
+                if time.monotonic() - gesucht >= SUCHINTERVALL:
+                    gesucht = time.monotonic()
+                    self._suche_wecker()
                 if self._runde():
                     self.services.runtime.request_redraw()
             except Exception as exc:  # noqa: BLE001 — der Wächter darf nie sterben
-                self.notify_error(f"Timer: {exc}")
+                self.notify_error(self.t("fehler", fehler=exc))
+
+    def _suche_wecker(self) -> None:
+        """Meldet alle Wecker aus der Konfiguration beim Wächter an.
+
+        Ein Wecker muss auch klingeln, wenn seine Seite seit dem Start nie
+        auf dem Gerät lag. Gesucht wird in den Profilen, die ein Deck
+        gerade zeigt; ohne Bindung in allen.
+        """
+        config = self.services.config
+        gebunden = {b.profile_id for b in getattr(config, "decks", {}).values()}
+        profile = [p for pid, p in config.profiles.items() if not gebunden or pid in gebunden]
+        for profil in profile:
+            for seite in profil.pages.values():
+                for art, belegung in (("key", seite.keys), ("dial", seite.dials)):
+                    for index, slot in belegung.items():
+                        if slot.plugin_id != self.manifest.id or slot.action_id != "alarm":
+                            continue
+                        schluessel = f"{seite.id}:{art}:{index}"
+                        if schluessel not in self._laeufe:
+                            self._laeufe[schluessel] = Lauf()
+                        self._bekannt[schluessel] = ("alarm", dict(slot.settings))
 
     def _runde(self) -> bool:
         """Eine Prüfrunde. Liefert ``True``, wenn sich etwas getan hat."""
@@ -261,7 +278,7 @@ class TimerPlugin(ActionPlugin):
         if wahl == "file":
             pfad = str(einstellungen.get("sound_file") or "").strip()
             if not pfad:
-                self.notify_error("Timer: keine Audiodatei eingestellt")
+                self.notify_error(self.t("fehler_keine_datei"))
                 return
         else:
             pfad = str(KLINGEL)
@@ -272,7 +289,7 @@ class TimerPlugin(ActionPlugin):
                 loop=wiederholen,
             )
         except Exception as exc:  # noqa: BLE001 — ohne Ton läuft der Timer weiter
-            self.notify_error(f"Timer: {exc}")
+            self.notify_error(self.t("fehler", fehler=exc))
 
     # -- Bedienung ---------------------------------------------------------
 
@@ -352,9 +369,16 @@ class TimerPlugin(ActionPlugin):
     def on_tick(self, action_id, settings, ctx):
         """Hält die sichtbare Anzeige aktuell — aber nur, wenn nötig."""
         lauf = self._hole(action_id, settings, ctx)
-        text = self._anzeige(action_id, settings, lauf)
-        if self._gezeigt.get(ctx.key) != text:
-            self._gezeigt[ctx.key] = text
+        # Beim Wecker steht die Weckzeit fest; was sich ändert, sind die
+        # Restzeit darunter und der Balken. Beides gehört deshalb dazu.
+        anteil = self._fortschritt(action_id, settings, lauf)
+        stand = (
+            self._anzeige(action_id, settings, lauf),
+            self._zusatz(action_id, settings, lauf),
+            round(anteil, 2) if anteil is not None else None,
+        )
+        if self._gezeigt.get(ctx.key) != stand:
+            self._gezeigt[ctx.key] = stand
             ctx.request_redraw()
 
     # -- Zustand einer Belegung -------------------------------------------
@@ -460,28 +484,20 @@ class TimerPlugin(ActionPlugin):
             return "pausiert"
         return "bereit"
 
-    def _wort(self, name: str) -> str:
-        try:
-            sprache = self.services.config.app.language
-        except AttributeError:
-            sprache = "de"
-        return WOERTER.get(sprache, WOERTER["de"]).get(name, name)
-
     def _restzeit(self, offen: timedelta) -> str:
         """„in 12 min", „in 3 h 05 min", „in 2 Tagen 4 h"."""
         sekunden = max(0, int(offen.total_seconds()))
         if sekunden < 60:
-            return self._wort("now")
+            return self.t("rest_jetzt")
         minuten = sekunden // 60
         tage, rest = divmod(minuten, 24 * 60)
         stunden, minuten_rest = divmod(rest, 60)
-        wort = self._wort("in")
         if tage:
-            einheit = self._wort("day") if tage == 1 else self._wort("days")
-            return f"{wort} {tage} {einheit} {stunden} h"
+            schluessel = "rest_tag" if tage == 1 else "rest_tage"
+            return self.t(schluessel, tage=tage, stunden=stunden)
         if stunden:
-            return f"{wort} {stunden} h {minuten_rest:02d} {self._wort('min')}"
-        return f"{wort} {minuten_rest} {self._wort('min')}"
+            return self.t("rest_stunden", stunden=stunden, minuten=f"{minuten_rest:02d}")
+        return self.t("rest_minuten", minuten=minuten_rest)
 
     def _anzeige(self, action_id, settings, lauf: Lauf) -> str:
         """Der große Text auf der Kachel."""
@@ -534,24 +550,24 @@ class TimerPlugin(ActionPlugin):
         """Die kleine Zeile unter der Zeit."""
         if action_id == "alarm":
             if lauf.fertig:
-                return self._wort("ringing")
+                return self.t("wort_ringing")
             # Ein einmaliger Wecker, der geklingelt hat, ist vorbei. Dort
             # noch „in 23 h" zu schreiben, hieße den nächsten Tag zu
             # versprechen — und den gibt es bei „einmalig" nicht.
             if lauf.verbraucht:
                 return ""
             if not self._scharf(lauf, settings):
-                return self._wort("off")
+                return self.t("wort_off")
             termin = self._naechster_termin(lauf, settings)
             if termin is None:
                 return ""
             return self._restzeit(termin - datetime.now())
         if lauf.fertig:
-            return self._wort("done")
+            return self.t("wort_done")
         if lauf.laeuft:
             return ""
         if lauf.verstrichen() > 0:
-            return self._wort("paused")
+            return self.t("wort_paused")
         return ""
 
     def render(self, action_id, settings, ctx):
@@ -611,8 +627,7 @@ class TimerPlugin(ActionPlugin):
                             box=(12, hoehe - 16, breite - 12, hoehe - 9))
         return bild
 
-    @staticmethod
-    def _name(action_id: str) -> str:
-        return {"countdown": "Timer", "stopwatch": "Stoppuhr", "alarm": "Wecker"}.get(
-            action_id, action_id
-        )
+    def _name(self, action_id: str) -> str:
+        schluessel = {"countdown": "name_countdown", "stopwatch": "name_stopwatch",
+                      "alarm": "name_alarm"}.get(action_id)
+        return self.t(schluessel) if schluessel else action_id

@@ -19,7 +19,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+
+from deckswitch.plugins.base import plugin_text
 
 log = logging.getLogger(__name__)
 
@@ -40,80 +43,96 @@ class WeatherError(RuntimeError):
     pass
 
 
+def _t(schluessel: str, **werte: Any) -> str:
+    """Text aus den Sprachdateien dieses Plugins."""
+    return plugin_text(Path(__file__).resolve().parent, "weather", schluessel, werte)
+
+
 # --------------------------------------------------------------------------
 # Wettercodes (WMO) → Text und Icon
 # --------------------------------------------------------------------------
 
-#: WMO-Code → (Beschreibung de, Beschreibung en, Icon bei Tag, Icon bei Nacht)
-WMO: dict[int, tuple[str, str, str, str]] = {
-    0: ("Klar", "Clear", "sun", "moon"),
-    1: ("Überwiegend klar", "Mostly clear", "sun", "moon"),
-    2: ("Teils bewölkt", "Partly cloudy", "cloud", "cloud"),
-    3: ("Bedeckt", "Overcast", "cloud", "cloud"),
-    45: ("Nebel", "Fog", "cloud-fog", "cloud-fog"),
-    48: ("Reifnebel", "Rime fog", "cloud-fog", "cloud-fog"),
-    51: ("Leichter Niesel", "Light drizzle", "cloud-rain", "cloud-rain"),
-    53: ("Niesel", "Drizzle", "cloud-rain", "cloud-rain"),
-    55: ("Starker Niesel", "Dense drizzle", "cloud-rain", "cloud-rain"),
-    56: ("Gefrierender Niesel", "Freezing drizzle", "cloud-snow", "cloud-snow"),
-    57: ("Gefrierender Niesel", "Freezing drizzle", "cloud-snow", "cloud-snow"),
-    61: ("Leichter Regen", "Light rain", "cloud-rain", "cloud-rain"),
-    63: ("Regen", "Rain", "cloud-rain", "cloud-rain"),
-    65: ("Starker Regen", "Heavy rain", "cloud-rain", "cloud-rain"),
-    66: ("Gefrierender Regen", "Freezing rain", "cloud-snow", "cloud-snow"),
-    67: ("Gefrierender Regen", "Freezing rain", "cloud-snow", "cloud-snow"),
-    71: ("Leichter Schnee", "Light snow", "cloud-snow", "cloud-snow"),
-    73: ("Schnee", "Snow", "cloud-snow", "cloud-snow"),
-    75: ("Starker Schnee", "Heavy snow", "cloud-snow", "cloud-snow"),
-    77: ("Schneegriesel", "Snow grains", "snowflake", "snowflake"),
-    80: ("Regenschauer", "Rain showers", "cloud-rain", "cloud-rain"),
-    81: ("Regenschauer", "Rain showers", "cloud-rain", "cloud-rain"),
-    82: ("Starke Schauer", "Violent showers", "cloud-rain", "cloud-rain"),
-    85: ("Schneeschauer", "Snow showers", "cloud-snow", "cloud-snow"),
-    86: ("Schneeschauer", "Snow showers", "cloud-snow", "cloud-snow"),
-    95: ("Gewitter", "Thunderstorm", "cloud-storm", "cloud-storm"),
-    96: ("Gewitter mit Hagel", "Thunderstorm, hail", "cloud-bolt", "cloud-bolt"),
-    99: ("Gewitter mit Hagel", "Thunderstorm, hail", "cloud-bolt", "cloud-bolt"),
+#: WMO-Code → (Schlüssel der Beschreibung, Icon bei Tag, Icon bei Nacht)
+WMO: dict[int, tuple[str, str, str]] = {
+    0: ("wetter_klar", "sun", "moon"),
+    1: ("wetter_ueberwiegend_klar", "sun", "moon"),
+    2: ("wetter_teils_bewoelkt", "cloud", "cloud"),
+    3: ("wetter_bedeckt", "cloud", "cloud"),
+    45: ("wetter_nebel", "cloud-fog", "cloud-fog"),
+    48: ("wetter_reifnebel", "cloud-fog", "cloud-fog"),
+    51: ("wetter_niesel_leicht", "cloud-rain", "cloud-rain"),
+    53: ("wetter_niesel", "cloud-rain", "cloud-rain"),
+    55: ("wetter_niesel_stark", "cloud-rain", "cloud-rain"),
+    56: ("wetter_niesel_gefrierend", "cloud-snow", "cloud-snow"),
+    57: ("wetter_niesel_gefrierend", "cloud-snow", "cloud-snow"),
+    61: ("wetter_regen_leicht", "cloud-rain", "cloud-rain"),
+    63: ("wetter_regen", "cloud-rain", "cloud-rain"),
+    65: ("wetter_regen_stark", "cloud-rain", "cloud-rain"),
+    66: ("wetter_regen_gefrierend", "cloud-snow", "cloud-snow"),
+    67: ("wetter_regen_gefrierend", "cloud-snow", "cloud-snow"),
+    71: ("wetter_schnee_leicht", "cloud-snow", "cloud-snow"),
+    73: ("wetter_schnee", "cloud-snow", "cloud-snow"),
+    75: ("wetter_schnee_stark", "cloud-snow", "cloud-snow"),
+    77: ("wetter_schneegriesel", "snowflake", "snowflake"),
+    80: ("wetter_regenschauer", "cloud-rain", "cloud-rain"),
+    81: ("wetter_regenschauer", "cloud-rain", "cloud-rain"),
+    82: ("wetter_schauer_stark", "cloud-rain", "cloud-rain"),
+    85: ("wetter_schneeschauer", "cloud-snow", "cloud-snow"),
+    86: ("wetter_schneeschauer", "cloud-snow", "cloud-snow"),
+    95: ("wetter_gewitter", "cloud-storm", "cloud-storm"),
+    96: ("wetter_gewitter_hagel", "cloud-bolt", "cloud-bolt"),
+    99: ("wetter_gewitter_hagel", "cloud-bolt", "cloud-bolt"),
 }
 
 
-def describe(code: int | None, language: str = "de") -> str:
+def describe(code: int | None) -> str:
     entry = WMO.get(int(code) if code is not None else -1)
     if entry is None:
-        return "—"
-    return entry[0] if language.startswith("de") else entry[1]
+        return "---"
+    return _t(entry[0])
 
 
 def icon_for(code: int | None, is_day: bool = True) -> str:
     entry = WMO.get(int(code) if code is not None else -1)
     if entry is None:
         return "cloud-off"
-    return entry[2] if is_day else entry[3]
+    return entry[1] if is_day else entry[2]
 
 
 # --------------------------------------------------------------------------
 # Luftqualität
 # --------------------------------------------------------------------------
 
-#: Europäischer AQI: (Obergrenze, Bezeichnung de, en, Farbe)
+#: Europäischer AQI: (Obergrenze, Schlüssel der Bezeichnung, Farbe)
 AQI_BANDS = [
-    (20, "Sehr gut", "Very good", "#4ade80"),
-    (40, "Gut", "Good", "#a3e635"),
-    (60, "Mittel", "Moderate", "#facc15"),
-    (80, "Schlecht", "Poor", "#fb923c"),
-    (100, "Sehr schlecht", "Very poor", "#ef4444"),
-    (10_000, "Extrem schlecht", "Extremely poor", "#a21caf"),
+    (20, "luft_sehr_gut", "#4ade80"),
+    (40, "luft_gut", "#a3e635"),
+    (60, "luft_mittel", "#facc15"),
+    (80, "luft_schlecht", "#fb923c"),
+    (100, "luft_sehr_schlecht", "#ef4444"),
+    (10_000, "luft_extrem_schlecht", "#a21caf"),
 ]
 
 
-def aqi_band(value: float | None, language: str = "de") -> tuple[str, str]:
-    """Liefert (Bezeichnung, Farbe) zu einem europäischen AQI-Wert."""
+#: US-AQI der EPA: (Obergrenze, Schlüssel der Bezeichnung, Farbe)
+AQI_BANDS_US = [
+    (50, "luft_us_gut", "#4ade80"),
+    (100, "luft_us_maessig", "#facc15"),
+    (150, "luft_us_empfindlich", "#fb923c"),
+    (200, "luft_us_ungesund", "#ef4444"),
+    (300, "luft_us_sehr_ungesund", "#a21caf"),
+    (10_000, "luft_us_gefaehrlich", "#7f1d1d"),
+]
+
+
+def aqi_band(value: float | None, scale: str = "eu") -> tuple[str, str]:
+    """Liefert (Bezeichnung, Farbe) zu einem AQI-Wert der gewählten Skala."""
     if value is None:
-        return ("—", "#6b7280")
-    for limit, label_de, label_en, color in AQI_BANDS:
+        return ("---", "#6b7280")
+    for limit, label, color in (AQI_BANDS_US if scale == "us" else AQI_BANDS):
         if value <= limit:
-            return (label_de if language.startswith("de") else label_en, color)
-    return ("—", "#6b7280")
+            return (_t(label), color)
+    return ("---", "#6b7280")
 
 
 # --------------------------------------------------------------------------
@@ -311,8 +330,8 @@ class OpenMeteo:
                 return json.loads(response.read())
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")[:200]
-            raise WeatherError(f"Wetterdienst antwortet {exc.code}: {detail}") from exc
+            raise WeatherError(_t("fehler_http", code=exc.code, detail=detail)) from exc
         except urllib.error.URLError as exc:
-            raise WeatherError(f"Wetterdienst nicht erreichbar: {exc.reason}") from exc
+            raise WeatherError(_t("fehler_netz", grund=exc.reason)) from exc
         except (TimeoutError, json.JSONDecodeError) as exc:
-            raise WeatherError(f"Antwort unbrauchbar: {exc}") from exc
+            raise WeatherError(_t("fehler_antwort", fehler=exc)) from exc

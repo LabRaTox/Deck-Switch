@@ -4,18 +4,19 @@
     "de": "Twitch",
     "en": "Twitch"
   },
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "min_app_version": "1.4.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "streaming",
   "accent": "#9146ff",
   "description": {
-    "de": "Stream steuern, Chat moderieren, Umfragen starten und sehen, wie viele zuschauen — über Twitchs Helix-API.",
-    "en": "Run your stream, moderate chat, start polls and see who is watching — through Twitch's Helix API."
+    "de": "Stream steuern, Chat moderieren, Umfragen starten und sehen, wie viele zuschauen. Das Plugin nutzt Twitchs Helix-API.",
+    "en": "Run your stream, moderate chat, start polls and see who is watching. The plugin uses Twitch's Helix API."
   },
   "changelog": {
-    "de": "Erste Fassung: Titel und Kategorie, Werbung, Marker, Clip, Raid, Chat und Moderation, Umfragen und Vorhersagen, dazu Anzeigen für Zuschauer, Follower und Laufzeit.",
-    "en": "First release: title and category, commercials, markers, clips, raids, chat and moderation, polls and predictions, plus displays for viewers, followers and uptime."
+    "de": "Die Laufzeit des Streams zählt sekundengenau statt in 20-Sekunden-Schritten. Bei einem Fehler fragt das Plugin nicht mehr jede Sekunde neu nach, und ohne sichtbare Twitch-Taste fragt es gar nicht. Zwei gleichzeitige Erneuerungen der Anmeldung schlagen nicht mehr fehl. Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "The stream uptime counts by the second instead of in 20 second steps. After an error the plugin no longer asks again every second, and without a visible Twitch key it does not ask at all. Two renewals of the sign-in at the same time no longer fail. The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
@@ -303,7 +304,7 @@
           },
           "default": false,
           "help": {
-            "de": "Berücksichtigt die Streamverzögerung — der Clip trifft dann das, was die Zuschauer gerade sehen.",
+            "de": "Berücksichtigt die Streamverzögerung. Der Clip trifft dann das, was die Zuschauer gerade sehen.",
             "en": "Accounts for the stream delay, so the clip matches what viewers just saw."
           }
         }
@@ -748,8 +749,8 @@
           "min": 1,
           "max": 10,
           "help": {
-            "de": "Die wievielte Antwort gewonnen hat — zum Auflösen einer gesperrten Vorhersage.",
-            "en": "Which outcome won, counted from one — used to resolve a locked prediction."
+            "de": "Die wievielte Antwort gewonnen hat, gezählt ab eins. Damit wird eine gesperrte Vorhersage aufgelöst.",
+            "en": "Which outcome won, counted from one. Used to resolve a locked prediction."
           }
         }
       ]

@@ -4,7 +4,8 @@
     "de": "YouTube",
     "en": "YouTube"
   },
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "min_app_version": "1.4.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "streaming",
@@ -15,8 +16,8 @@
     "en": "Run your livestream from the deck: watch the viewer count, post a chat message, insert an ad, start and end the stream."
   },
   "changelog": {
-    "de": "Erste Fassung: Zuschauer, Chatnachricht, Werbung, Dashboard öffnen, Stream starten und beenden.",
-    "en": "First release: viewers, chat message, ad, open dashboard, start and stop the stream."
+    "de": "Bei einem Fehler fragt das Plugin nicht mehr jede Sekunde neu nach. Das schont das Tageskontingent von YouTube. Gefragt wird nur, solange eine Taste zu sehen ist. Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "After an error the plugin no longer asks again every second. That spares YouTube's daily quota. It only asks while a key is visible. The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",
@@ -111,8 +112,8 @@
         "en": "Chat message"
       },
       "description": {
-        "de": "Schickt einen vorbereiteten Text in den Live-Chat — für Links, Sponsoren, Hinweise.",
-        "en": "Posts a prepared text to the live chat — for links, sponsors, notices."
+        "de": "Schickt einen vorbereiteten Text in den Live-Chat, etwa Links, Sponsoren oder Hinweise.",
+        "en": "Posts a prepared text to the live chat, such as links, sponsors or notices."
       },
       "inputs": [
         "key"
@@ -135,8 +136,8 @@
             "en": "What to send"
           },
           "help": {
-            "de": "Höchstens 200 Zeichen — mehr nimmt YouTube nicht an.",
-            "en": "At most 200 characters — YouTube does not accept more."
+            "de": "Höchstens 200 Zeichen. Mehr nimmt YouTube nicht an.",
+            "en": "At most 200 characters. YouTube does not accept more."
           }
         }
       ]
@@ -193,8 +194,8 @@
         "en": "Open dashboard"
       },
       "description": {
-        "de": "Öffnet die Streamübersicht in YouTube Studio — bei laufender Sendung direkt deren Seite.",
-        "en": "Opens the live dashboard in YouTube Studio — the running broadcast's own page if there is one."
+        "de": "Öffnet die Streamübersicht in YouTube Studio. Läuft eine Sendung, öffnet sich direkt deren Seite.",
+        "en": "Opens the live dashboard in YouTube Studio, or the running broadcast's own page if there is one."
       },
       "inputs": [
         "key"

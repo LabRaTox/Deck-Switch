@@ -1,7 +1,8 @@
 {
   "id": "obs",
   "name": "OBS",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "min_app_version": "1.4.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "streaming",
@@ -11,8 +12,8 @@
     "en": "Controls OBS Studio via obs-websocket: scenes, stream, recording, sources, filters and more."
   },
   "changelog": {
-    "de": "2.0.0 — Nicht mehr fest eingebaut, sondern als Plugin nachinstallierbar. Inhaltlich unverändert: 17 Aktionen von Aufnahme bis virtuelle Kamera.",
-    "en": "2.0.0 — No longer built in; installed as a plugin instead. Unchanged otherwise: 17 actions from recording to virtual camera."
+    "de": "Stürzt OBS ab oder bricht die Verbindung ab, verbindet sich das Plugin wieder. Der Szenen-Dial im Vorschau-Modus geht jetzt Szene für Szene weiter. Die Aufnahmedauer zählt Pausen nicht mehr mit. Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "If OBS crashes or the connection drops, the plugin connects again. The scene dial in preview mode now steps scene by scene. The recording time no longer counts pauses. The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",

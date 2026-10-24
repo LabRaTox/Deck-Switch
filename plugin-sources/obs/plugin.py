@@ -30,6 +30,10 @@ RECONNECT_INTERVAL_S = 5.0
 #: Wie lange eine Erfolgsmeldung ("gespeichert") auf der Taste stehen bleibt.
 FLASH_S = 1.5
 
+#: So lange wird eine Nachfrage, die OBS abgelehnt hat, nicht wiederholt.
+#: Eine umbenannte Quelle soll nicht jede Sekunde eine Anfrage auslösen.
+LAZY_RETRY_S = 30.0
+
 MEDIA_ACTIONS = {
     "restart": "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
     "stop": "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP",
@@ -72,6 +76,11 @@ class ObsPlugin(ActionPlugin):
         self._filter_states: dict[tuple[str, str], bool] = {}
         self._confirm_pending: dict[str, float] = {}
         self._flash_until: dict[str, float] = {}
+        #: Nachfragen, die zuletzt abgelehnt wurden, mit Zeitpunkt.
+        self._lazy_failed: dict[tuple, float] = {}
+        #: Laufzeit der Aufnahme bis zur letzten Pause, in Sekunden.
+        self.record_paused_total = 0.0
+        self.record_paused_at: float | None = None
 
     # ======================================================================
     # Lebenszyklus
@@ -98,6 +107,13 @@ class ObsPlugin(ActionPlugin):
 
     async def _connection_loop(self):
         while True:
+            # Ein abgebrochener Websocket meldet sich nicht von selbst: Die
+            # Bibliothek setzt nur ``identified`` zurück. Ohne diesen Blick
+            # bliebe die Taste nach einem Absturz von OBS auf dem alten Stand.
+            client = self.client
+            if self.connected and client is not None and not client.is_identified():
+                self.log.info("Verbindung zu OBS abgebrochen")
+                self._set_offline()
             if not self.connected:
                 await self._connect()
             await asyncio.sleep(RECONNECT_INTERVAL_S)
@@ -127,11 +143,12 @@ class ObsPlugin(ActionPlugin):
                 with contextlib.suppress(Exception):
                     await client.disconnect()
                 self._set_offline()
-                self.notify_error("OBS: Anmeldung fehlgeschlagen — Passwort prüfen")
+                self.notify_error(self.t("anmeldung_fehlgeschlagen"))
                 return
 
             self.client = client
             self.connected = True
+            self._lazy_failed.clear()
             self._register_events(client)
             await self._refresh_state()
             self.log.info("Mit OBS verbunden (%s:%s)", host, port)
@@ -147,8 +164,17 @@ class ObsPlugin(ActionPlugin):
 
     def _set_offline(self):
         was_connected = self.connected
+        client, self.client = self.client, None
         self.connected = False
-        self.client = None
+        if client is not None:
+            # Sauber trennen, sonst bliebe die alte Verbindung samt ihren
+            # Ereignis-Callbacks neben der neuen bestehen.
+            async def trennen():
+                with contextlib.suppress(Exception):
+                    await client.disconnect()
+
+            with contextlib.suppress(RuntimeError):
+                asyncio.get_running_loop().create_task(trennen())
         if was_connected:
             self.services.runtime.request_redraw()
             self.services.runtime.publish_plugin_status(self.manifest.id)
@@ -157,8 +183,8 @@ class ObsPlugin(ActionPlugin):
         config = self.plugin_config
         target = f"{config.get('host') or '127.0.0.1'}:{config.get('port') or 4455}"
         if self.connected:
-            return {"connected": True, "detail": f"{target} · {len(self.scenes)} Szenen"}
-        return {"connected": False, "detail": f"{target} nicht erreichbar"}
+            return {"connected": True, "detail": self.t("status_verbunden", ziel=target, szenen=len(self.scenes))}
+        return {"connected": False, "detail": self.t("status_nicht_erreichbar", ziel=target)}
 
     # ======================================================================
     # Events
@@ -188,15 +214,23 @@ class ObsPlugin(ActionPlugin):
         async def on_record(data):
             self.recording = bool(data.get("outputActive"))
             state = data.get("outputState", "")
-            if state == "OBS_WEBSOCKET_OUTPUT_PAUSED":
+            now = time.monotonic()
+            if state == "OBS_WEBSOCKET_OUTPUT_PAUSED" and not self.record_paused:
                 self.record_paused = True
+                self.record_paused_at = now
             elif state in ("OBS_WEBSOCKET_OUTPUT_RESUMED", "OBS_WEBSOCKET_OUTPUT_STARTED"):
+                if self.record_paused and self.record_paused_at is not None:
+                    self.record_paused_total += now - self.record_paused_at
                 self.record_paused = False
+                self.record_paused_at = None
             if not self.recording:
                 self.record_paused = False
                 self.record_started_at = None
+                self.record_paused_at = None
+                self.record_paused_total = 0.0
             elif self.record_started_at is None:
-                self.record_started_at = time.monotonic()
+                self.record_started_at = now
+                self.record_paused_total = 0.0
             redraw()
 
         async def on_replay(data):
@@ -246,6 +280,7 @@ class ObsPlugin(ActionPlugin):
         async def on_input_list(_data=None):
             self._mute_states.clear()
             self._media_states.clear()
+            self._lazy_failed.clear()
             redraw()
 
         async def on_exit(_data=None):
@@ -286,11 +321,15 @@ class ObsPlugin(ActionPlugin):
         if record:
             self.recording = bool(record.get("outputActive"))
             self.record_paused = bool(record.get("outputPaused"))
+            # ``outputDuration`` zählt Pausen nicht mit; ab hier rechnet die
+            # Anzeige selbst weiter und zieht spätere Pausen ab.
             self.record_started_at = (
                 time.monotonic() - record.get("outputDuration", 0) / 1000
                 if self.recording
                 else None
             )
+            self.record_paused_total = 0.0
+            self.record_paused_at = time.monotonic() if self.record_paused else None
 
         for request, attribute in (
             ("GetVirtualCamStatus", "virtual_cam"),
@@ -369,11 +408,15 @@ class ObsPlugin(ActionPlugin):
         step = 1 if delta > 0 else -1
 
         if action_id == "scene" and self.scenes:
-            target = _step(self.scenes, self.current_scene, step)
-            request = (
-                "SetCurrentPreviewScene" if ctx.setting("preview", False) else "SetCurrentProgramScene"
-            )
+            preview = bool(ctx.setting("preview", False))
+            # Im Vorschau-Modus von der Vorschau aus weiterzählen, sonst
+            # landet jede Drehung wieder neben der Programmszene.
+            start = (self.preview_scene or self.current_scene) if preview else self.current_scene
+            target = _step(self.scenes, start, step)
+            request = "SetCurrentPreviewScene" if preview else "SetCurrentProgramScene"
             await self._call(request, {"sceneName": target})
+            if preview:
+                self.preview_scene = target
 
         elif action_id == "transition" and self.transitions:
             target = _step(self.transitions, self.current_transition, step)
@@ -387,12 +430,12 @@ class ObsPlugin(ActionPlugin):
         if not self.connected:
             await self._connect()
             if not self.connected:
-                self.notify_info("OBS nicht erreichbar — läuft obs-websocket?")
+                self.notify_info(self.t("nicht_erreichbar"))
                 return
 
         handler = getattr(self, f"_do_{action_id}", None)
         if handler is None:
-            self.notify_error(f"Unbekannte Aktion '{action_id}'")
+            self.notify_error(self.t("unbekannte_aktion", aktion=action_id))
             return
         await handler(settings, ctx)
 
@@ -405,7 +448,7 @@ class ObsPlugin(ActionPlugin):
 
     async def _do_record_pause(self, settings, ctx):
         if not self.recording:
-            self.notify_info("Es läuft keine Aufnahme")
+            self.notify_info(self.t("keine_aufnahme"))
             return
         await self._call("ToggleRecordPause")
 
@@ -419,7 +462,7 @@ class ObsPlugin(ActionPlugin):
 
     async def _do_save_replay(self, settings, ctx):
         if not self.replay_active:
-            self.notify_info("Der Wiedergabepuffer ist nicht aktiv")
+            self.notify_info(self.t("puffer_inaktiv"))
             return
         if await self._call("SaveReplayBuffer") is not None:
             self._flash(ctx)
@@ -427,14 +470,14 @@ class ObsPlugin(ActionPlugin):
     async def _do_scene_collection(self, settings, ctx):
         collection = settings.get("collection")
         if not collection:
-            self.notify_error("Keine Szenensammlung eingestellt")
+            self.notify_error(self.t("keine_sammlung"))
             return
         await self._call("SetCurrentSceneCollection", {"sceneCollectionName": collection})
 
     async def _do_scene(self, settings, ctx):
         scene = settings.get("scene")
         if not scene:
-            self.notify_error("Keine Szene eingestellt")
+            self.notify_error(self.t("keine_szene"))
             return
         request = (
             "SetCurrentPreviewScene" if settings.get("preview") else "SetCurrentProgramScene"
@@ -444,13 +487,13 @@ class ObsPlugin(ActionPlugin):
     async def _do_source(self, settings, ctx):
         source = (settings.get("source") or "").strip()
         if not source:
-            self.notify_error("Keine Quelle eingestellt")
+            self.notify_error(self.t("keine_quelle"))
             return
         scene = (settings.get("scene") or "").strip() or self.current_scene
 
         found = await self._call("GetSceneItemId", {"sceneName": scene, "sourceName": source})
         if not found:
-            self.notify_error(f"Quelle '{source}' nicht in Szene '{scene}'")
+            self.notify_error(self.t("quelle_nicht_in_szene", quelle=source, szene=scene))
             return
         item_id = found.get("sceneItemId")
 
@@ -467,7 +510,7 @@ class ObsPlugin(ActionPlugin):
     async def _do_mute(self, settings, ctx):
         name = (settings.get("input") or "").strip()
         if not name:
-            self.notify_error("Keine Audioquelle eingestellt")
+            self.notify_error(self.t("keine_audioquelle"))
             return
         result = await self._call("ToggleInputMute", {"inputName": name})
         if result is not None:
@@ -484,7 +527,7 @@ class ObsPlugin(ActionPlugin):
     async def _do_media(self, settings, ctx):
         name = (settings.get("input") or "").strip()
         if not name:
-            self.notify_error("Keine Medienquelle eingestellt")
+            self.notify_error(self.t("keine_medienquelle"))
             return
 
         action = settings.get("action") or "play_pause"
@@ -499,7 +542,7 @@ class ObsPlugin(ActionPlugin):
         else:
             request = MEDIA_ACTIONS.get(action)
             if request is None:
-                self.notify_error(f"Unbekannte Medienaktion '{action}'")
+                self.notify_error(self.t("unbekannte_medienaktion", aktion=action))
                 return
 
         await self._call("TriggerMediaInputAction", {"inputName": name, "mediaAction": request})
@@ -512,7 +555,7 @@ class ObsPlugin(ActionPlugin):
 
     async def _do_preview_scene(self, settings, ctx):
         if not self.studio_mode:
-            self.notify_info("Der Studio-Modus ist nicht aktiv")
+            self.notify_info(self.t("studio_inaktiv"))
             return
         await self._call("TriggerStudioModeTransition")
 
@@ -520,14 +563,14 @@ class ObsPlugin(ActionPlugin):
         source = (settings.get("source") or "").strip()
         name = (settings.get("filter") or "").strip()
         if not source or not name:
-            self.notify_error("Quelle und Filter müssen eingestellt sein")
+            self.notify_error(self.t("filter_fehlt"))
             return
 
         state = await self._call(
             "GetSourceFilter", {"sourceName": source, "filterName": name}
         )
         if state is None:
-            self.notify_error(f"Filter '{name}' an '{source}' nicht gefunden")
+            self.notify_error(self.t("filter_nicht_gefunden", filter=name, quelle=source))
             return
         enabled = bool(state.get("filterEnabled"))
         await self._call(
@@ -539,7 +582,7 @@ class ObsPlugin(ActionPlugin):
     async def _do_screenshot(self, settings, ctx):
         source = (settings.get("source") or "").strip() or self.current_scene
         if not source:
-            self.notify_error("Keine Quelle für den Screenshot")
+            self.notify_error(self.t("screenshot_keine_quelle"))
             return
 
         image_format = settings.get("format") or "png"
@@ -549,7 +592,7 @@ class ObsPlugin(ActionPlugin):
         try:
             folder.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            self.notify_error(f"Screenshot-Ordner nicht nutzbar: {exc}")
+            self.notify_error(self.t("screenshot_ordner", fehler=exc))
             return
 
         stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
@@ -563,7 +606,7 @@ class ObsPlugin(ActionPlugin):
             },
         )
         if result is None:
-            self.notify_error("Screenshot fehlgeschlagen — Pfad für OBS erreichbar?")
+            self.notify_error(self.t("screenshot_fehlgeschlagen"))
             return
         self.log.info("Screenshot gespeichert: %s", target)
         self._flash(ctx)
@@ -571,7 +614,7 @@ class ObsPlugin(ActionPlugin):
     async def _do_transition(self, settings, ctx):
         name = (settings.get("transition") or "").strip()
         if not name:
-            self.notify_error("Kein Übergang eingestellt")
+            self.notify_error(self.t("kein_uebergang"))
             return
         await self._call("SetCurrentSceneTransition", {"transitionName": name})
 
@@ -581,7 +624,7 @@ class ObsPlugin(ActionPlugin):
 
     async def _do_chapter_marker(self, settings, ctx):
         if not self.recording:
-            self.notify_info("Kapitelmarken gehen nur während einer Aufnahme")
+            self.notify_info(self.t("kapitel_nur_aufnahme"))
             return
         payload = {}
         name = (settings.get("name") or "").strip()
@@ -589,10 +632,7 @@ class ObsPlugin(ActionPlugin):
             payload["chapterName"] = name
 
         if await self._call("CreateRecordChapter", payload) is None:
-            self.notify_error(
-                "Kapitelmarke abgelehnt — OBS 30.2+ und Hybrid-MP4 als "
-                "Aufnahmeformat nötig."
-            )
+            self.notify_error(self.t("kapitel_abgelehnt"))
             return
         self._flash(ctx)
 
@@ -711,15 +751,15 @@ class ObsPlugin(ActionPlugin):
 
         if action_id == "stream":
             if ctx.scratch.get("confirm_until", 0) > time.monotonic():
-                return "Nochmal?"
+                return self.t("nochmal")
             if self.streaming and ctx.setting("show_time", True):
                 return _duration(self.stream_started_at)
 
         if action_id == "record":
             if ctx.scratch.get("confirm_until", 0) > time.monotonic():
-                return "Nochmal?"
+                return self.t("nochmal")
             if self.recording and ctx.setting("show_time", True):
-                return _duration(self.record_started_at)
+                return _duration(self.record_started_at, self._record_paused_s())
 
         if ctx.appearance.label_text:
             return None
@@ -769,17 +809,37 @@ class ObsPlugin(ActionPlugin):
         if self.connected:
             await self._poll_lazy_state(action_id, settings, ctx)
 
+    def _record_paused_s(self) -> float:
+        """Wie lange die laufende Aufnahme bisher pausiert war."""
+        paused = self.record_paused_total
+        if self.record_paused and self.record_paused_at is not None:
+            paused += time.monotonic() - self.record_paused_at
+        return paused
+
+    def _lazy_due(self, key: tuple) -> bool:
+        """Darf diese Nachfrage wieder gestellt werden?"""
+        failed = self._lazy_failed.get(key)
+        return failed is None or time.monotonic() - failed >= LAZY_RETRY_S
+
+    def _lazy_result(self, key: tuple, ok: bool) -> None:
+        if ok:
+            self._lazy_failed.pop(key, None)
+        else:
+            self._lazy_failed[key] = time.monotonic()
+
     async def _poll_lazy_state(self, action_id, settings, ctx):
         """Fragt Zustände nach, für die es kein Event beim Verbinden gibt."""
         try:
             if action_id == "source":
                 scene = (settings.get("scene") or "").strip() or self.current_scene
                 source = (settings.get("source") or "").strip()
-                if not source or (scene, source) in self._item_states:
+                key = ("source", scene, source)
+                if not source or (scene, source) in self._item_states or not self._lazy_due(key):
                     return
                 found = await self._call(
                     "GetSceneItemId", {"sceneName": scene, "sourceName": source}
                 )
+                self._lazy_result(key, bool(found))
                 if not found:
                     return
                 state = await self._call(
@@ -792,18 +852,22 @@ class ObsPlugin(ActionPlugin):
 
             elif action_id == "mute":
                 name = (settings.get("input") or "").strip()
-                if not name or name in self._mute_states:
+                key = ("mute", name)
+                if not name or name in self._mute_states or not self._lazy_due(key):
                     return
                 state = await self._call("GetInputMute", {"inputName": name})
+                self._lazy_result(key, state is not None)
                 if state is not None:
                     self._mute_states[name] = bool(state.get("inputMuted"))
                     ctx.request_redraw()
 
             elif action_id == "media":
                 name = (settings.get("input") or "").strip()
-                if not name:
+                key = ("media", name)
+                if not name or not self._lazy_due(key):
                     return
                 status = await self._call("GetMediaInputStatus", {"inputName": name})
+                self._lazy_result(key, status is not None)
                 if status is not None:
                     new = status.get("mediaState", "")
                     if self._media_states.get(name) != new:
@@ -813,11 +877,14 @@ class ObsPlugin(ActionPlugin):
             elif action_id == "filter":
                 source = (settings.get("source") or "").strip()
                 name = (settings.get("filter") or "").strip()
-                if not source or not name or (source, name) in self._filter_states:
+                key = ("filter", source, name)
+                if (not source or not name or (source, name) in self._filter_states
+                        or not self._lazy_due(key)):
                     return
                 state = await self._call(
                     "GetSourceFilter", {"sourceName": source, "filterName": name}
                 )
+                self._lazy_result(key, state is not None)
                 if state is not None:
                     self._filter_states[(source, name)] = bool(state.get("filterEnabled"))
                     ctx.request_redraw()
@@ -876,7 +943,7 @@ class ObsPlugin(ActionPlugin):
             await self._disconnect()
             await self._connect()
             return {"connected": self.connected}
-        raise NotImplementedError(f"OBS kennt kein Kommando '{command}'")
+        raise NotImplementedError(self.t("unbekanntes_kommando", kommando=command))
 
     def get_dynamic_options(self, source, context=None):
         context = context or {}
@@ -985,10 +1052,10 @@ class ObsPlugin(ActionPlugin):
 # --------------------------------------------------------------------------
 
 
-def _duration(started_at: float | None) -> str:
+def _duration(started_at: float | None, paused_s: float = 0.0) -> str:
     if started_at is None:
         return "00:00"
-    seconds = int(time.monotonic() - started_at)
+    seconds = max(0, int(time.monotonic() - started_at - paused_s))
     hours, rest = divmod(seconds, 3600)
     minutes, secs = divmod(rest, 60)
     if hours:

@@ -59,17 +59,6 @@ RAID_COUNTDOWN_S = 90.0
 FARBE_LIVE = "#22c55e"
 FARBE_OFFLINE = "#6b7280"
 
-#: Die paar Wörter auf den Kacheln, in beiden Sprachen der Oberfläche.
-WOERTER = {
-    "de": {"offline": "offline", "live": "live", "viewers": "Zuschauer",
-           "followers": "Follower", "uptime": "Laufzeit", "no_login": "nicht verbunden",
-           "loading": "…", "running": "läuft", "locked": "gesperrt", "none": "keine"},
-    "en": {"offline": "offline", "live": "live", "viewers": "viewers",
-           "followers": "followers", "uptime": "uptime", "no_login": "not connected",
-           "loading": "…", "running": "running", "locked": "locked", "none": "none"},
-}
-
-
 def _lade_token() -> dict[str, Any]:
     try:
         return json.loads(TOKEN_DATEI.read_text(encoding="utf-8"))
@@ -133,7 +122,7 @@ class TwitchPlugin(ActionPlugin):
         # dort nach einem Neustart eine Anmeldung, die Twitch längst
         # verworfen hat.
         self.api.beim_aendern = lambda anmeldung: _schreib_token(anmeldung.als_dict())
-        self.fehler = ""
+        self._fehler = ""
 
         # Gespiegelter Zustand — nur daraus zeichnet render().
         self.stream: dict[str, Any] | None = None
@@ -143,6 +132,12 @@ class TwitchPlugin(ActionPlugin):
         self.umfrage: dict[str, Any] | None = None
         self.vorhersage: dict[str, Any] | None = None
         self.stand_geholt = 0.0
+        #: Zuletzt gemeldeter Fehler beim Auffrischen; derselbe kommt nicht
+        #: bei jeder Runde erneut in die Fehlerleiste.
+        self._letzter_fehler = ""
+        #: Wann zuletzt eine Twitch-Kachel einen Tick bekam. Ohne sichtbare
+        #: Kachel fragt der Hintergrund nicht.
+        self._gesehen = 0.0
 
         self._raid_bis = 0.0
         self._rueckfrage: dict[str, float] = {}
@@ -176,21 +171,28 @@ class TwitchPlugin(ActionPlugin):
         # Kann nur passieren, wenn jemand das Plugin ohne Kennung baut —
         # dann aber sofort und mit klarer Ansage, statt beim ersten
         # Tastendruck.
-        self.fehler = "" if self.api.client_id else (
-            "Diesem Plugin fehlt die Client-ID der Twitch-App. So gebaut "
-            "kann es sich nicht anmelden."
-        )
+        self.fehler = "" if self.api.client_id else "plugin.client_id_fehlt"
+
+    @property
+    def fehler(self) -> str:
+        """Warum das Plugin nicht arbeiten kann, in der aktuellen Sprache."""
+        return self.t(self._fehler) if self._fehler else ""
+
+    @fehler.setter
+    def fehler(self, schluessel: str) -> None:
+        self._fehler = schluessel
 
     def get_status(self) -> dict[str, Any] | None:
         if self.fehler:
             return {"connected": False, "detail": self.fehler}
         if not self.api.angemeldet:
-            return {"connected": False, "detail": "nicht mit Twitch verbunden"}
+            return {"connected": False, "detail": self.t("status.nicht_verbunden")}
         name = self.api.anmeldung.anzeigename or self.api.anmeldung.login
         if self.stream:
             zuschauer = int(self.stream.get("viewer_count") or 0)
-            return {"connected": True, "detail": f"{name} — live, {zuschauer} Zuschauer"}
-        return {"connected": True, "detail": f"{name} — offline"}
+            detail = self.t("status.live", name=name, zuschauer=zuschauer)
+            return {"connected": True, "detail": detail}
+        return {"connected": True, "detail": self.t("status.offline", name=name)}
 
     # -- Der Hintergrund ---------------------------------------------------
 
@@ -199,6 +201,8 @@ class TwitchPlugin(ActionPlugin):
         while True:
             await asyncio.sleep(AUFFRISCHEN_S)
             if not self.api.angemeldet:
+                continue
+            if time.monotonic() - self._gesehen > 2 * AUFFRISCHEN_S:
                 continue
             try:
                 await self._hole_stand()
@@ -220,14 +224,21 @@ class TwitchPlugin(ActionPlugin):
                 ergebnis["vorhersage"] = self._aktive_vorhersage()
                 return ergebnis
 
+            # Auch ein Fehlschlag zählt als Versuch: Sonst fragte jeder Tick
+            # sofort wieder nach, solange Twitch nicht erreichbar ist.
+            self.stand_geholt = time.monotonic()
             try:
                 stand = await asyncio.to_thread(arbeit)
             except NichtAngemeldet:
                 return
             except TwitchError as exc:
-                self.notify_error(f"Twitch: {exc}")
+                meldung = f"Twitch: {exc}"
+                if meldung != self._letzter_fehler:
+                    self._letzter_fehler = meldung
+                    self.notify_error(meldung)
                 return
 
+            self._letzter_fehler = ""
             self.stream = stand["stream"]
             self.kanal = stand["kanal"]
             self.follower = stand["follower"]
@@ -273,7 +284,7 @@ class TwitchPlugin(ActionPlugin):
             _loesche_token()
             self._leere_spiegel()
             return {"angemeldet": False}
-        raise NotImplementedError(f"Twitch kennt kein Kommando '{command}'")
+        raise NotImplementedError(self.t("gui.unbekanntes_kommando", command=command))
 
     async def _verbinden(self) -> dict[str, Any]:
         daten = await asyncio.to_thread(self.api.geraetecode)
@@ -294,7 +305,7 @@ class TwitchPlugin(ActionPlugin):
             return {"angemeldet": self.api.angemeldet, "wartet": False}
         if time.monotonic() > laufend["endet"]:
             self._laufende_anmeldung = {}
-            raise TwitchError("Der Code ist abgelaufen — bitte neu anfangen")
+            raise TwitchError(self.t("anmeldung.code_abgelaufen"))
 
         anmeldung = await asyncio.to_thread(
             self.api.code_einloesen, laufend["device_code"]
@@ -356,13 +367,13 @@ class TwitchPlugin(ActionPlugin):
             self.notify_error(self.fehler)
             return
         if not self.api.angemeldet:
-            self.notify_error("Für Twitch ist niemand verbunden — Plugin-Einstellungen")
+            self.notify_error(self.t("aktion.nicht_verbunden"))
             return
 
         # Was sich nicht zurücknehmen lässt, fragt einmal nach: Der erste
         # Druck bewaffnet, der zweite löst aus. Ohne Antwort verfällt es.
         if settings.get("confirm") and not self._bestaetigt(ctx.key):
-            self.notify_info("Noch einmal drücken zum Auslösen")
+            self.notify_info(self.t("aktion.nochmal_druecken"))
             ctx.request_redraw()
             return
 
@@ -395,7 +406,7 @@ class TwitchPlugin(ActionPlugin):
             if kategorie:
                 rumpf["game_id"] = self._kategorie_id(kategorie)
             if not rumpf:
-                raise TwitchError("Für diese Taste ist kein Titel eingetragen")
+                raise TwitchError(self.t("aktion.kein_titel"))
             self.api.helix("PATCH", "/channels", abfrage={"broadcaster_id": ich},
                            rumpf=rumpf)
             self.api.vergiss("kanal")
@@ -403,7 +414,7 @@ class TwitchPlugin(ActionPlugin):
         elif action_id == "category":
             name = str(settings.get("category") or "").strip()
             if not name:
-                raise TwitchError("Für diese Taste ist keine Kategorie eingetragen")
+                raise TwitchError(self.t("aktion.keine_kategorie"))
             self.api.helix("PATCH", "/channels", abfrage={"broadcaster_id": ich},
                            rumpf={"game_id": self._kategorie_id(name)})
             self.api.vergiss("kanal")
@@ -441,7 +452,7 @@ class TwitchPlugin(ActionPlugin):
             else:
                 ziel = str(settings.get("channel") or "").strip()
                 if not ziel:
-                    raise TwitchError("Für diese Taste ist kein Kanal eingetragen")
+                    raise TwitchError(self.t("aktion.kein_kanal"))
                 self.api.helix("POST", "/raids", abfrage={
                     "from_broadcaster_id": ich,
                     "to_broadcaster_id": self.api.benutzer_id(ziel),
@@ -451,7 +462,7 @@ class TwitchPlugin(ActionPlugin):
         elif action_id == "chat":
             text = str(settings.get("message") or "").strip()
             if not text:
-                raise TwitchError("Für diese Taste ist keine Nachricht eingetragen")
+                raise TwitchError(self.t("aktion.keine_nachricht"))
             self.api.helix("POST", "/chat/messages", rumpf={
                 "broadcaster_id": ich, "sender_id": ich, "message": text[:500],
             })
@@ -467,7 +478,7 @@ class TwitchPlugin(ActionPlugin):
         elif action_id == "shoutout":
             ziel = str(settings.get("channel") or "").strip()
             if not ziel:
-                raise TwitchError("Für diese Taste ist kein Kanal eingetragen")
+                raise TwitchError(self.t("aktion.kein_kanal"))
             self.api.helix("POST", "/chat/shoutouts", abfrage={
                 "from_broadcaster_id": ich,
                 "to_broadcaster_id": self.api.benutzer_id(ziel),
@@ -490,7 +501,7 @@ class TwitchPlugin(ActionPlugin):
         genau = next((t for t in treffer if t["name"].lower() == name.lower()), None)
         gewaehlt = genau or (treffer[0] if treffer else None)
         if gewaehlt is None:
-            raise TwitchError(f"Kategorie '{name}' gibt es bei Twitch nicht")
+            raise TwitchError(self.t("aktion.kategorie_unbekannt", name=name))
         return str(gewaehlt["id"])
 
     def _chatmodus(self, settings: dict[str, Any], ich: str) -> None:
@@ -526,7 +537,7 @@ class TwitchPlugin(ActionPlugin):
         frage = str(settings.get("question") or "").strip()
         antworten = _teile(settings.get("choices"))
         if not frage or len(antworten) < 2:
-            raise TwitchError("Es braucht eine Frage und mindestens zwei Antworten")
+            raise TwitchError(self.t("aktion.frage_und_antworten"))
         self.api.helix("POST", "/polls", rumpf={
             "broadcaster_id": ich,
             "title": frage[:60],
@@ -546,7 +557,7 @@ class TwitchPlugin(ActionPlugin):
             nummer = max(1, int(settings.get("winner") or 1))
             if nummer > len(ergebnisse):
                 raise TwitchError(
-                    f"Diese Vorhersage hat nur {len(ergebnisse)} Antworten"
+                    self.t("aktion.zu_wenig_antworten", anzahl=len(ergebnisse))
                 )
             self.api.helix("PATCH", "/predictions", rumpf={
                 "broadcaster_id": ich, "id": laufend["id"], "status": "RESOLVED",
@@ -557,7 +568,7 @@ class TwitchPlugin(ActionPlugin):
         frage = str(settings.get("question") or "").strip()
         antworten = _teile(settings.get("choices"))
         if not frage or len(antworten) < 2:
-            raise TwitchError("Es braucht eine Frage und mindestens zwei Antworten")
+            raise TwitchError(self.t("aktion.frage_und_antworten"))
         self.api.helix("POST", "/predictions", rumpf={
             "broadcaster_id": ich,
             "title": frage[:45],
@@ -569,19 +580,22 @@ class TwitchPlugin(ActionPlugin):
 
     async def on_tick(self, action_id, settings, ctx):
         """Sichtbare Anzeigen halten den Spiegel frisch."""
+        self._gesehen = time.monotonic()
+        # Die Laufzeit zählt jede Sekunde, der Spiegel kommt nur alle 20 s.
+        if action_id == "status" and self.stream and settings.get("show") == "uptime":
+            ctx.request_redraw()
+        # Ein abgelaufener Raid soll nicht bis zur nächsten Runde „läuft" zeigen.
+        if action_id == "raid":
+            laeuft = time.monotonic() < self._raid_bis
+            if ctx.scratch.get("raid") != laeuft:
+                ctx.scratch["raid"] = laeuft
+                ctx.request_redraw()
         if action_id not in ("status", "followers", "poll", "prediction", "chat_mode"):
             return
         if not self.api.angemeldet:
             return
         if time.monotonic() - self.stand_geholt >= AUFFRISCHEN_S:
             await self._hole_stand()
-
-    def _wort(self, name: str) -> str:
-        try:
-            sprache = self.services.config.app.language
-        except AttributeError:
-            sprache = "de"
-        return WOERTER.get(sprache, WOERTER["de"]).get(name, name)
 
     def get_state(self, action_id, settings, ctx):
         if action_id == "status":
@@ -639,27 +653,27 @@ class TwitchPlugin(ActionPlugin):
         breite, hoehe = ctx.size
 
         if not self.api.angemeldet:
-            gross, klein = "—", self._wort("no_login")
+            gross, klein = "---", self.t("kachel.nicht_verbunden")
         elif action_id == "followers":
-            gross, klein = _zahl(self.follower), self._wort("followers")
+            gross, klein = _zahl(self.follower), self.t("kachel.follower")
         elif not live:
-            gross, klein = self._wort("offline"), ""
+            gross, klein = self.t("kachel.offline"), ""
         else:
             was = str(settings.get("show") or "viewers")
             if was == "uptime":
-                gross, klein = _dauer(self._laufzeit()), self._wort("uptime")
+                gross, klein = _dauer(self._laufzeit()), self.t("kachel.laufzeit")
             elif was == "followers":
-                gross, klein = _zahl(self.follower), self._wort("followers")
+                gross, klein = _zahl(self.follower), self.t("kachel.follower")
             else:
                 gross = _zahl(int(self.stream.get("viewer_count") or 0))
-                klein = self._wort("viewers")
+                klein = self.t("kachel.zuschauer")
 
         beschriftung = ctx.appearance.label_text or ""
         if ctx.input_type == "dial":
             render.draw_text_at(bild, beschriftung or "Twitch", x=10, y=8, size=13,
                                 color="#c7c7d1", max_width=breite - 70)
             if self.api.angemeldet:
-                render.draw_text_at(bild, self._wort("live") if live else self._wort("offline"),
+                render.draw_text_at(bild, self.t("kachel.live") if live else self.t("kachel.offline"),
                                     x=breite - 10, y=8, size=13, color=farbe, align="right")
             render.draw_text_at(bild, gross, x=10, y=30, size=38, bold=True,
                                 color=ctx.appearance.label_color)

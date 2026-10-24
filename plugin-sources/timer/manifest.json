@@ -4,7 +4,8 @@
     "de": "Timer",
     "en": "Timer"
   },
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "min_app_version": "1.4.0",
   "type": "action",
   "author": "LabRaTox",
   "category": "productivity",
@@ -14,8 +15,8 @@
     "en": "Countdown, stopwatch and alarm clock on keys and dials. Set times by typing or by turning a dial; it rings when the time is up."
   },
   "changelog": {
-    "de": "Erste Fassung: Countdown, Stoppuhr und Wecker, mit mitgelieferter Klingel.",
-    "en": "First release: countdown, stopwatch and alarm clock, with a bundled bell."
+    "de": "Ein Wecker klingelt nach einem Neustart auch dann, wenn seine Seite gerade nicht zu sehen ist. Restzeit und Balken des Weckers laufen wieder mit. Die Texte des Plugins folgen jetzt der eingestellten Sprache. Braucht DECK//SWITCH 1.4.0 oder neuer.",
+    "en": "An alarm rings after a restart even when its page is not shown. The alarm's remaining time and bar keep moving again. The plugin's texts now follow the language setting. Needs DECK//SWITCH 1.4.0 or newer."
   },
   "license": "MIT",
   "support": "https://github.com/LabRaTox/Deck-Switch",

@@ -77,6 +77,9 @@ class MprisPlayer:
         self.state = PlayerState()
         self.bus: MessageBus | None = None
         self._bus_name: str | None = None
+        #: Eindeutiger Busname (``:1.42``) des Players. Signale tragen nur
+        #: diesen als Absender, nie ``org.mpris.MediaPlayer2.spotify``.
+        self._owner: str | None = None
         self._on_change: Callable[[], None] | None = None
         self._lock = asyncio.Lock()
 
@@ -100,6 +103,8 @@ class MprisPlayer:
 
             found = await self._find_player()
             if not found:
+                self._bus_name = None
+                self._owner = None
                 if self.state.available:
                     self.state = PlayerState()
                     self._notify()
@@ -107,7 +112,10 @@ class MprisPlayer:
 
             if self._bus_name != found:
                 self._bus_name = found
+                # Anderer Player, anderer Stand: nichts vom vorigen behalten.
+                self.state = PlayerState()
                 log.info("MPRIS-Player gefunden: %s", found)
+            self._owner = await self._name_owner(found)
 
             await self.refresh()
             return True
@@ -115,6 +123,7 @@ class MprisPlayer:
     async def close(self) -> None:
         bus, self.bus = self.bus, None
         self._bus_name = None
+        self._owner = None
         if bus is not None:
             with contextlib.suppress(Exception):
                 bus.disconnect()
@@ -134,6 +143,17 @@ class MprisPlayer:
             if wanted in name.lower():
                 return name
         return candidates[0] if (candidates and wanted in ("", "any")) else None
+
+    async def _name_owner(self, name: str) -> str | None:
+        reply = await self._send(
+            destination="org.freedesktop.DBus",
+            path="/org/freedesktop/DBus",
+            interface="org.freedesktop.DBus",
+            member="GetNameOwner",
+            signature="s",
+            body=[name],
+        )
+        return str(reply.body[0]) if reply and reply.body else None
 
     async def _list_names(self) -> list[str]:
         reply = await self._send(
@@ -173,14 +193,16 @@ class MprisPlayer:
 
         if message.member != "PropertiesChanged":
             return
-        if self._bus_name and message.sender not in (self._bus_name, None):
-            # Auch ohne Absenderprüfung wäre es harmlos, aber so bleiben
-            # fremde Player (Browser, Videoplayer) außen vor.
-            pass
+        # Nur der eigene Player zählt. Ohne diese Prüfung landeten Titel und
+        # Wiedergabestand eines Browsers oder Videoplayers auf der Taste.
+        if self._owner is None or message.sender != self._owner:
+            return
 
         try:
-            _iface, changed, _invalidated = message.body
+            iface, changed, _invalidated = message.body
         except (ValueError, TypeError):
+            return
+        if iface != PLAYER_IFACE:
             return
         self._apply({k: v.value for k, v in changed.items()})
         self._notify()

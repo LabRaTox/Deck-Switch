@@ -11,7 +11,8 @@ Ablauf einer Sitzung:
   3. Code gegen ein Access-Token tauschen (dafür ist das Client-Secret nötig)
   4. ``AUTHENTICATE`` mit dem Token → ab jetzt sind die RPC-Kommandos offen
 
-Der Token wird gespeichert, Schritt 2 und 3 passieren also genau einmal.
+Der Token wird gespeichert, Schritt 2 und 3 passieren also genau einmal. Er
+gilt 7 Tage und wird vorher mit dem ``refresh_token`` erneuert, ohne Dialog.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ import struct
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+
+from deckswitch.plugins.base import plugin_text
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +98,7 @@ class DiscordIpc:
         if self.connected:
             return
         if not self.client_id:
-            raise DiscordIpcError("Keine Application-ID hinterlegt")
+            raise DiscordIpcError(_t("ipc.keine_client_id"))
 
         last_error: Exception | None = None
         for path in socket_candidates():
@@ -121,8 +124,7 @@ class DiscordIpc:
             return
 
         raise DiscordIpcError(
-            "Kein Discord-IPC-Socket gefunden — läuft der Discord-Client?"
-            + (f" ({last_error})" if last_error else "")
+            _t("ipc.kein_socket_grund", grund=last_error) if last_error else _t("ipc.kein_socket")
         )
 
     async def close(self) -> None:
@@ -154,7 +156,7 @@ class DiscordIpc:
     async def _send(self, opcode: int, payload: dict) -> None:
         writer = self.writer
         if writer is None:
-            raise DiscordIpcError("Nicht verbunden")
+            raise DiscordIpcError(_t("ipc.nicht_verbunden"))
         data = json.dumps(payload).encode("utf-8")
         async with self._write_lock:
             writer.write(struct.pack("<II", opcode, len(data)) + data)
@@ -180,16 +182,26 @@ class DiscordIpc:
                 if opcode == OP_CLOSE:
                     log.info("Discord hat die Verbindung geschlossen: %s", payload)
                     self.connected = False
+                    self._fail_pending()
                     return
                 self._dispatch(payload)
         except (asyncio.IncompleteReadError, ConnectionResetError):
             log.info("Discord-IPC-Verbindung beendet")
             self.connected = False
+            self._fail_pending()
         except asyncio.CancelledError:
             raise
         except Exception:
             log.exception("Discord-IPC-Leseschleife abgebrochen")
             self.connected = False
+            self._fail_pending()
+
+    def _fail_pending(self) -> None:
+        """Wer noch auf eine Antwort wartet, bekommt keine mehr — sofort Bescheid geben."""
+        pending, self._pending = self._pending, {}
+        for future in pending.values():
+            if not future.done():
+                future.set_exception(DiscordIpcError(_t("ipc.nicht_verbunden")))
 
     def _dispatch(self, payload: dict) -> None:
         event = payload.get("evt")
@@ -207,7 +219,7 @@ class DiscordIpc:
                 if event == "ERROR":
                     data = payload.get("data") or {}
                     future.set_exception(
-                        DiscordIpcError(data.get("message") or "Unbekannter RPC-Fehler")
+                        DiscordIpcError(data.get("message") or _t("ipc.unbekannter_fehler"))
                     )
                 else:
                     future.set_result(payload.get("data") or {})
@@ -229,7 +241,7 @@ class DiscordIpc:
             return await asyncio.wait_for(future, timeout=timeout)
         except asyncio.TimeoutError:
             self._pending.pop(nonce, None)
-            raise DiscordIpcError(f"Zeitüberschreitung bei '{cmd}'") from None
+            raise DiscordIpcError(_t("ipc.zeitueberschreitung", befehl=cmd)) from None
 
     async def subscribe(self, event: str, args: dict | None = None) -> None:
         nonce = uuid.uuid4().hex
@@ -261,22 +273,20 @@ class DiscordIpc:
         )
         code = data.get("code")
         if not code:
-            raise DiscordIpcError("Discord hat keinen Autorisierungs-Code geliefert")
+            raise DiscordIpcError(_t("ipc.kein_code"))
         return code
 
 
 def exchange_code(
     client_id: str, client_secret: str, code: str, redirect_uri: str = DEFAULT_REDIRECT_URI
-) -> str:
-    """Tauscht den Autorisierungs-Code gegen ein Access-Token.
+) -> dict:
+    """Tauscht den Autorisierungs-Code gegen ein Token.
 
-    Blockierend (``urllib``) — vom Aufrufer im Executor auszuführen.
+    Liefert die ganze Antwort: ``access_token``, ``refresh_token`` und
+    ``expires_in`` (Sekunden, bei Discord 7 Tage). Blockierend (``urllib``),
+    vom Aufrufer im Executor auszuführen.
     """
-    import urllib.error
-    import urllib.parse
-    import urllib.request
-
-    body = urllib.parse.urlencode(
+    return _token_request(
         {
             "client_id": client_id,
             "client_secret": client_secret,
@@ -284,11 +294,36 @@ def exchange_code(
             "code": code,
             "redirect_uri": redirect_uri,
         }
-    ).encode()
+    )
+
+
+def refresh_token(client_id: str, client_secret: str, refresh: str) -> dict:
+    """Holt mit dem ``refresh_token`` ein neues Token, ohne Dialog in Discord.
+
+    Die Antwort hat denselben Aufbau wie beim Code-Tausch. Discord gibt dabei
+    jedes Mal ein neues ``refresh_token`` aus, und das alte ist danach
+    ungültig. Wer erneuert, muss das neue also sofort speichern.
+    Blockierend, vom Aufrufer im Executor auszuführen.
+    """
+    return _token_request(
+        {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh,
+        },
+        erneuerung=True,
+    )
+
+
+def _token_request(felder: dict, *, erneuerung: bool = False) -> dict:
+    import urllib.error
+    import urllib.parse
+    import urllib.request
 
     request = urllib.request.Request(
         TOKEN_URL,
-        data=body,
+        data=urllib.parse.urlencode(felder).encode(),
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
             "User-Agent": USER_AGENT,
@@ -300,30 +335,29 @@ def exchange_code(
             payload = json.loads(response.read())
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:300]
+        if erneuerung and exc.code in (400, 401):
+            raise DiscordIpcError(_t("ipc.erneuerung_abgelehnt", detail=detail)) from exc
         raise DiscordIpcError(_explain_token_error(exc.code, detail)) from exc
     except urllib.error.URLError as exc:
-        raise DiscordIpcError(f"Token-Tausch nicht möglich: {exc.reason}") from exc
+        raise DiscordIpcError(_t("ipc.token_nicht_moeglich", grund=exc.reason)) from exc
 
-    token = payload.get("access_token")
-    if not token:
-        raise DiscordIpcError(f"Antwort ohne Token: {payload}")
-    return token
+    if not payload.get("access_token"):
+        raise DiscordIpcError(_t("ipc.antwort_ohne_token", antwort=payload))
+    return payload
 
 
 def _explain_token_error(status: int, detail: str) -> str:
     """Übersetzt die Antwort des Token-Endpunkts in etwas Handhabbares."""
     if "error code: 1010" in detail:
-        return (
-            "Cloudflare hat die Anfrage abgewiesen (fehlender User-Agent). "
-            "Das ist ein Fehler in der App, kein Einrichtungsproblem."
-        )
+        return _t("ipc.token_cloudflare")
     if "invalid_client" in detail:
-        return "Client-Secret stimmt nicht mit der Application-ID überein."
+        return _t("ipc.token_invalid_client")
     if "invalid_grant" in detail:
-        return (
-            "Der Autorisierungs-Code wurde abgelehnt — meist weicht die "
-            "Redirect-URI von der im Developer Portal ab."
-        )
+        return _t("ipc.token_invalid_grant")
     if "invalid_scope" in detail:
-        return "Die angefragten RPC-Berechtigungen wurden abgelehnt."
-    return f"Token-Tausch abgelehnt ({status}): {detail}"
+        return _t("ipc.token_invalid_scope")
+    return _t("ipc.token_abgelehnt", status=status, detail=detail)
+
+
+def _t(schluessel: str, **werte) -> str:
+    return plugin_text(Path(__file__).resolve().parent, "discord", schluessel, werte)

@@ -10,7 +10,9 @@ Einmalige Einrichtung (siehe docs/discord-setup.md):
   3. Beim ersten Verbinden im Discord-Client den Zugriff bestätigen
 
 Das Access-Token landet danach in einer eigenen Datei mit 0600 — nicht in der
-Config, die exportiert und weitergegeben werden kann.
+Config, die exportiert und weitergegeben werden kann. Es gilt 7 Tage. Einen
+Tag vor Ablauf holt das Plugin mit dem ``refresh_token`` ein neues, ohne
+Dialog in Discord.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ import asyncio
 import contextlib
 import json
 import os
+import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -26,11 +29,14 @@ from PIL import Image, ImageDraw
 from deckswitch import paths
 from deckswitch.plugins.base import ActionPlugin
 
-from .ipc import USER_AGENT, DiscordIpc, DiscordIpcError, exchange_code
+from .ipc import USER_AGENT, DiscordIpc, DiscordIpcError, exchange_code, refresh_token
 
 ACCENT = "#5865f2"
 RECONNECT_INTERVAL_S = 8.0
 TOKEN_FILE = paths.CONFIG_DIR / "discord-token.json"
+#: So lange vor Ablauf wird das Token erneuert. Discord stellt es für 7 Tage
+#: aus; ein Tag Vorlauf übersteht auch einen Rechner, der über Nacht aus war.
+REFRESH_BEFORE_S = 24 * 3600
 
 #: Serverlogos liegen im Cache, nicht bei den Nutzerdaten — sie kommen
 #: jederzeit wieder von Discords CDN und dürfen jederzeit weggeräumt werden.
@@ -53,6 +59,9 @@ class DiscordPlugin(ActionPlugin):
         self.authenticated = False
         self._task: asyncio.Task | None = None
         self._connect_lock = asyncio.Lock()
+        #: Discord entwertet ein ``refresh_token``, sobald es benutzt wurde.
+        #: Zwei Erneuerungen gleichzeitig ließen eine davon scheitern.
+        self._refresh_lock = asyncio.Lock()
 
         # Gespiegelter Zustand — render() darf nie auf Netzwerk warten.
         self.muted = False
@@ -94,8 +103,21 @@ class DiscordPlugin(ActionPlugin):
 
     async def _connection_loop(self):
         while True:
+            # Beendet sich Discord, merkt das nur die Leseschleife der
+            # Verbindung. Ohne diesen Blick bliebe das Plugin „angemeldet"
+            # an einem toten Socket und verbände sich nie neu.
+            ipc = self.ipc
+            if self.authenticated and (ipc is None or not ipc.connected):
+                self.log.info("Verbindung zu Discord abgebrochen")
+                self._mark_offline()
+                if ipc is not None:
+                    await ipc.close()
             if not self.authenticated:
                 await self._connect()
+            else:
+                # Die laufende Sitzung braucht kein Token mehr. Der nächste
+                # Verbindungsaufbau aber schon, und der kann nach Wochen kommen.
+                await self._fresh_token((self.plugin_config.get("client_id") or "").strip())
             await asyncio.sleep(RECONNECT_INTERVAL_S)
 
     # -- Verbindung --------------------------------------------------------
@@ -113,12 +135,12 @@ class DiscordPlugin(ActionPlugin):
 
             client_id = (self.plugin_config.get("client_id") or "").strip()
             if not client_id:
-                self.last_error = "Keine Application-ID eingetragen"
+                self.last_error = self.t("kein_client_id")
                 return False
 
-            token = _load_token(client_id)
+            token = await self._fresh_token(client_id)
             if token is None and not interactive:
-                self.last_error = "Noch nicht autorisiert — in den Einstellungen verbinden"
+                self.last_error = self.t("nicht_autorisiert")
                 return False
 
             ipc = DiscordIpc(client_id)
@@ -132,7 +154,18 @@ class DiscordPlugin(ActionPlugin):
             try:
                 if token is None:
                     token = await self._authorize(ipc, client_id)
-                await ipc.authenticate(token)
+                try:
+                    await ipc.authenticate(token["access_token"])
+                except DiscordIpcError:
+                    # Abgelehnt, obwohl die Uhr noch Zeit gibt (etwa nach einem
+                    # Widerruf): einmal erneuern, bevor ein Dialog nötig wird.
+                    if not token.get("refresh_token"):
+                        raise
+                    erneuert = await self._fresh_token(client_id, force=True)
+                    if erneuert is None:
+                        raise
+                    token = erneuert
+                    await ipc.authenticate(token["access_token"])
             except DiscordIpcError as exc:
                 retried = False
                 if token is not None and interactive:
@@ -140,12 +173,12 @@ class DiscordPlugin(ActionPlugin):
                     _clear_token()
                     try:
                         token = await self._authorize(ipc, client_id)
-                        await ipc.authenticate(token)
+                        await ipc.authenticate(token["access_token"])
                         retried = True
                     except DiscordIpcError as retry_exc:
                         exc = retry_exc
                 if not retried:
-                    self.last_error = f"Anmeldung fehlgeschlagen: {exc}"
+                    self.last_error = self.t("anmeldung_fehlgeschlagen", fehler=exc)
                     await ipc.close()
                     self._mark_offline()
                     return False
@@ -160,18 +193,47 @@ class DiscordPlugin(ActionPlugin):
             self.services.runtime.publish_plugin_status(self.manifest.id)
             return True
 
-    async def _authorize(self, ipc: DiscordIpc, client_id: str) -> str:
+    async def _authorize(self, ipc: DiscordIpc, client_id: str) -> dict:
         secret = (self.plugin_config.get("client_secret") or "").strip()
         if not secret:
-            raise DiscordIpcError("Kein Client-Secret eingetragen")
+            raise DiscordIpcError(self.t("kein_client_secret"))
 
         code = await ipc.authorize()
         redirect_uri = self.plugin_config.get("redirect_uri") or "http://localhost"
-        token = await asyncio.get_running_loop().run_in_executor(
+        antwort = await asyncio.get_running_loop().run_in_executor(
             None, exchange_code, client_id, secret, code, redirect_uri
         )
-        _store_token(client_id, token)
-        return token
+        return _store_token(client_id, antwort)
+
+    async def _fresh_token(self, client_id: str, *, force: bool = False) -> dict | None:
+        """Das gespeicherte Token, bei nahem Ablauf vorher erneuert.
+
+        Scheitert die Erneuerung, bleibt das alte Token stehen: Es gilt
+        womöglich noch, und sonst fragt der nächste Verbindungsaufbau nach.
+        """
+        if not client_id:
+            return None
+        async with self._refresh_lock:
+            token = _load_token(client_id)
+            if token is None or not token.get("refresh_token"):
+                return token
+            ablauf = token.get("expires_at") or 0
+            if not force and ablauf - time.time() > REFRESH_BEFORE_S:
+                return token
+            secret = (self.plugin_config.get("client_secret") or "").strip()
+            if not secret:
+                return token
+            try:
+                antwort = await asyncio.get_running_loop().run_in_executor(
+                    None, refresh_token, client_id, secret, token["refresh_token"]
+                )
+            except DiscordIpcError as exc:
+                self.log.warning("Discord-Token ließ sich nicht erneuern: %s", exc)
+                if force:
+                    return None
+                return token
+            self.log.info("Discord-Token erneuert")
+            return _store_token(client_id, antwort)
 
     async def gui_command(self, command, payload):
         if command == "connect":
@@ -182,7 +244,7 @@ class DiscordPlugin(ActionPlugin):
         if command == "forget":
             _clear_token()
             await self.teardown()
-            return {"connected": False, "message": "Autorisierung gelöscht"}
+            return {"connected": False, "message": self.t("autorisierung_geloescht")}
         if command == "status":
             return {
                 "connected": self.authenticated,
@@ -190,7 +252,7 @@ class DiscordPlugin(ActionPlugin):
                 "user": self.ipc.user if self.ipc else None,
                 "channels": len(self.channels),
             }
-        raise NotImplementedError(f"Discord kennt kein Kommando '{command}'")
+        raise NotImplementedError(self.t("unbekanntes_kommando", kommando=command))
 
     async def connect_interactive(self) -> dict:
         """Von der GUI aufgerufen: Verbindung inklusive Zustimmungs-Dialog."""
@@ -211,9 +273,9 @@ class DiscordPlugin(ActionPlugin):
     def get_status(self):
         if self.authenticated:
             user = (self.ipc.user or {}).get("username") if self.ipc else None
-            detail = f"angemeldet als {user}" if user else "verbunden"
+            detail = self.t("status.angemeldet_als", nutzer=user) if user else self.t("status.verbunden")
             return {"connected": True, "detail": detail}
-        return {"connected": False, "detail": self.last_error or "nicht verbunden"}
+        return {"connected": False, "detail": self.last_error or self.t("status.nicht_verbunden")}
 
     # -- Events ------------------------------------------------------------
 
@@ -378,7 +440,7 @@ class DiscordPlugin(ActionPlugin):
 
     async def _activate(self, action_id, settings, ctx):
         if not self.authenticated:
-            self.notify_info(self.last_error or "Discord nicht verbunden")
+            self.notify_info(self.last_error or self.t("discord_nicht_verbunden"))
             return
 
         if action_id == "mute":
@@ -388,7 +450,7 @@ class DiscordPlugin(ActionPlugin):
         elif action_id == "channel":
             channel_id = settings.get("channel_id")
             if not channel_id:
-                self.notify_error("Kein Sprachkanal eingestellt")
+                self.notify_error(self.t("kein_sprachkanal"))
                 return
             await self._command("SELECT_VOICE_CHANNEL", {"channel_id": channel_id, "force": True})
         elif action_id == "leave":
@@ -396,7 +458,7 @@ class DiscordPlugin(ActionPlugin):
         elif action_id == "text_channel":
             channel_id = settings.get("channel_id")
             if not channel_id:
-                self.notify_error("Kein Textkanal eingestellt")
+                self.notify_error(self.t("kein_textkanal"))
                 return
             await self._command("SELECT_TEXT_CHANNEL", {"channel_id": channel_id})
         elif action_id == "input_volume":
@@ -606,22 +668,43 @@ def _download_guild_icon(guild_id: str, url: str) -> Path:
 # --------------------------------------------------------------------------
 
 
-def _load_token(client_id: str) -> str | None:
+def _load_token(client_id: str) -> dict | None:
+    """Das gespeicherte Token als ``access_token``, ``refresh_token``, ``expires_at``.
+
+    Ältere Dateien kennen nur ``access_token``. Ohne ``refresh_token`` lässt
+    sich nichts erneuern; dann bleibt es beim Dialog, sobald es abläuft.
+    """
     try:
         data = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    if data.get("client_id") != client_id:
+    if data.get("client_id") != client_id or not data.get("access_token"):
         return None
-    return data.get("access_token") or None
+    return {
+        "access_token": data["access_token"],
+        "refresh_token": data.get("refresh_token") or "",
+        "expires_at": float(data.get("expires_at") or 0),
+    }
 
 
-def _store_token(client_id: str, token: str) -> None:
+def _store_token(client_id: str, antwort: dict) -> dict:
+    """Legt die Antwort von Discord ab und liefert sie im Format von ``_load_token``."""
+    token = {
+        "access_token": antwort["access_token"],
+        "refresh_token": antwort.get("refresh_token") or "",
+        "expires_at": time.time() + float(antwort.get("expires_in") or 0),
+    }
     TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    TOKEN_FILE.write_text(
-        json.dumps({"client_id": client_id, "access_token": token}), encoding="utf-8"
-    )
-    os.chmod(TOKEN_FILE, 0o600)
+    # Gleich mit 0600 anlegen und dann tauschen: Erst schreiben und danach
+    # die Rechte setzen ließe die Datei kurz für alle lesbar.
+    vorlaeufig = TOKEN_FILE.with_suffix(".neu")
+    with contextlib.suppress(FileNotFoundError):
+        vorlaeufig.unlink()
+    fd = os.open(vorlaeufig, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as datei:
+        datei.write(json.dumps({"client_id": client_id, **token}))
+    os.replace(vorlaeufig, TOKEN_FILE)
+    return token
 
 
 def _clear_token() -> None:

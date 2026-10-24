@@ -37,7 +37,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from deckswitch.plugins.base import plugin_text
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +65,10 @@ BROADCAST_FRISCH_S = 60.0
 DASHBOARD = "https://studio.youtube.com/video/{id}/livestreaming"
 #: Fällt keine Sendung an, wenigstens die Übersicht.
 DASHBOARD_ALLGEMEIN = "https://studio.youtube.com/channel/UC/livestreaming"
+
+
+def _t(schluessel: str, **werte: Any) -> str:
+    return plugin_text(Path(__file__).resolve().parent, "youtube", schluessel, werte)
 
 
 class YouTubeError(RuntimeError):
@@ -159,7 +166,7 @@ def _fehlertext(exc: urllib.error.HTTPError) -> str:
     try:
         return _fehlertext_aus(exc, exc.read())
     except Exception:  # noqa: BLE001
-        return f"YouTube antwortet mit {exc.code}"
+        return _t("api.status_code", code=exc.code)
 
 
 def _fehlertext_aus(exc: urllib.error.HTTPError, roh: bytes) -> str:
@@ -185,12 +192,7 @@ def _fehlertext_aus(exc: urllib.error.HTTPError, roh: bytes) -> str:
     if kennung == "access_denied" or "has not completed the Google verification" in str(
         daten.get("error_description") or ""
     ):
-        return (
-            "Google lässt diese App nur von eingetragenen Testnutzern benutzen, "
-            "solange sie nicht überprüft ist. Trag dich selbst ein: Cloud "
-            "Console → APIs & Dienste → OAuth-Zustimmungsbildschirm → "
-            "Zielgruppe → Testnutzer."
-        )
+        return _t("api.nur_testnutzer")
 
     fehler = daten.get("error")
     if isinstance(fehler, dict):
@@ -208,16 +210,12 @@ def _fehlertext_aus(exc: urllib.error.HTTPError, roh: bytes) -> str:
     if isinstance(fehler, str) and fehler:
         return fehler
     if exc.code == 403:
-        return ("YouTube lehnt ab (403). Häufigster Grund: Das Kontingent des "
-                "Google-Projekts ist für heute verbraucht, oder der Kanal ist "
-                "nicht für Livestreams freigeschaltet.")
+        return _t("api.abgelehnt_403")
     if exc.code == 404:
         # Hier kommt oft nichts zurück — dann ist der Statuscode alles, was
         # es gibt, und „404" allein hilft niemandem weiter.
-        return ("YouTube findet das nicht (404). Bei Chatnachrichten heißt das "
-                "meist: Die Sendung läuft noch nicht, der Chat ist also noch "
-                "nicht offen.")
-    return f"YouTube antwortet mit {exc.code}"
+        return _t("api.nicht_gefunden_404")
+    return _t("api.status_code", code=exc.code)
 
 
 class YouTubeApi:
@@ -260,16 +258,12 @@ class YouTubeApi:
                 raise NochNichtBestaetigt(kennung) from exc
             raise YouTubeError(_fehlertext_aus(exc, fehler_rumpf)) from exc
         except urllib.error.URLError as exc:
-            raise YouTubeError(f"Google ist nicht erreichbar: {exc.reason}") from exc
+            raise YouTubeError(_t("api.google_nicht_erreichbar", grund=exc.reason)) from exc
         return json.loads(roh.decode("utf-8")) if roh else {}
 
     def _pruefe_zugangsdaten(self) -> None:
         if not self.client_id or not self.client_secret:
-            raise KeineZugangsdaten(
-                "Es fehlen Client-ID und Client-Secret. Beide kommen aus einem "
-                "eigenen Google-Cloud-Projekt — siehe Hilfe in den "
-                "Plugin-Einstellungen."
-            )
+            raise KeineZugangsdaten(_t("api.zugangsdaten_fehlen"))
 
     def geraetecode(self) -> dict[str, Any]:
         """Startet die Anmeldung. Zurück kommt der Code für den Benutzer."""
@@ -302,7 +296,7 @@ class YouTubeApi:
 
     def erneuere(self) -> None:
         if not self.anmeldung.refresh_token:
-            raise NichtAngemeldet("Keine Anmeldung, die sich erneuern ließe")
+            raise NichtAngemeldet(_t("api.nicht_erneuerbar"))
         self._pruefe_zugangsdaten()
         daten = self._oauth(TOKEN_URL, {
             "client_id": self.client_id,
@@ -349,9 +343,7 @@ class YouTubeApi:
         daten = self.ruf("/channels", {"part": "snippet", "mine": "true"})
         eintraege = daten.get("items") or []
         if not eintraege:
-            raise YouTubeError(
-                "Zu diesem Google-Konto gibt es keinen YouTube-Kanal."
-            )
+            raise YouTubeError(_t("api.kein_kanal"))
         self.anmeldung.kanal_id = str(eintraege[0].get("id") or "")
         self.anmeldung.kanal = str(
             (eintraege[0].get("snippet") or {}).get("title") or ""
@@ -363,7 +355,7 @@ class YouTubeApi:
             methode: str = "GET", rumpf: dict[str, Any] | None = None,
             erneut: bool = True) -> dict[str, Any]:
         if not self.anmeldung.access_token:
-            raise NichtAngemeldet("Für YouTube ist noch niemand angemeldet")
+            raise NichtAngemeldet(_t("api.nicht_angemeldet"))
 
         # Fünf Minuten Vorlauf: Ein Token, das während des Aufrufs abläuft,
         # kostet einen unnötigen Fehlversuch — und der zählt aufs Kontingent.
@@ -396,16 +388,16 @@ class YouTubeApi:
                 return self.ruf(pfad, abfrage, methode=methode, rumpf=rumpf, erneut=False)
             raise YouTubeError(_fehlertext(exc)) from exc
         except urllib.error.URLError as exc:
-            raise YouTubeError(f"YouTube ist nicht erreichbar: {exc.reason}") from exc
+            raise YouTubeError(_t("api.nicht_erreichbar", grund=exc.reason)) from exc
         except (TimeoutError, OSError) as exc:
-            raise YouTubeError(f"Verbindung abgebrochen: {exc}") from exc
+            raise YouTubeError(_t("api.verbindung_abgebrochen", fehler=exc)) from exc
 
         if not roh:
             return {}
         try:
             return json.loads(roh.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise YouTubeError("YouTube hat etwas Unlesbares geschickt") from exc
+            raise YouTubeError(_t("api.unlesbar")) from exc
 
     # -- Was das Plugin braucht -------------------------------------------
 
@@ -473,18 +465,13 @@ class YouTubeApi:
         """
         laufend = self.sendung()
         if laufend is None:
-            raise YouTubeError("Es läuft keine Sendung, in deren Chat man schreiben könnte")
+            raise YouTubeError(_t("api.chat_keine_sendung"))
         if not laufend.laeuft:
             raise YouTubeError(
-                "Der Live-Chat ist erst offen, wenn die Sendung läuft. "
-                f"'{laufend.titel}' steht gerade auf '{laufend.status}' "
-                "— erst starten."
+                _t("api.chat_noch_zu", titel=laufend.titel, status=laufend.status)
             )
         if not laufend.chat_id:
-            raise YouTubeError(
-                "Diese Sendung hat keinen Live-Chat (bei Streams für Kinder "
-                "oder mit abgeschaltetem Chat)."
-            )
+            raise YouTubeError(_t("api.kein_chat"))
         self.ruf("/liveChatMessages", {"part": "snippet"}, methode="POST", rumpf={
             "snippet": {
                 "liveChatId": laufend.chat_id,
@@ -502,7 +489,7 @@ class YouTubeApi:
         """
         laufend = self.sendung()
         if laufend is None or not laufend.laeuft:
-            raise YouTubeError("Werbung geht nur, solange die Sendung läuft")
+            raise YouTubeError(_t("api.werbung_nur_live"))
         self.ruf("/liveBroadcasts/cuepoint", {"id": laufend.id}, methode="POST", rumpf={
             "cueType": "cueTypeAd",
             "durationSecs": max(1, int(dauer_s)),
@@ -517,10 +504,7 @@ class YouTubeApi:
         """
         laufend = self.sendung(erneut=True)
         if laufend is None:
-            raise YouTubeError(
-                "Es gibt keine Sendung. Eine muss in YouTube Studio angelegt "
-                "sein, bevor sie sich von hier starten lässt."
-            )
+            raise YouTubeError(_t("api.keine_sendung"))
         daten = self.ruf("/liveBroadcasts/transition", {
             "part": "id,snippet,status",
             "broadcastStatus": nach,
