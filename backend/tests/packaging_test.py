@@ -65,6 +65,23 @@ def main() -> None:
         summe = feld(text, "sha256sums").strip("()'\"")
         check("und stimmt mit dem PKGBUILD überein", f"sha256sums = {summe}" in srcinfo)
 
+    print("\nDas Wheel nimmt alle Daten-Dateien des Backends mit")
+    # setuptools packt nur .py-Dateien ein, alles andere nur über
+    # package-data. Fehlt dort etwas, zeigt die installierte App etwa nur
+    # Schlüssel statt Texte, obwohl aus dem Quellbaum alles läuft.
+    import fnmatch
+    import tomllib
+    projekt = tomllib.loads((WURZEL / "backend" / "pyproject.toml").read_text(encoding="utf-8"))
+    muster = projekt.get("tool", {}).get("setuptools", {}).get("package-data", {}).get("deckswitch", [])
+    paket = WURZEL / "backend" / "deckswitch"
+    daten = sorted(
+        datei.relative_to(paket).as_posix() for datei in paket.rglob("*")
+        if datei.is_file() and datei.suffix not in (".py", ".pyc") and "__pycache__" not in datei.parts
+    )
+    fehlen = [d for d in daten if not any(fnmatch.fnmatch(d, m) for m in muster)]
+    check("jede Daten-Datei steht in package-data", not fehlen, ", ".join(fehlen))
+    check("darunter die Sprachdateien", any(d.startswith("locales/") for d in daten))
+
     print("\nAlle verpackten Dateien gibt es auch")
     # Jede Datei, die das Rezept aus dem Quellbaum einsammelt. Kommentare
     # fliegen vorher raus, sonst prüfte man Fließtext; gesucht wird dann

@@ -36,5 +36,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["deckswitch*"]
 
+# Dateien, die keine Python-Module sind, nimmt setuptools nur mit, wenn sie
+# hier stehen: die Sprachdateien und die Seite für Netz-Decks.
+[tool.setuptools.package-data]
+deckswitch = ["locales/*.json", "web/*.html"]
+
 [tool.setuptools.dynamic]
 version = { attr = "deckswitch.__version__" }
