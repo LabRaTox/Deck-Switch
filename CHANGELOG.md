@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.4.0 (not released yet)
+
+### New
+
+- Everything the backend shows in the window follows the language setting:
+  error messages, hints, reasons why a feature is missing. Error responses
+  carry a code next to the text
+- Plugins translate their texts through `self.t()` with their own
+  `locales/de.json` and `locales/en.json`. Plugins that use it need
+  DECK//SWITCH 1.4.0 or newer
+- A thumbs down in the store asks for a short reason first. On your own
+  plugin the rating shows only the numbers
+
+### Changed
+
+- Sliders and text fields save while you drag or type, but no more often
+  than needed, and the last value always arrives
+- Closing a program by pattern counts programs instead of processes, so
+  Discord, Steam or VS Code with their many helper processes can be closed
+- The API answers only for 127.0.0.1, localhost and ::1. Network decks are
+  not affected
+
+### Fixed
+
+- A busy port for network decks no longer takes the whole backend down
+- After switching a network deck off, a restart of the service shut the
+  backend down without resetting the device
+- Moving over from the old `streamdeck-app` folders works again
+- A broken configuration is reported instead of being replaced silently
+- Typing fast into a label no longer loses characters
+- A broken sound file no longer restarts the player in an endless loop
+- Plugin updates load all modules and texts of the new version
+- Forgotten decks stop running in the background
+- A screensaver that crashes no longer freezes the deck
+- Input devices like EasyEffects or Bluetooth microphones are recognised as
+  inputs, and the keyboard layout is detected correctly without KDE
+- Store archives with more than one plugin or with a different plugin ID are
+  refused
+
 ## 1.3.5 — 11 October 2026
 
 ### New
