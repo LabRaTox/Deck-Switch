@@ -38,6 +38,8 @@
   inputs, and the keyboard layout is detected correctly without KDE
 - Store archives with more than one plugin or with a different plugin ID are
   refused
+- The AUR package ships the page for network decks. It was missing from the
+  package before, so network decks only worked from the source tree
 
 ## 1.3.5 — 11 October 2026
 
