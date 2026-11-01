@@ -29,3 +29,4 @@ intern/
 # Quellen der Store-Plugins. Sie werden über den Store verteilt und gehören
 # nicht in dieses Repository.
 plugin-sources/
+.wheels/

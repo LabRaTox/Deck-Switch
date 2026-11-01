@@ -13,12 +13,15 @@
  * gezeichnet, nur angezeigt und zurückgemeldet. Deshalb sieht das Overlay
  * exakt aus wie das echte Deck.
  *
+ * Das hier ist der gemeinsame Teil. Gestartet wird über
+ * ``deck-overlay.qml`` (Layer-Surface) oder ``deck-overlay-x11.qml``
+ * (X11 und XWayland), weil nur die erste das Modul LayerShellQt braucht.
+ *
  * Aufruf:
  *   qml6 deck-overlay.qml -- --deck <serial> --base http://127.0.0.1:8770
  */
 import QtQuick
 import QtQuick.Window
-import org.kde.layershell as LayerShell
 
 Window {
     id: root
@@ -92,21 +95,12 @@ Window {
      * darauf beruht das ganze Overlay, denn sonst tippte eine
      * Hotkey-Aktion hier hinein statt in die Anwendung davor.
      *
-     * Beides steht nebeneinander in derselben Datei: Unter X11 laufen die
-     * LayerShell-Zuweisungen ins Leere, unter Wayland die Flags. Das ist
-     * gemessen und wirft keine Fehler. Der Import von LayerShellQt bleibt
-     * dabei nötig, auch auf einem reinen X11-Desktop — das Paket
-     * ``layer-shell-qt`` ist deshalb weiterhin eine harte Abhängigkeit.
+     * Die Flags gelten für beide Wege, unter Wayland laufen sie ins Leere.
+     * Die Layer-Surface steht in ``deck-overlay.qml``: Ein Import dort ließe
+     * das Overlay sonst überall scheitern, wo das Modul fehlt.
      */
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
            | Qt.WindowDoesNotAcceptFocus
-
-    LayerShell.Window.layer: LayerShell.Window.LayerOverlay
-    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
-    LayerShell.Window.anchors: LayerShell.Window.AnchorTop | LayerShell.Window.AnchorLeft
-    LayerShell.Window.margins: Qt.rect(zielX, zielY, 0, 0)
-    LayerShell.Window.exclusionZone: 0
-    LayerShell.Window.scope: "deckswitch-overlay"
 
     property int zielX: root.zahl("--x", 200)
     property int zielY: root.zahl("--y", 200)

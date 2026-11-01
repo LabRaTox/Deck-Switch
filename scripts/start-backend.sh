@@ -7,7 +7,7 @@ set -eu
 REPO=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 
 if [ ! -x "$REPO/.venv/bin/python" ]; then
-    printf '\033[31mNo .venv found — run ./scripts/setup.sh first.\033[0m\n' >&2
+    printf '\033[31mNo .venv found — run ./scripts/install.sh first.\033[0m\n' >&2
     exit 1
 fi
 

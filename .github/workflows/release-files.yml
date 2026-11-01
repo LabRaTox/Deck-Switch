@@ -1,0 +1,52 @@
+# Builds the finished files of every release, for systems without Node, Rust
+# or a compiler. scripts/install.sh downloads the result.
+#
+# On the oldest Ubuntu that has webkit2gtk-4.1 on purpose: a binary runs on the
+# glibc it was built against and anything newer, and a build on a current Arch
+# runs almost nowhere else.
+name: Release files
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, like v1.4.1
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev libxkbcommon-dev linux-libc-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Build
+        run: scripts/build-release-files.sh out
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/* --clobber

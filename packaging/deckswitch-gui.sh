@@ -97,7 +97,8 @@ signatur() {
     printf '%s|%s|%s' \
         "${XDG_SESSION_TYPE:-unbekannt}" \
         "$(cat /sys/module/nvidia/version 2>/dev/null || echo ohne-nvidia)" \
-        "$(ls /usr/lib/libwebkit2gtk-4.1.so.*.*.* 2>/dev/null | tail -1)"
+        "$(ls /usr/lib/libwebkit2gtk-4.1.so.*.*.* /usr/lib64/libwebkit2gtk-4.1.so.*.*.* \
+            /usr/lib/*/libwebkit2gtk-4.1.so.*.*.* 2>/dev/null | tail -1)"
 }
 JETZT=$(signatur)
 
