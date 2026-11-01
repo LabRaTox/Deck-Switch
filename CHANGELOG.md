@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.4.1 · 1 November 2026
+
+### New
+
+- The plugin list has a search field and can be sorted by name, by newest
+  release or by best rating. The counts on the tabs and categories follow
+  the search
+- A Help menu next to the settings, with links to the GitHub repository and
+  the Discord community and a new About page
+- Plugins can bring what they need: `dependencies` in the manifest names
+  Python packages and packages of the distribution, on Arch, Debian, Ubuntu
+  and Fedora. They show on the plugin page and install along with the plugin.
+  Python packages need no rights and land in a folder of the plugin's own,
+  system packages ask for the password. What cannot be installed stops the
+  installation and names the command to run. The package now depends on `uv`
+  and `python-packaging`
+- `scripts/delete.sh` removes the program in one go, `--all` also deletes
+  settings, images and plugins after a question
+- **Level meter** on *Volume* and *Set volume*, on keys and dials: shows what is
+  coming out of the device, with a peak mark. It can be turned off per
+  assignment, only measures while visible and lets the output go to sleep
+- **One-line install and update** for systems without the Arch package:
+  `scripts/get.sh`. It needs no Node, Rust or compiler, and asks for the
+  password once
+- **More distributions**: the installer now runs through on Arch, Debian 13,
+  Ubuntu 22.04 and 24.04 and Fedora 43. `scripts/install.sh` replaces
+  `scripts/setup.sh`, starts the backend and sets up the autostart itself
+- Every release carries the finished window, the interface and the Python
+  packages that have no wheels, built on an old Ubuntu so they run on current
+  distributions too
+
+### Changed
+
+- The version moved from the bottom of the settings to the About page
+- The virtual deck now runs on GNOME and on Ubuntu: where there is no layer
+  shell it goes through XWayland, and it no longer needs LayerShellQt at all
+  on X11. Where it still cannot run, the button to add one is greyed out and
+  says why
+- The overlay finds Qt where Debian, Ubuntu and Fedora put it, and hints about
+  missing programs name the packages of all of them
+
 ## 1.4.0 · 24 October 2026
 
 ### New

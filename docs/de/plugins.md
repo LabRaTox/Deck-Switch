@@ -6,7 +6,7 @@
 
 | Plugin | Aktionen |
 | --- | --- |
-| **Audio** | Lautstärke (Dial mit Balken), Lautstärke auf Festwert setzen, Mikrofon stumm (auch Push-to-Talk), Ausgabegerät wechseln, App-Lautstärke |
+| **Audio** | Lautstärke (Dial mit Balken und Pegelanzeige), Lautstärke auf Festwert setzen, Mikrofon stumm (auch Push-to-Talk), Ausgabegerät wechseln, App-Lautstärke |
 | **Multi-Aktion** | Multi-Aktion, Multi-Aktion (Umschalter) |
 | **Soundboard** | Klang abspielen (mit eigenem Ausgabegerät), alles anhalten |
 | **System** | Programm starten und beenden, Ordner/Datei/Link öffnen, Shell-Befehl, Tastenkombination (auch als Umschalter und als Push-to-Talk), Text tippen, Multimedia, Fenster & Arbeitsfläche, Bildschirmfoto, Sitzung (sperren, abmelden, ruhen, neu starten, ausschalten), Systemwerte (CPU, RAM, GPU, Temperaturen, Netz), Monitorhelligkeit über DDC/CI |
@@ -73,6 +73,13 @@ Schleife, und ein zweiter Druck startet neu oder hält an.
 **Ausgabegerät wechseln** setzt nicht nur den Standard-Sink, sondern zieht
 auch alle laufenden Streams mit. Sonst bliebe die schon laufende Musik auf
 dem alten Gerät.
+
+**Pegelanzeige.** *Lautstärke* und *Lautstärke setzen* zeigen unter dem Text, was
+gerade aus dem Gerät kommt: von -60 bis 0 dBFS, gelb ab -12, rot ab -3, dazu eine
+weiße Marke für die letzte Spitze. Der Wert folgt dem Lautstärkeregler. Gemessen
+wird nur, solange die Anzeige zu sehen ist, und der Ausgang darf dabei weiter in
+den Ruhezustand gehen. Abschalten lässt sie sich je Belegung über den Schalter
+*Pegelanzeige*. Stumm bleibt sie leer.
 
 **Lautstärke setzen** springt mit einem Druck auf einen festen Prozentwert
 — eine Taste für 20 %, eine für 50 %, eine für 100 %. Ein stummes Gerät wird
@@ -380,6 +387,12 @@ heißen nach einer laufenden Nummer (`0001`, `0002`, …) und nicht nach der
 Kennung des Plugins. So bestimmt kein Archiv mehr, wie ein Ordner auf deiner
 Platte heißt. Welches Plugin in welchem Ordner liegt, steht in dessen
 `manifest.json`.
+
+Bringt ein Plugin Abhängigkeiten mit, stehen sie auf seiner Detailseite und
+werden mit installiert. Python-Pakete landen in
+`~/.local/share/deckswitch/plugins/.deps/` und gehen mit dem Plugin. Für
+Systempakete fragt das System nach deinem Passwort. Lässt sich etwas nicht
+installieren, bleibt das Plugin draußen, und die Meldung nennt den Befehl.
 
 Eingebaute Plugins lassen sich weder überschreiben noch entfernen.
 Nachinstallierte haben in der Liste einen *Entfernen*-Knopf.

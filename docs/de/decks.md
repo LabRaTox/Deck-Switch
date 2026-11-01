@@ -92,6 +92,12 @@ sonst. Würde ein Klick auf die Taste den Fokus stehlen, tippte die Aktion
 Unter KWin nachgemessen: Der Klick kommt an, der Fokus bleibt beim
 Vordergrundfenster.
 
+Wo es keine Layer-Surface gibt, unter GNOME oder ohne das Modul LayerShellQt
+wie unter Ubuntu, läuft das Deck als X11-Fenster über XWayland und unter X11
+direkt. Es bleibt über allen Fenstern und nimmt ebenfalls keinen Fokus, unter
+Mutter 42 und 46 nachgemessen. Geht beides nicht, ist *+ Virtuelles Deck*
+ausgegraut und nennt den Grund.
+
 **Herbeirufen** kannst du es auf drei Wegen:
 
 * über einen **globalen Kurzbefehl**, siehe unten

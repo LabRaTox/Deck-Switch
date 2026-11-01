@@ -677,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "deckswitch"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "log",
  "serde",

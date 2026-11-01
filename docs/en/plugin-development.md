@@ -394,6 +394,41 @@ In the interface then *Plugins → Reload plugins*. Python caches modules it
 has already imported, so restarting the backend is the more reliable route
 after code changes.
 
+## Dependencies
+
+Any plugin can name the packages it needs. They go into the manifest, the
+installer does the rest.
+
+```json
+"dependencies": {
+  "python": ["icalendar>=6.0"],
+  "system": ["ffmpeg", {"arch": "python-gobject", "debian": "python3-gi", "fedora": "python3-gobject"}]
+}
+```
+
+* **`python`** names packages from PyPI in the usual notation with a version.
+  Direct addresses are rejected. No special rights are needed: `uv` puts
+  finished wheels into `<plugins>/.deps/<id>/`, so a package without a wheel
+  does not work. The folder goes to the end of `sys.path` when the plugin
+  loads. A plugin can add packages that way but never replace one of the
+  backend's, and the folder leaves with the plugin. If two plugins ask for
+  different versions of a package, they share the one that loaded first.
+* **`system`** names packages of the distribution. A plain name applies
+  everywhere. Where names differ, an object gives one per family: `arch`,
+  `debian` (Ubuntu too) and `fedora`. If the name for a family is missing, the
+  installation stops there. If a package is missing, `pkexec` asks for the
+  password and pacman, apt or dnf install it. On an image-based Fedora such as
+  Bazzite the message names the `rpm-ostree` command instead. Without one of
+  these package managers each name is looked for as a program.
+
+**The installation stops until everything is there.** If something cannot be
+installed, the plugin is not installed, an older version stays in place, and
+the error names the command to run by hand.
+
+Name only packages you trust, with a lower version bound. Set
+`min_app_version` to `1.4.1`: older versions ignore the field, and the plugin
+then fails on its import.
+
 ## Submitting
 
 Once the plugin is done you can put it into the store through *Plugins →

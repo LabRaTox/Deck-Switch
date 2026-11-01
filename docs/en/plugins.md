@@ -67,6 +67,12 @@ headphones. Looping optional, and a second press restarts or stops.
 
 ### Audio
 
+**Level meter.** *Volume* and *Set volume* show what is coming out of the device
+right now: from -60 to 0 dBFS, yellow from -12, red from -3, with a white mark for
+the last peak. The value follows the volume control. It only measures while the
+meter is visible, and the output can still go to sleep meanwhile. Turn it off per
+assignment with the *Level meter* switch. While muted it stays empty.
+
 **Switch output device** does not only set the default sink, it pulls all
 running streams along. Otherwise the music already playing would stay on the
 old device.
@@ -356,6 +362,12 @@ Plugins are installed into `~/.local/share/deckswitch/plugins/`. The folders
 there are named after a running number (`0001`, `0002`, …) and not after the
 plugin's id. That way no archive decides what a folder on your disk is
 called. Which plugin sits in which folder is in its `manifest.json`.
+
+If a plugin brings dependencies, they show on its detail page and install along
+with it. Python packages land in `~/.local/share/deckswitch/plugins/.deps/` and
+leave with the plugin. For system packages the system asks for your password. If
+something cannot be installed, the plugin stays out and the message names the
+command.
 
 Built-in plugins can neither be overwritten nor removed. The ones you
 installed have a *remove* button in the list.

@@ -1,7 +1,7 @@
 # Maintainer: LabRaTox <278214024+LabRaTox@users.noreply.github.com>
 
 pkgname=deckswitch
-pkgver=1.4.0
+pkgver=1.4.1
 pkgrel=1
 pkgdesc="Independent Elgato Stream Deck control software with its own plugin system"
 arch=('x86_64')
@@ -22,6 +22,8 @@ depends=(
   'python-evdev'
   'python-xkbcommon'
   'python-elgato-streamdeck'
+  'python-packaging'
+  'uv'
   'uvicorn'
   'python-watchfiles'
   'python-httptools'
@@ -106,8 +108,7 @@ package() {
   install -d "$pkgdir/usr/share/$pkgname"
   cp -r backend/plugins "$pkgdir/usr/share/$pkgname/plugins"
   cp -r gui/dist "$pkgdir/usr/share/$pkgname/gui"
-  install -Dm644 packaging/overlay/deck-overlay.qml \
-    "$pkgdir/usr/share/$pkgname/overlay/deck-overlay.qml"
+  install -Dm644 -t "$pkgdir/usr/share/$pkgname/overlay" packaging/overlay/*.qml
 
   # -- Programme -----------------------------------------------------------
   # `deckswitch` selbst legt bereits das Wheel an (project.scripts).

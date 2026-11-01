@@ -17,12 +17,17 @@ on your system, the settings tell you what and why.
 | KDE Plasma (Wayland and X11) | yes | yes |
 | Hyprland, Sway | yes | yes |
 | XFCE, Cinnamon, MATE, i3 … (X11) | yes | no |
-| GNOME | no | no |
+| GNOME | yes, through XWayland | no |
 
-The virtual deck needs `zwlr_layer_shell_v1` on Wayland and the classic
-window hints on X11. Either way, a click never takes the keyboard focus.
-GNOME's compositor cannot do the protocol. Window control needs an interface
-in the compositor: Plasma, Hyprland and Sway have one, GNOME does not.
+The virtual deck uses `zwlr_layer_shell_v1` on Wayland and the classic window
+hints on X11. Where the layer shell is missing, as on GNOME or on Ubuntu, it
+runs through XWayland. Either way, a click never takes the keyboard focus.
+Window control needs an interface in the compositor: Plasma, Hyprland and Sway
+have one, GNOME does not.
+
+The installer runs on Arch, Debian, Ubuntu and Fedora. Only CachyOS is tested
+with a real Deck. On the other distributions only the installation itself is
+checked, in fresh Docker images.
 
 > The name is written **DECK//SWITCH**, with the slashes in the accent
 > colour. Technically everything is called `deckswitch`: package, service,
@@ -66,7 +71,7 @@ put it anywhere and the app remembers the spot. A **global shortcut** brings
 it up from anywhere.
 
 **Network deck**
-A deck that someone else on the same network operates in a browser — your
+A deck that someone else on the same network operates in a browser: your
 moderator during a stream, for example. Password protected, nothing to
 install, and guests cannot change anything.
 
@@ -81,9 +86,10 @@ can have its own touch strip wallpaper.
 
 **Plugins**
 Six plugins are built in: audio, system, soundboard, multi-action,
-navigation and the Tabler icon set. Five more can be installed afterwards:
-OBS, Discord, Spotify, weather and a clock screensaver. For your own there is
-an open API. Icon sets are plugins too.
+navigation and the Tabler icon set. The store has more, among them OBS,
+Discord, Spotify, Twitch, YouTube, Steam, Govee, weather, a battery display and
+a clock screensaver. For your own there is an open API, and a plugin can bring
+the Python and system packages it needs. Icon sets are plugins too.
 
 There are four ways to install one: through the **store** inside the app,
 from a ZIP file, from a URL, or through a `streamdeck://` link in the
@@ -92,8 +98,9 @@ browser.
 **Built-in plugin store**
 It shows you every plugin there is, the installed ones included. The ones you
 do not have yet carry a dashed frame. Clicking the name opens the detail page
-with pictures, description, licence and size. Filter by topic on the left,
-by kind at the top.
+with pictures, description, licence, size and dependencies. Filter by topic on
+the left and by kind at the top, search by name, description or author, and
+sort by name, newest release or best rating.
 
 <p align="center">
   <img src="docs/screenshots/plugins.png" alt="Plugin overview with store cards" width="49%">
@@ -114,43 +121,101 @@ More on all of this: [Operation](docs/en/operation.md) ·
 
 ## Installation
 
-This is meant for **CachyOS and Arch Linux**, so `setup.sh` needs `pacman`.
-On other distributions it stops and shows you the list of packages to install
-yourself.
-
-### Build the package
-
-DECK//SWITCH is not in the AUR yet. The packaging files are in the repository
-though, so you can build it yourself. It is worth doing, because the package
-puts the udev rule and the systemd unit where they belong — exactly the step
-people forget when doing it by hand.
+### With one command (all distributions)
 
 ```sh
-git clone https://github.com/LabRaTox/Deck-Switch.git
-cd Deck-Switch/packaging/aur
+curl -fsSL https://raw.githubusercontent.com/LabRaTox/Deck-Switch/main/scripts/get.sh | bash
+```
+
+This fetches `uv` if it is missing, unpacks the newest release into
+`~/.local/share/deckswitch/app` and starts the installer. It needs no Node, no
+Rust and no compiler, the window and the interface come finished with the
+release. It asks for your password once, for everything that needs root:
+missing system packages, the udev rule and the `input` group. After that the
+backend runs, now and at every login, and DECK//SWITCH is in the application
+menu. Run the same command again to update, the settings stay.
+
+The menu entry *Help* in the window leads to the repository, the Discord
+community and the *About* page with the version.
+
+To remove it again:
+
+```sh
+~/.local/share/deckswitch/app/scripts/delete.sh
+```
+
+Your settings stay in `~/.config/deckswitch/`, your images and plugins in
+`~/.local/share/deckswitch/`. With `--all` they go as well, after a question.
+
+Runs through on Arch, Debian 13, Ubuntu 22.04 and 24.04 and Fedora 43. On an
+image-based Fedora such as Bazzite the installer names the `rpm-ostree` command
+instead, because a package only arrives there with the next boot. Without a
+`layer-shell`, as on GNOME or Ubuntu, the virtual deck runs over XWayland
+instead, and it keeps out of the task list and of your keyboard focus just the
+same.
+
+On Arch and CachyOS the package below is the better way, because pacman then
+manages it.
+
+### Arch and CachyOS
+
+DECK//SWITCH is not in the AUR yet, the package is attached to the GitHub
+release. It puts the udev rule and the systemd unit where they belong.
+
+The library for the Deck comes first, because it only exists in the AUR. With
+`paru` or `yay`, `paru -S python-elgato-streamdeck` is enough, otherwise:
+
+```sh
+git clone https://aur.archlinux.org/python-elgato-streamdeck.git
+cd python-elgato-streamdeck
 makepkg -si
+cd ..
+```
+
+Then download and install the package. Passing the address straight to
+`pacman -U` does not work, pacman looks for a signature there:
+
+```sh
+curl -fLO https://github.com/LabRaTox/Deck-Switch/releases/download/v1.4.1/deckswitch-1.4.1-1-x86_64.pkg.tar.zst
+sudo pacman -U ./deckswitch-1.4.1-1-x86_64.pkg.tar.zst
 systemctl --user enable --now deckswitch.service
 ```
 
 Then add yourself to the `input` group once and log in again. You need it for
-the *hotkey* and *type text* actions:
+the actions *Hotkey* and *Type text*:
 
 ```sh
 sudo usermod -aG input "$USER"
 ```
 
+To update, download the new package file and install it the same way. Building
+it yourself works too, the library has to be there for that as well:
+
+```sh
+git clone https://github.com/LabRaTox/Deck-Switch.git
+cd Deck-Switch/packaging/aur
+makepkg -si
+```
+
 ### From the repository
 
-For hacking on it, or if you would rather not package anything:
+For hacking on it:
 
 ```sh
 git clone https://github.com/LabRaTox/Deck-Switch.git
 cd Deck-Switch
-./scripts/setup.sh          # packages, venv, GUI and window build, udev rule,
-                            # input group, menu entry, streamdeck://,
-                            # and the autostart service if you want it
-./scripts/start-backend.sh  # start the backend
+./scripts/install.sh
 ```
+
+`install.sh` does the same as the one-line install. In a git checkout it builds
+the window itself if `npm` and `cargo` are there. Running it again is safe.
+
+| Option | |
+| --- | --- |
+| `--no-root` | change nothing that needs root, print what is left instead |
+| `--no-download` | take nothing from the release, build everything here |
+| `--no-start` | install everything, but do not start the service |
+| `--no-autostart` | start now, but not at the next login |
 
 The interface then runs at <http://127.0.0.1:8770>, or as its own window:
 
@@ -158,20 +223,10 @@ The interface then runs at <http://127.0.0.1:8770>, or as its own window:
 ./scripts/start-gui.sh
 ```
 
-### Packages by hand
-
-`setup.sh` checks for them and offers to install what is missing:
-
-```sh
-sudo pacman -S --needed python webkit2gtk-4.1 base-devel rust hidapi libusb \
-    nodejs npm noto-fonts wireplumber libpulse libxkbcommon pipewire-audio \
-    qt6-declarative layer-shell-qt cairo
-```
-
 ### Device access (udev)
 
 Without the udev rule the HID node belongs to root, so only root could talk
-to the device. `setup.sh` offers to install it; by hand it goes like this:
+to the device. `install.sh` sets it up; by hand it goes like this:
 
 ```sh
 sudo install -m 644 packaging/70-streamdeck.rules /etc/udev/rules.d/
@@ -183,7 +238,7 @@ Then unplug the Stream Deck once and plug it back in.
 
 The same rule also sets up access to `/dev/uinput`. That is the virtual
 keyboard behind **hotkey** and **type text**. Your user needs to be in the
-`input` group for it. `setup.sh` checks this and offers to add you; by
+`input` group for it. `install.sh` adds you; by
 hand it goes like this:
 
 ```sh
@@ -196,20 +251,20 @@ missing.
 
 ### When the window does not open
 
-On some drivers WebKitGTK and Wayland do not get along — the window closes
+On some drivers WebKitGTK and Wayland do not get along: the window closes
 after half a second and the terminal says `Gdk-Message: Error 71 (protocol
 error) dispatching to Wayland display`. With NVIDIA under KDE this happens
 every time.
 
 This is dealt with: if the first attempt dies right away, the window starts
 over with the DMABUF renderer switched off. That lives in
-`packaging/deckswitch-gui.sh` — the same script the package installs as
+`packaging/deckswitch-gui.sh`, the same script the package installs as
 `deckswitch-gui` and that `scripts/start-gui.sh` calls in a checkout, so an
 installed copy behaves exactly the same.
 
 It only happens once, though. The outcome is written down, together with a
-signature of the system — session type, graphics driver and WebKit version
-— in
+signature of the system (session type, graphics driver and WebKit version)
+in
 
 ```
 ~/.cache/deckswitch/fensterstart
@@ -228,7 +283,7 @@ export WEBKIT_DISABLE_DMABUF_RENDERER=1
 
 ### In the application menu
 
-`setup.sh` creates the launcher along the way. By hand:
+`install.sh` creates the launcher along the way. By hand:
 
 ```sh
 ./scripts/install-desktop-entry.sh            # add it
@@ -239,7 +294,7 @@ Entry and icon go to `~/.local/share`, so no sudo is involved. The launcher
 runs `scripts/start-gui.sh`, which brings the backend along if it isn't
 running yet. Started that way it keeps running after the window closes,
 until you log out. The service below also starts it at login, before any
-window, and restarts it after a crash. The AUR package ships the entry
+window, and restarts it after a crash. The Arch package ships the entry
 anyway.
 
 ### Start at login
@@ -258,20 +313,20 @@ In the settings under **Backup & restore**:
 
 | | |
 | --- | --- |
-| **Export configuration** | The configuration as JSON — small and readable, but without your uploaded images |
+| **Export configuration** | The configuration as JSON, small and readable, but without your uploaded images |
 | **Backup archive** | Configuration *and* all your own images in one ZIP file. This is the one for a move or a real backup |
 | **Earlier states** | Before every overwrite DECK//SWITCH keeps a copy of the configuration, at most one per hour and the last thirty of them. This is the way back |
 
 A single profile goes out through the profile manager: **Export** next to the
 profile packs it together with the images used in it. **Import profile** adds
-it on the other side — nothing is overwritten, and a name that already exists
+it on the other side, nothing is overwritten, and a name that already exists
 gets a number.
 
 Not included are the soundboard's sounds: you point at them by arbitrary
 paths, so they live somewhere on your disk rather than in the application's
 data directory. The references survive a backup, the files themselves you back
 up like your other own files. Plugins you installed later are not included
-either — get those from the store after restoring.
+either, get those from the store after restoring.
 
 ---
 
@@ -281,10 +336,11 @@ either — get those from the store after restoring.
 | --- | --- |
 | **Backend** | Python 3, [`streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck), FastAPI |
 | **GUI** | Tauri + Vite/React, using the system WebView |
-| **Audio** | PipeWire via `wpctl`/`pactl`, soundboard via `pw-play` |
+| **Audio** | PipeWire via `wpctl`/`pactl`, level meter via `parec`, soundboard via `pw-play` |
 | **Input** | virtual keyboard via `/dev/uinput`, layout via libxkbcommon |
 | **Desktop** | MPRIS over D-Bus. Global shortcuts and screenshots via KDE, otherwise via `xdg-desktop-portal` |
-| **Overlay** | `zwlr_layer_shell_v1` via layer-shell-qt, window hints on X11 |
+| **Overlay** | `zwlr_layer_shell_v1` via layer-shell-qt, window hints on X11 and XWayland |
+| **Installation** | [`uv`](https://github.com/astral-sh/uv) for the Python environment and the packages of plugins |
 | **Icons** | [Tabler Icons](https://tabler.io/icons) (MIT), wired in as an ordinary icon set plugin |
 
 Without [`python-elgato-streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck)
@@ -307,7 +363,7 @@ Everything in both languages, under [`docs/de/`](docs/de/) and
 
 ## Licence
 
-[MIT](LICENSE) — Heiko Stuhrmann.
+[MIT](LICENSE), Heiko Stuhrmann.
 
 The Tabler Icons are MIT licensed as well
 (`backend/plugins/iconset-tabler/LICENSE`).

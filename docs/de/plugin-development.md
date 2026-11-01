@@ -397,6 +397,41 @@ In der GUI dann *Plugins → Plugins neu laden*. Python speichert bereits
 importierte Module zwischen, deshalb ist nach Codeänderungen ein Neustart des
 Backends der verlässlichere Weg.
 
+## Abhängigkeiten
+
+Jedes Plugin kann Pakete nennen, die es braucht. Sie stehen im Manifest, den
+Rest macht der Installer.
+
+```json
+"dependencies": {
+  "python": ["icalendar>=6.0"],
+  "system": ["ffmpeg", {"arch": "python-gobject", "debian": "python3-gi", "fedora": "python3-gobject"}]
+}
+```
+
+* **`python`** nennt Pakete von PyPI, in der üblichen Schreibweise mit
+  Version. Direkte Adressen werden abgelehnt. Besondere Rechte sind nicht
+  nötig: `uv` legt fertige Wheels nach `<plugins>/.deps/<id>/`, ein Paket ohne
+  Wheel geht also nicht. Der Ordner kommt beim Laden ans Ende von `sys.path`.
+  Ein Plugin kann damit Pakete ergänzen, aber keines des Backends ersetzen,
+  und der Ordner verschwindet mit dem Plugin. Verlangen zwei Plugins
+  verschiedene Versionen eines Pakets, teilen sie sich die zuerst geladene.
+* **`system`** nennt Pakete der Distribution. Ein einfacher Name gilt überall.
+  Wo die Namen abweichen, nennt ein Objekt einen je Familie: `arch`, `debian`
+  (auch Ubuntu) und `fedora`. Fehlt der Name für eine Familie, stoppt dort die
+  Installation. Fehlt ein Paket, fragt `pkexec` nach dem Passwort, und pacman,
+  apt oder dnf installieren es. Auf einem Fedora mit Image wie Bazzite nennt
+  die Meldung stattdessen den `rpm-ostree`-Befehl. Ohne einen dieser
+  Paketmanager wird jeder Name als Programm gesucht.
+
+**Die Installation stoppt, bis alles da ist.** Lässt sich etwas nicht
+installieren, wird das Plugin nicht installiert, eine ältere Fassung bleibt
+liegen, und der Fehler nennt den Befehl für die Hand.
+
+Nenne nur Pakete, denen du traust, mit einer unteren Versionsgrenze. Setze
+`min_app_version` auf `1.4.1`: Ältere Versionen ignorieren das Feld, und das
+Plugin scheitert dann an seinem Import.
+
 ## Einreichen
 
 Ist das Plugin fertig, kannst du es über *Plugins → Plugin einreichen* in den

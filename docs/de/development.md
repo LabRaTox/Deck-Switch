@@ -16,6 +16,7 @@ backend/
     netauth.py           Passwörter, Sitzungen, Bremse gegen Raten
     virtualdeck.py       Deck ohne Hardware, Bilder gehen in den Speicher
     plugins/base.py      Plugin-API (die einzige Datei für Plugin-Autoren)
+    plugins/abhaengigkeiten.py  Was Plugins mitbringen: Python- und Systempakete
     services/            Audio (PipeWire), Icons, Rendering, Hintergründe,
                          Autostart, App-Symbol, Eingabe (uinput),
                          Medien (MPRIS), Desktop (KDE), Soundboard, Overlay,
@@ -28,7 +29,7 @@ backend/
 gui/                     Tauri + Vite/React
 packaging/               udev-Regeln, systemd-Unit, URL-Handler
   overlay/               das virtuelle Deck als QML-Overlay
-scripts/                 Setup und Start (POSIX sh)
+scripts/                 Installation (bash), Start (POSIX sh)
 docs/                    diese Dokumentation
 ```
 
@@ -138,7 +139,8 @@ der Anwendung.
 ### Zu den Skripten
 
 Die Skripte unter `scripts/` sind POSIX-`sh` und **auf Englisch**, Ausgaben
-wie Kommentare. Sie laufen damit aus jeder Shell heraus, ohne dass fish
+wie Kommentare. Nur die Installation (`get.sh`, `install.sh`, `fetch-release.sh`,
+`build-release-files.sh`) braucht `bash`. Sie laufen damit aus jeder Shell heraus, ohne dass fish
 installiert sein muss. Geprüft mit `sh`, `dash`, `bash`, `zsh` und `fish`.
 
 Das venv wird dabei nie „aktiviert". Die Skripte rufen `.venv/bin/python`
@@ -202,8 +204,9 @@ Herkunft der Anfrage und nicht der Inhalt.
 * Plugin-Hot-Reload lädt Manifeste und Klassen neu, aber Python cached
   bereits importierte Module. Nach Änderungen an einem Plugin ist ein
   Neustart des Backends der verlässlichere Weg.
-* **Nur CachyOS und Arch.** Das ist eine bewusste Festlegung und keine Lücke.
-  `setup.sh` braucht `pacman`, systemd und PipeWire setzt die App voraus.
+* **systemd und PipeWire setzt die App voraus.** `install.sh` kennt Arch,
+  Debian, Ubuntu und Fedora. Entwickelt und am Gerät getestet wird nur auf
+  CachyOS, die anderen Distributionen laufen im Container.
 * **DDC/CI hängt am Monitor.** Die Helligkeitssteuerung braucht ein Gerät,
   das DDC/CI zulässt, und viele muss man dafür erst im Bildschirmmenü
   freischalten. Außerdem ist `ddcutil` von Natur aus langsam. Deshalb führt

@@ -91,6 +91,11 @@ type into the deck afterwards instead of the application you came from.
 Measured under KWin: the click arrives, the focus stays with the foreground
 window.
 
+Where there is no layer surface, on GNOME or without the LayerShellQt module as
+on Ubuntu, the deck runs as an X11 window through XWayland, and directly on X11.
+It stays above all windows and takes no focus either, measured under Mutter 42
+and 46. If neither works, *+ Virtual deck* is greyed out and gives the reason.
+
 **Calling it up** works three ways:
 
 * through a **global shortcut**, see below

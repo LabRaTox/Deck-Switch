@@ -17,6 +17,7 @@ backend/
     netauth.py           passwords, sessions, brake against guessing
     virtualdeck.py       deck without hardware, images go to memory
     plugins/base.py      plugin API (the only file plugin authors need)
+    plugins/abhaengigkeiten.py  what plugins bring along: Python and system packages
     services/            audio (PipeWire), icons, rendering, backgrounds,
                          autostart, tray icon, input (uinput), media (MPRIS),
                          desktop (KDE), soundboard, overlay, global
@@ -28,7 +29,7 @@ backend/
 gui/                     Tauri + Vite/React
 packaging/               udev rules, systemd unit, URL handler
   overlay/               the virtual deck as a QML overlay
-scripts/                 setup and start (POSIX sh)
+scripts/                 installation (bash), start (POSIX sh)
 docs/                    this documentation
 ```
 
@@ -134,7 +135,9 @@ to the application.
 
 ### About the scripts
 
-The scripts under `scripts/` are POSIX `sh` and **in English**, output as
+The scripts under `scripts/` are POSIX `sh`, except the installation (`get.sh`,
+`install.sh`, `fetch-release.sh`, `build-release-files.sh`), which needs `bash`.
+They are **in English**, output as
 well as comments. They run from any shell without fish having to be
 installed. Tested with `sh`, `dash`, `bash`, `zsh` and `fish`.
 
@@ -199,8 +202,9 @@ the origin of the request and not the content.
 * Plugin hot reload reloads manifests and classes, but Python caches modules
   it has already imported. After changing a plugin, restarting the backend is
   the more reliable route.
-* **CachyOS and Arch only.** That is a deliberate decision and not a gap.
-  `setup.sh` needs `pacman`, and systemd and PipeWire are taken as given.
+* **systemd and PipeWire are taken as given.** `install.sh` knows Arch, Debian,
+  Ubuntu and Fedora. Developed and tested on the device on CachyOS only, the
+  other distributions are checked in containers.
 * **DDC/CI depends on the monitor.** Brightness control needs a device that
   permits DDC/CI, and many have to be unlocked in the on-screen menu first.
   On top of that `ddcutil` is slow by nature, so the app keeps the value
