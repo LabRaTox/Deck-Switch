@@ -325,6 +325,13 @@ export type PluginCategory =
   | "video"
   | "other";
 
+/** Was ein Plugin außer seinen Dateien braucht. */
+export interface PluginAbhaengigkeiten {
+  python?: string[];
+  /** Ein Name oder ein Name je Distributionsfamilie. */
+  system?: (string | Record<string, string>)[];
+}
+
 export interface Manifest {
   id: string;
   name: LocalizedText;
@@ -337,6 +344,7 @@ export interface Manifest {
   accent: string;
   /** Wohin das Plugin in der Übersicht gehört. */
   category?: PluginCategory;
+  dependencies?: PluginAbhaengigkeiten;
   /** Bis zu drei Bilder für die Detailansicht (Dateinamen im Plugin-Ordner). */
   screenshots?: string[];
   /** Projektseite, Forum oder Fehlerberichte. */
@@ -496,6 +504,7 @@ export interface StoreVersion {
   /** Ob eine der Aktionen auf einem Dial liegen kann; nur bei `action`. */
   dials?: boolean | null;
   min_app_version: string | null;
+  dependencies?: PluginAbhaengigkeiten | null;
   downloads: number;
   released_at: string;
   download_url: string;

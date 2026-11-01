@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e1a2e"/>
+      <stop offset="100%" stop-color="#16171d"/>
+    </linearGradient>
+    <linearGradient id="letter" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+
+  <!-- Subtle inner glow top-left -->
+  <ellipse cx="6" cy="6" rx="10" ry="10" fill="#8b5cf6" fill-opacity="0.12"/>
+
+  <!-- N: hand-drawn path for crisp rendering at small sizes -->
+  <!-- Left stroke -->
+  <rect x="7" y="8" width="3.5" height="16" rx="1" fill="url(#letter)"/>
+  <!-- Right stroke -->
+  <rect x="21.5" y="8" width="3.5" height="16" rx="1" fill="url(#letter)"/>
+  <!-- Diagonal top-left to bottom-right -->
+  <polygon points="7,8 10.5,8 24,24 21.5,24" fill="url(#letter)"/>
+</svg>

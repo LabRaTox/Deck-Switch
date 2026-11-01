@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useStore } from "../store";
 import type { DeckInfo } from "../types";
+import { HilfeMenue } from "./HilfeMenue";
 import { Wordmark } from "./Wordmark";
 
 /** Kopfzeile: Ansichtswechsel, Deckauswahl, Gerätestatus und Helligkeit. */
@@ -74,6 +75,7 @@ export function TopBar() {
             </button>
           );
         })}
+        <HilfeMenue />
       </nav>
 
       <div className="topbar-right">

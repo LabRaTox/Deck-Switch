@@ -11,6 +11,7 @@ export type Angaben = {
   released?: string | null;
   size?: string | null;
   minApp?: string | null;
+  dependencies?: string | null;
   actions?: string | null;
   dials?: string | null;
   source?: string | null;
@@ -28,6 +29,7 @@ const REIHENFOLGE: (keyof Omit<Angaben, "support">)[] = [
   "released",
   "size",
   "minApp",
+  "dependencies",
   "actions",
   "dials",
   "source",

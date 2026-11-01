@@ -5,7 +5,6 @@ import { api, type Snapshot } from "../api/client";
 import { SUPPORTED_LANGUAGES } from "../i18n";
 import { useStore } from "../store";
 import { ScreensaverCard } from "./ScreensaverCard";
-import { Wordmark } from "./Wordmark";
 import type { AutostartStatus, SessionCapabilities } from "../types";
 import { NumberField } from "./NumberField";
 
@@ -381,7 +380,6 @@ export function SettingsView() {
 
       <SessionCard />
 
-      <AboutCard />
     </div>
   );
 }
@@ -463,28 +461,6 @@ function SessionCard() {
 }
 
 /**
- * Wortmarke und Version.
- *
- * Die Zahl kommt vom Backend und nicht aus dem Bau der Oberfläche: Wer eine
- * Fehlermeldung schickt, soll die Version dessen nennen, was die Arbeit
- * macht — bei einem Netz-Deck sitzt die Oberfläche womöglich auf einem
- * ganz anderen Rechner.
- */
-function AboutCard() {
-  const { t } = useTranslation();
-  const version = useStore((s) => s.version);
-
-  return (
-    <section className="settings-card about-card">
-      <Wordmark />
-      <p className="help">
-        {version ? t("settings.version", { version }) : t("settings.versionUnknown")}
-      </p>
-    </section>
-  );
-}
-
-/**
  * Die angeschlossenen (und die früher einmal angeschlossenen) Decks.
  *
  * Sichtbar nur, wenn es mehr als eines gibt oder eines fehlt — bei genau
@@ -492,6 +468,18 @@ function AboutCard() {
  * steht.
  */
 function DecksCard() {
+  /** Warum es hier kein Overlay geben kann. Leer, wenn es geht oder noch nichts bekannt ist. */
+  const [overlaySperre, setOverlaySperre] = useState("");
+  useEffect(() => {
+    api
+      .session()
+      .then((daten) => {
+        const overlay = daten.capabilities.find((c) => c.id === "overlay");
+        setOverlaySperre(overlay && !overlay.available ? overlay.reason : "");
+      })
+      .catch(() => undefined);
+  }, []);
+
   const { t } = useTranslation();
   const decks = useStore((s) => s.decks);
   const activeDeck = useStore((s) => s.activeDeck);
@@ -564,9 +552,12 @@ function DecksCard() {
       </ul>
 
       <div className="row">
+        {/* Grau statt versteckt: So sieht man, dass es das gäbe und warum nicht. */}
         <button
           type="button"
           className="btn"
+          disabled={Boolean(overlaySperre)}
+          title={overlaySperre}
           onClick={() =>
             void createVirtual({
               name: t("decks.newVirtualName"),
@@ -594,7 +585,7 @@ function DecksCard() {
           + {t("decks.addNetwork")}
         </button>
       </div>
-      <small className="help">{t("decks.addVirtualHint")}</small>
+      <small className="help">{overlaySperre || t("decks.addVirtualHint")}</small>
       <small className="help">{t("decks.addNetworkHint")}</small>
     </section>
   );

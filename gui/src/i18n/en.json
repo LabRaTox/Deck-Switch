@@ -3,7 +3,29 @@
     "title": "DECK//SWITCH",
     "editor": "Editor",
     "plugins": "Plugins",
-    "settings": "Settings"
+    "settings": "Settings",
+    "help": "Help"
+  },
+  "help": {
+    "github": "GitHub repository",
+    "discord": "Discord community",
+    "about": "About DECK//SWITCH"
+  },
+  "about": {
+    "title": "About",
+    "description": "Stream Deck control for the Linux desktop.",
+    "version": "Version",
+    "unknown": "unknown",
+    "siblings": "Also by me",
+    "edgedash": "A dashboard for the Corsair Xeneon Edge: weather, media, system values and more as tiles, built in the same spirit as this project.",
+    "nephthys": "A free Discord bot with a web dashboard: moderation, levelling, music, temporary voice channels, tickets and stream notifications, with no premium tier.",
+    "credits": "Work by others",
+    "credit": {
+      "streamdeck": "Device connection",
+      "fastapi": "Backend API",
+      "tauri": "Window frame",
+      "tabler": "MIT"
+    }
   },
   "device": {
     "connected": "Connected",
@@ -259,6 +281,15 @@
       "wallpaper": "Wallpapers"
     },
     "emptyCategory": "Nothing installed in this category.",
+    "search": "Search plugins",
+    "noMatch": "No matches for this search.",
+    "sortBy": "Sort",
+    "sort": {
+      "nameAsc": "A to Z",
+      "nameDesc": "Z to A",
+      "newest": "Newest first",
+      "rating": "Best rated"
+    },
     "iconsetsHint": "Provide the symbols for key images. You pick them while editing a key.",
     "backToList": "Back to overview",
     "overview": "Overview",
@@ -280,7 +311,9 @@
       "downloads": "Downloads",
       "size": "Size",
       "released": "Released",
-      "minApp": "Requires app version"
+      "minApp": "Requires app version",
+      "dependencies": "Dependencies",
+      "systemPackage": "system"
     },
     "checksumAnnounced": "Announced checksum: {{hash}}… It is verified before unpacking.",
     "checksumMissing": "No checksum: whatever is at that address will be installed.",
@@ -341,8 +374,6 @@
     "animationsHint": "Costs USB bandwidth: Every frame travels to the device.",
     "animationFps": "Frames per second",
     "perDeckHint": "These settings apply to the deck selected above.",
-    "version": "Version {{version}}",
-    "versionUnknown": "Version unknown, the backend has not reported in yet.",
     "optionUnavailable": "{{label}} (has no effect in this session)",
     "paket": "Backup archive",
     "paketHint": "Configuration and all your own images in one ZIP file. Unlike the JSON export, uploaded icons survive a move as well.",

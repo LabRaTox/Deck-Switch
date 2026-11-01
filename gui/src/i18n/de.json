@@ -3,7 +3,29 @@
     "title": "DECK//SWITCH",
     "editor": "Editor",
     "plugins": "Plugins",
-    "settings": "Einstellungen"
+    "settings": "Einstellungen",
+    "help": "Hilfe"
+  },
+  "help": {
+    "github": "GitHub-Repository",
+    "discord": "Discord-Community",
+    "about": "Über DECK//SWITCH"
+  },
+  "about": {
+    "title": "Über",
+    "description": "Stream-Deck-Steuerung für den Linux-Desktop.",
+    "version": "Version",
+    "unknown": "unbekannt",
+    "siblings": "Auch von mir",
+    "edgedash": "Ein Dashboard für den Corsair Xeneon Edge: Wetter, Medien, Systemwerte und mehr als Kacheln, mit derselben Handschrift wie dieses Projekt.",
+    "nephthys": "Ein kostenloser Discord-Bot mit Web-Dashboard: Moderation, Leveling, Musik, temporäre Sprachkanäle, Tickets und Stream-Benachrichtigungen, ohne Premium-Stufe.",
+    "credits": "Verwendete Arbeit anderer",
+    "credit": {
+      "streamdeck": "Geräteanbindung",
+      "fastapi": "Backend-Schnittstelle",
+      "tauri": "Fensterrahmen",
+      "tabler": "MIT"
+    }
   },
   "device": {
     "connected": "Verbunden",
@@ -259,6 +281,15 @@
       "wallpaper": "Hintergrundbilder"
     },
     "emptyCategory": "In dieser Kategorie ist nichts installiert.",
+    "search": "Plugins durchsuchen",
+    "noMatch": "Keine Treffer für diese Suche.",
+    "sortBy": "Sortieren",
+    "sort": {
+      "nameAsc": "A bis Z",
+      "nameDesc": "Z bis A",
+      "newest": "Neueste zuerst",
+      "rating": "Beste Bewertung"
+    },
     "iconsetsHint": "Liefern die Symbole für Tastenbilder. Ausgewählt werden sie beim Bearbeiten einer Taste.",
     "backToList": "Zurück zur Übersicht",
     "overview": "Beschreibung",
@@ -280,7 +311,9 @@
       "downloads": "Downloads",
       "size": "Größe",
       "released": "Veröffentlicht",
-      "minApp": "Braucht App-Version"
+      "minApp": "Braucht App-Version",
+      "dependencies": "Abhängigkeiten",
+      "systemPackage": "System"
     },
     "checksumAnnounced": "Angekündigte Prüfsumme: {{hash}}… Vor dem Auspacken wird sie geprüft.",
     "checksumMissing": "Ohne Prüfsumme: Es wird installiert, was gerade unter der Adresse liegt.",
@@ -341,8 +374,6 @@
     "animationsHint": "Kostet USB-Bandbreite: Jedes Einzelbild geht zum Gerät.",
     "animationFps": "Bilder je Sekunde",
     "perDeckHint": "Diese Einstellungen gelten für das oben gewählte Deck.",
-    "version": "Version {{version}}",
-    "versionUnknown": "Version unbekannt, das Backend hat sich noch nicht gemeldet.",
     "optionUnavailable": "{{label}} (in dieser Sitzung wirkungslos)",
     "paket": "Sicherungspaket",
     "paketHint": "Konfiguration und alle eigenen Bilder in einer ZIP-Datei. Anders als der JSON-Export überstehen damit auch hochgeladene Symbole einen Umzug.",

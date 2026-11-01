@@ -50,7 +50,7 @@ interface StoreState {
    * Belegung, lädt nur deren Vorschau neu statt das ganze Raster.
    */
   kachelStand: Record<string, number>;
-  view: "editor" | "plugins" | "settings";
+  view: "editor" | "plugins" | "settings" | "about";
   /**
    * Wer im Store angemeldet ist und was dort auf Prüfung wartet.
    *

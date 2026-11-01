@@ -24,10 +24,16 @@ interface Props {
 export function SettingsForm({ pluginId, schema, values, onChange }: Props) {
   const { i18n } = useTranslation();
 
+  // Ein Feld, das noch nie geändert wurde, steht auf seiner Vorgabe. Ohne
+  // diesen Rückfall blieben abhängige Felder dann unsichtbar, obwohl das
+  // Formular den Vorgabewert anzeigt.
+  const aktuell = (key: string) =>
+    values[key] ?? schema.find((f) => f.key === key)?.default;
   const visible = schema.filter((field) => {
     if (!field.depends_on) return true;
-    return Object.entries(field.depends_on).every(
-      ([key, expected]) => values[key] === expected,
+    // Eine Liste heißt „einer dieser Werte“, etwa beide Netzwerk-Messwerte.
+    return Object.entries(field.depends_on).every(([key, expected]) =>
+      Array.isArray(expected) ? expected.includes(aktuell(key)) : aktuell(key) === expected,
     );
   });
 
@@ -202,13 +208,27 @@ function Field({
           onChange={(event) => onChange(event.target.value)}
         />
       ) : (
-        <input
-          id={id}
-          type="text"
-          value={String(value ?? "")}
-          placeholder={placeholder}
-          onChange={(event) => onChange(event.target.value)}
-        />
+        <>
+          <input
+            id={id}
+            type="text"
+            value={String(value ?? "")}
+            placeholder={placeholder}
+            list={options.length ? `${id}-vorschlaege` : undefined}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          {/* Ein Textfeld mit Optionen bleibt frei beschreibbar; die Optionen
+              erscheinen nur als Vorschläge, etwa schon vorhandene Namen. */}
+          {options.length > 0 && (
+            <datalist id={`${id}-vorschlaege`}>
+              {options.map((option) => (
+                <option key={String(option.value)} value={String(option.value)}>
+                  {option.label}
+                </option>
+              ))}
+            </datalist>
+          )}
+        </>
       )}
 
       {help && (

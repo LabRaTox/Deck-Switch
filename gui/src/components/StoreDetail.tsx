@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { abhaengigkeitenText } from "../lib/abhaengigkeiten";
 import type { StorePlugin } from "../types";
 import { Bewertung } from "./Bewertung";
 import { type Angaben, DetailAngaben } from "./DetailAngaben";
@@ -87,6 +88,7 @@ export function StoreDetail({
     released: new Date(neueste.released_at).toLocaleDateString(),
     size: `${Math.max(1, Math.round(neueste.size / 1024))} KB`,
     minApp: neueste.min_app_version,
+    dependencies: abhaengigkeitenText(neueste.dependencies, t("plugins.detail.systemPackage")),
     // Ältere Stores liefern beides nicht, dann fällt die Zeile weg.
     actions: neueste.actions != null ? String(neueste.actions) : null,
     dials: neueste.dials != null ? t(neueste.dials ? "common.yes" : "common.no") : null,

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { localized } from "../i18n";
+import { abhaengigkeitenText } from "../lib/abhaengigkeiten";
 import type { PluginInfo, StorePlugin } from "../types";
 import { Bewertung } from "./Bewertung";
 import { type Angaben, DetailAngaben } from "./DetailAngaben";
@@ -62,6 +63,7 @@ export function PluginDetail({
     released: imStore ? new Date(imStore.released_at).toLocaleDateString() : null,
     size: imStore ? `${Math.max(1, Math.round(imStore.size / 1024))} KB` : null,
     minApp: imStore?.min_app_version ?? null,
+    dependencies: abhaengigkeitenText(manifest.dependencies, t("plugins.detail.systemPackage")),
     // Bei einem Schoner stünde hier dauerhaft „0“. Nur die Zahl: Die Zeile
     // heißt schon „Aktionen“.
     actions: manifest.type === "action" ? String(manifest.actions.length) : null,

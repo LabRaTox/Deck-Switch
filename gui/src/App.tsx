@@ -8,6 +8,7 @@ import { ErrorBanner } from "./components/ErrorBanner";
 import { Inspector } from "./components/Inspector";
 import { InstallRequestBanner } from "./components/PluginInstaller";
 import { PageCrumbs, PageTree } from "./components/PageTree";
+import { AboutView } from "./components/AboutView";
 import { PluginsView } from "./components/PluginsView";
 import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
@@ -198,6 +199,7 @@ export default function App() {
       )}
       {view === "plugins" && <PluginsView />}
       {view === "settings" && <SettingsView />}
+      {view === "about" && <AboutView />}
     </div>
   );
 }

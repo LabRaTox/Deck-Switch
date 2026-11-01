@@ -18,7 +18,7 @@ import { YouTubeVerbinden } from "./YouTubeVerbinden";
 import { UiIcon } from "./UiIcon";
 import { StoreEinreichen } from "./StoreEinreichen";
 import { StoreAnmeldung, StoreKarte, StoreHinweis } from "./StoreView";
-import { storeName } from "./storeTexte";
+import { storeKurz, storeName } from "./storeTexte";
 
 /**
  * Ein Eintrag der Liste: entweder etwas Installiertes oder etwas aus dem
@@ -27,6 +27,63 @@ import { storeName } from "./storeTexte";
 type Eintrag =
   | { art: "installiert"; plugin: PluginInfo }
   | { art: "store"; plugin: StorePlugin };
+
+const SORTIERUNGEN = ["nameAsc", "nameDesc", "newest", "rating"] as const;
+type Sortierung = (typeof SORTIERUNGEN)[number];
+
+function nameVon(e: Eintrag, sprache: string): string {
+  return e.art === "installiert"
+    ? localized(e.plugin.manifest.name, sprache)
+    : storeName(e.plugin, sprache);
+}
+
+/** Worin die Suche nachsieht: das, was auf der Karte steht. */
+function suchtextVon(e: Eintrag, sprache: string): string {
+  const teile =
+    e.art === "installiert"
+      ? [
+          e.plugin.id,
+          localized(e.plugin.manifest.summary, sprache) ||
+            localized(e.plugin.manifest.description, sprache),
+          e.plugin.manifest.author,
+        ]
+      : [e.plugin.slug, storeKurz(e.plugin, sprache), e.plugin.author];
+  return [nameVon(e, sprache), ...teile].join(" ").toLowerCase();
+}
+
+/**
+ * Die Reihenfolge der Liste.
+ *
+ * Datum und Bewertung kennt nur der Store. Ein installiertes Plugin wird
+ * deshalb dort nachgeschlagen, und was er nicht kennt (die eingebauten, lokal
+ * installierte), steht hinten. Bei Gleichstand entscheidet der Name.
+ */
+function vergleicheEintraege(
+  sortierung: Sortierung,
+  katalog: StorePlugin[] | null,
+  sprache: string,
+) {
+  const nachSlug = new Map((katalog ?? []).map((s) => [s.slug, s]));
+  const imKatalog = (e: Eintrag) =>
+    nachSlug.get(e.art === "installiert" ? e.plugin.id : e.plugin.slug);
+  const erschienen = (e: Eintrag) => {
+    const datum = imKatalog(e)?.latest.released_at;
+    return datum ? Date.parse(datum) : -Infinity;
+  };
+  const punkte = (e: Eintrag) => {
+    const wertung = imKatalog(e)?.rating;
+    return wertung ? wertung.up - wertung.down : -Infinity;
+  };
+  return (a: Eintrag, b: Eintrag): number => {
+    const namen = nameVon(a, sprache).localeCompare(nameVon(b, sprache), sprache);
+    // Zwei gleiche Unendlichkeiten ergäben abgezogen NaN, darum erst der Vergleich.
+    const reihe = (x: number, y: number) => (x === y ? namen : y > x ? 1 : -1);
+    if (sortierung === "nameDesc") return -namen;
+    if (sortierung === "newest") return reihe(erschienen(a), erschienen(b));
+    if (sortierung === "rating") return reihe(punkte(a), punkte(b));
+    return namen;
+  };
+}
 
 /**
  * Plugin-Übersicht — installiert und Store in einer Liste.
@@ -66,6 +123,8 @@ export function PluginsView() {
    * diese Liste und nicht sein Thema.
    */
   const [filter, setFilter] = useState<"alle" | "installiert" | PluginCategory>("alle");
+  const [suche, setSuche] = useState("");
+  const [sortierung, setSortierung] = useState<Sortierung>("nameAsc");
   const [updates, setUpdates] = useState<StoreUpdate[]>([]);
   const [alleLaufen, setAlleLaufen] = useState(false);
 
@@ -219,8 +278,17 @@ export function PluginsView() {
   const kennungVon = (e: Eintrag) =>
     e.art === "installiert" ? e.plugin.id : e.plugin.slug;
 
+  // Reiter und Menü zählen, was die Suche übrig lässt: So sieht man, wo die
+  // Treffer liegen, auch wenn sie unter einem anderen Reiter stehen.
+  const nadel = suche.trim().toLowerCase();
+  const treffer = eintraege.filter(
+    (e) => !nadel || suchtextVon(e, i18n.language).includes(nadel),
+  );
+
   /** Alles vom gewählten Typ — die Grundlage für Menü und Liste. */
-  const vomTyp = eintraege.filter((e) => artVon(e) === typ);
+  const vomTyp = treffer
+    .filter((e) => artVon(e) === typ)
+    .sort(vergleicheEintraege(sortierung, katalog, i18n.language));
 
   /** Wie viele Plugins je Kategorie, damit das Menü Zahlen zeigen kann. */
   const anzahl = new Map<PluginCategory, number>();
@@ -329,7 +397,7 @@ export function PluginsView() {
           einen Blick, was es überhaupt gibt. */}
       <div className="plugin-tabs" role="tablist">
         {TYPEN.map((eintrag) => {
-          const zahl = eintraege.filter((e) => artVon(e) === eintrag).length;
+          const zahl = treffer.filter((e) => artVon(e) === eintrag).length;
           return (
             <button
               key={eintrag}
@@ -415,8 +483,31 @@ export function PluginsView() {
             </p>
           )}
 
+          <div className="plugin-werkzeuge">
+            <input
+              type="search"
+              value={suche}
+              placeholder={t("plugins.search")}
+              aria-label={t("plugins.search")}
+              onChange={(event) => setSuche(event.target.value)}
+            />
+            <select
+              value={sortierung}
+              aria-label={t("plugins.sortBy")}
+              onChange={(event) => setSortierung(event.target.value as Sortierung)}
+            >
+              {SORTIERUNGEN.map((s) => (
+                <option key={s} value={s}>
+                  {t(`plugins.sort.${s}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {sichtbar.length === 0 ? (
-            <p className="empty-note">{t("plugins.emptyCategory")}</p>
+            <p className="empty-note">
+              {t(nadel ? "plugins.noMatch" : "plugins.emptyCategory")}
+            </p>
           ) : (
             <div className="plugin-list">
               {sichtbar.map((eintrag) =>
