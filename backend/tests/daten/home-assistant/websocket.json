@@ -1,0 +1,108 @@
+[
+ {
+  "id": 1,
+  "type": "result",
+  "success": true,
+  "result": null
+ },
+ {
+  "id": 1,
+  "type": "event",
+  "event": {
+   "a": {
+    "light.bed_light": {
+     "s": "on",
+     "a": {
+      "min_color_temp_kelvin": 2000,
+      "max_color_temp_kelvin": 6535,
+      "effect_list": [
+       "rainbow",
+       "off"
+      ],
+      "supported_color_modes": [
+       "color_temp",
+       "hs"
+      ],
+      "effect": "rainbow",
+      "color_mode": "color_temp",
+      "brightness": 180,
+      "color_temp_kelvin": 2631,
+      "hs_color": [
+       28.55,
+       67.974
+      ],
+      "rgb_color": [
+       255,
+       164,
+       82
+      ],
+      "xy_color": [
+       0.532,
+       0.388
+      ],
+      "friendly_name": "Bed Light",
+      "supported_features": 4
+     },
+     "c": {
+      "id": "01M6BWMAEFDA3X4DNMBR97ZCGK",
+      "parent_id": null,
+      "user_id": "2c1a4df484fe4d9c893e740570a4b4b4"
+     },
+     "lc": 1793547971.023409
+    },
+    "sensor.outside_temperature": {
+     "s": "15.6",
+     "a": {
+      "state_class": "measurement",
+      "unit_of_measurement": "\u00b0C",
+      "device_class": "temperature",
+      "friendly_name": "Outside Temperature"
+     },
+     "c": "01M6BWJ1TB2RWHTC7GZ7665V3K",
+     "lc": 1793547896.651962
+    }
+   }
+  }
+ },
+ {
+  "type": "event",
+  "event": {
+   "c": {
+    "light.bed_light": {
+     "+": {
+      "lu": 1793547971.0402508,
+      "c": "01M6BWMAF0QNK2FRPWZB64Z3JE",
+      "a": {
+       "brightness": 102
+      }
+     }
+    }
+   }
+  },
+  "id": 1
+ },
+ {
+  "type": "event",
+  "event": {
+   "c": {
+    "light.bed_light": {
+     "+": {
+      "s": "off",
+      "lc": 1793547971.0421507,
+      "c": "01M6BWMAF1XAJXH5HC2FE1S249",
+      "a": {
+       "effect": null,
+       "color_mode": null,
+       "brightness": null,
+       "color_temp_kelvin": null,
+       "hs_color": null,
+       "rgb_color": null,
+       "xy_color": null
+      }
+     }
+    }
+   }
+  },
+  "id": 1
+ }
+]

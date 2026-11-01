@@ -86,6 +86,19 @@
           "default": true
         },
         {
+          "key": "show_meter",
+          "type": "bool",
+          "label": {
+            "de": "Pegelanzeige",
+            "en": "Level meter"
+          },
+          "default": true,
+          "help": {
+            "de": "Zeigt, was gerade aus dem Gerät kommt. Gemessen wird nur, solange die Anzeige zu sehen ist.",
+            "en": "Shows what is coming out of the device right now. It only measures while the meter is visible."
+          }
+        },
+        {
           "key": "show_percent",
           "type": "bool",
           "label": {
@@ -211,6 +224,19 @@
             "en": "Show bar"
           },
           "default": true
+        },
+        {
+          "key": "show_meter",
+          "type": "bool",
+          "label": {
+            "de": "Pegelanzeige",
+            "en": "Level meter"
+          },
+          "default": true,
+          "help": {
+            "de": "Zeigt, was gerade aus dem Gerät kommt. Gemessen wird nur, solange die Anzeige zu sehen ist.",
+            "en": "Shows what is coming out of the device right now. It only measures while the meter is visible."
+          }
         },
         {
           "key": "show_percent",

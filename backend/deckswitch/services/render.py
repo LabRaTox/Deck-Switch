@@ -354,6 +354,40 @@ class RenderService:
                 fill=parse_color(color, (59, 130, 246, 255)),
             )
 
+    def draw_meter(
+        self,
+        image: Image.Image,
+        pegel: float,
+        spitze: float,
+        *,
+        box: tuple[int, int, int, int],
+        aktiv: bool = True,
+    ) -> None:
+        """Aussteuerungsanzeige: grün, gelb, rot, mit Marke für die Spitze.
+
+        Die Skala läuft von -60 bis 0 dBFS. Gelb beginnt bei -12, rot bei -3.
+        """
+        x0, y0, x1, y1 = box
+        breite = x1 - x0
+        draw = ImageDraw.Draw(image)
+        draw.rectangle(box, fill=(39, 39, 42, 255))
+        if not aktiv:
+            return
+        bis = x0 + round(breite * max(0.0, min(1.0, pegel)))
+        start = x0
+        for ende, farbe in (
+            (0.8, (34, 197, 94, 255)),
+            (0.95, (234, 179, 8, 255)),
+            (1.0, (239, 68, 68, 255)),
+        ):
+            stop = min(bis, x0 + round(breite * ende))
+            if stop > start:
+                draw.rectangle((start, y0, stop, y1), fill=farbe)
+                start = stop
+        if spitze > 0:
+            marke = min(x1 - 1, x0 + round(breite * min(1.0, spitze)))
+            draw.rectangle((marke, y0, marke + 1, y1), fill=(255, 255, 255, 255))
+
     def draw_text(
         self,
         image: Image.Image,

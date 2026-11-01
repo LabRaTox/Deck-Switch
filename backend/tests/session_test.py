@@ -131,7 +131,7 @@ def main():
     # ein absichtlich eingebauter Fehler in der Compositor-Liste fiel nicht
     # auf (Mutationsprobe am 2026-08-21).
     gnome = erkenne(
-        {"XDG_CURRENT_DESKTOP": "GNOME", "XDG_SESSION_TYPE": "wayland"},
+        {"XDG_CURRENT_DESKTOP": "GNOME", "XDG_SESSION_TYPE": "wayland", "DISPLAY": ""},
         bus={"org.freedesktop.portal.Desktop"},
         pfad=["pactl", "pw-play", "xdg-open", "pgrep", "systemctl", "qml6"],
     )
@@ -139,6 +139,13 @@ def main():
     check("und zwar wegen des Compositors, nicht wegen fehlender Programme",
           "zwlr_layer_shell" in gnome.reason_for(sess.OVERLAY),
           gnome.reason_for(sess.OVERLAY))
+    gnome_xwayland = erkenne(
+        {"XDG_CURRENT_DESKTOP": "GNOME", "XDG_SESSION_TYPE": "wayland", "DISPLAY": ":0"},
+        bus={"org.freedesktop.portal.Desktop"},
+        pfad=["qml6"],
+    )
+    check("mit XWayland läuft das Overlay auch unter GNOME",
+          gnome_xwayland.caps[sess.OVERLAY].provider == sess.XWAYLAND)
     check("keine Fenstersteuerung", not gnome.has(sess.WINDOW_CONTROL))
     check("kein Bildschirm an/aus", not gnome.has(sess.SCREEN_POWER))
     check("Bildschirmfoto fällt aufs Portal zurück",

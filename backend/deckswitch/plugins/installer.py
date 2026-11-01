@@ -31,6 +31,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from .. import paths
+from . import abhaengigkeiten
 from .base import Manifest
 from .. import texte
 
@@ -300,6 +301,12 @@ def _install_from_directory(source: Path, plugin_id: str) -> Manifest:
             texte.t("installer.bereits_eingebaut_kann_nicht", id=manifest.id)
         )
 
+    # Vor dem Kopieren: Fehlt etwas, bleibt eine ältere Fassung, wie sie ist.
+    try:
+        abhaengigkeiten.sicherstellen(manifest.id, manifest.dependencies)
+    except abhaengigkeiten.AbhaengigkeitsFehler as exc:
+        raise InstallError(str(exc)) from exc
+
     paths.USER_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
     target = _ordner_fuer(manifest.id)
 
@@ -354,6 +361,7 @@ def uninstall(plugin_id: str) -> None:
         raise InstallError(texte.t("installer.liegt_nicht_plugin_verzeichnis", plugin_id=plugin_id))
 
     shutil.rmtree(target)
+    abhaengigkeiten.entfernen(plugin_id)
     log.info("Plugin '%s' entfernt (%s)", plugin_id, target.name)
 
 

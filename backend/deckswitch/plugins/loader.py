@@ -22,6 +22,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from .. import paths
+from . import abhaengigkeiten
 from .base import ActionPlugin, CanvasPlugin, Manifest, Services
 from .. import texte
 
@@ -281,6 +282,7 @@ class PluginRegistry:
         texte.vergiss(directory / "locales")
         importlib.invalidate_caches()
 
+        abhaengigkeiten.anmelden(manifest.id)
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         # Plugin-Ordner in den Suchpfad, damit mehrdateiige Plugins ihre

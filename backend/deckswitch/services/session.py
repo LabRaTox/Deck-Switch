@@ -313,16 +313,12 @@ class SessionCapabilities:
             )
 
         # -- Overlay -------------------------------------------------------
-        # Zwei Bedingungen: Das Anzeigeprogramm muss da sein *und* der
-        # Compositor muss ``zwlr_layer_shell_v1`` sprechen. Mutter (GNOME)
-        # tut das nicht und wird es absehbar auch nicht tun — dort bleibt
-        # das virtuelle Deck aus, und zwar sichtbar statt stillschweigend.
         self._detect_overlay()
 
     def _detect_overlay(self) -> None:
         """Lässt sich das virtuelle Deck über allen Fenstern zeigen?
 
-        Zwei Wege, und der ältere ist der breitere:
+        Drei Wege, und der älteste ist der breiteste:
 
         * **Wayland** braucht ``zwlr_layer_shell_v1``. KWin, Hyprland, Sway
           und die übrigen wlroots-Compositoren können es, Mutter nicht —
@@ -334,38 +330,39 @@ class SessionCapabilities:
           eine Kachel lässt den Tastaturfokus stehen, wo er war — geprüft
           über ``XGetInputFocus`` vor und nach dem Klick. Damit taugt der
           X11-Weg für dasselbe wie die Layer-Surface.
-
-        Das Programm selbst ist in beiden Fällen dasselbe.
+        * **XWayland** trägt den X11-Weg in eine Wayland-Sitzung. Das hilft
+          überall, wo die Layer-Surface fehlt: unter GNOME und dort, wo das
+          Modul nicht paketiert ist, etwa unter Ubuntu.
         """
-        if shutil.which("qml6") is None:
+        if finde_qml() is None:
             self._set(OVERLAY, False, reason=texte.t("session.qml6_fehlt_paket_qt6"))
-            return
-
-        # Der Import von LayerShellQt steht in der QML-Datei und wird auch
-        # unter X11 aufgelöst — ohne das Paket startet das Overlay nirgends.
-        if not Path("/usr/lib/qt6/qml/org/kde/layershell/qmldir").exists():
-            self._set(OVERLAY, False, reason=texte.t("session.layershellqt_fehlt_paket_layer"))
             return
 
         if self.info.display_server == "x11":
             self._set(OVERLAY, True, "x11")
             return
 
+        modul_da = any(
+            (ordner / "org/kde/layershell/qmldir").exists() for ordner in QML_ORDNER
+        )
         # Bei unbekannten Compositoren gehen wir von „ja" aus: Eine Liste
         # kann nur veralten, und ein falsches Nein wäre schlimmer als ein
         # Versuch, der eine Meldung nach sich zieht.
-        ohne_layer_shell = {"gnome", "unity"}
-        if self.info.desktop in ohne_layer_shell:
+        compositor_kann_es = self.info.desktop not in {"gnome", "unity"}
+        if modul_da and compositor_kann_es:
+            self._set(OVERLAY, True, "layer-shell-qt")
+        elif os.environ.get("DISPLAY"):
+            self._set(OVERLAY, True, XWAYLAND)
+        elif compositor_kann_es:
+            self._set(OVERLAY, False, reason=texte.t("session.layershellqt_fehlt_paket_layer"))
+        else:
             self._set(
                 OVERLAY,
                 False,
-                reason=(
-                    texte.t("session.compositor_unterstuetzt_zwlr_layer", desktop=self.info.desktop.upper())
+                reason=texte.t(
+                    "session.compositor_unterstuetzt_zwlr_layer", desktop=self.info.desktop.upper()
                 ),
             )
-            return
-
-        self._set(OVERLAY, True, "layer-shell-qt")
 
     async def _detect_bus(self) -> None:
         """Alles, was am Sitzungsbus hängt.
@@ -518,6 +515,37 @@ def _detect_session() -> SessionInfo:
 
 #: Wo die Backends von ``xdg-desktop-portal`` sich eintragen.
 PORTAL_BACKENDS = Path("/usr/share/xdg-desktop-portal/portals")
+
+#: Anbieter des Overlays, wenn es in einer Wayland-Sitzung über X11 läuft.
+XWAYLAND = "xwayland"
+
+#: Wo Distributionen ihre QML-Module ablegen: Arch, Fedora, Debian und Ubuntu.
+QML_ORDNER = (
+    Path("/usr/lib/qt6/qml"),
+    Path("/usr/lib64/qt6/qml"),
+    Path("/usr/lib/x86_64-linux-gnu/qt6/qml"),
+    Path("/usr/lib/aarch64-linux-gnu/qt6/qml"),
+)
+
+
+def finde_qml() -> str | None:
+    """Der Interpreter für das Overlay.
+
+    Er heißt je nach Distribution anders, und Ubuntu 24.04 legt ihn gar nicht
+    in den PATH.
+    """
+    return (
+        shutil.which("qml6")
+        or shutil.which("qml-qt6")
+        or next(
+            (
+                str(pfad)
+                for pfad in (Path("/usr/lib/qt6/bin/qml"), Path("/usr/lib64/qt6/bin/qml"))
+                if pfad.is_file()
+            ),
+            None,
+        )
+    )
 
 
 def _portal_backend_fuer(interface: str, desktop: str) -> bool:

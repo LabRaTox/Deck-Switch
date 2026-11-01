@@ -40,6 +40,11 @@ log = logging.getLogger(__name__)
 #: unter ``/usr/share/deckswitch/``. Welche der beiden, entscheidet
 #: :mod:`deckswitch.paths`.
 OVERLAY_QML = paths.OVERLAY_QML
+#: Dasselbe Overlay ohne Layer-Surface, und damit ohne das Modul LayerShellQt.
+OVERLAY_QML_X11 = OVERLAY_QML.with_name("deck-overlay-x11.qml")
+#: So lange wird nach dem Start beobachtet, ob das Programm gleich wieder geht.
+ANLAUF_S = 0.5
+ANLAUF_SCHRITTE = 5
 
 #: Unter diesem Namen meldet sich das Backend am Bus, damit ein KWin-Skript
 #: uns die Zeigerposition zurückgeben kann.
@@ -101,14 +106,17 @@ class OverlayService:
         return True, ""
 
     def _auf_x11(self) -> bool:
-        """Läuft die Sitzung unter X11 — hat das Overlay also kein layer-shell?"""
+        """Läuft das Overlay als X11-Fenster, also ohne Layer-Surface?"""
+        return self._anbieter() in ("x11", "xwayland")
+
+    def _anbieter(self) -> str:
         session = getattr(self.runtime, "session", None)
         if session is None:
-            return False
+            return ""
         from .session import OVERLAY as CAP_OVERLAY
 
         cap = session.caps.get(CAP_OVERLAY)
-        return cap is not None and cap.provider == "x11"
+        return cap.provider if cap is not None else ""
 
     def is_visible(self, deck_key: str) -> bool:
         prozess = self._prozesse.get(deck_key)
@@ -142,9 +150,11 @@ class OverlayService:
         # gibt — am 2026-08-21 im Journal als „Not Found" für key/6 und
         # key/7 eines 3×2-Decks zu sehen — und springt dann auf die
         # richtige Größe.
+        from .session import finde_qml
+
         befehl = [
-            "qml6",
-            str(OVERLAY_QML),
+            finde_qml() or "qml6",
+            str(OVERLAY_QML_X11 if self._auf_x11() else OVERLAY_QML),
             "--",
             "--deck", deck_key,
             "--base", f"http://127.0.0.1:{port}",
@@ -162,6 +172,10 @@ class OverlayService:
         # gesehen). Welcher Weg gilt, weiß die Sitzungserkennung.
         if self._auf_x11():
             befehl.append("--x11")
+        umgebung = os.environ.copy()
+        if self._anbieter() == "xwayland":
+            # Qt nähme sonst Wayland und bekäme dort ein gewöhnliches Fenster.
+            umgebung["QT_QPA_PLATFORM"] = "xcb"
         try:
             # stderr nicht an eine Pipe: Die liest niemand, und QML schreibt
             # Warnungen dorthin. Ist der Puffer voll, bliebe das Overlay beim
@@ -172,10 +186,24 @@ class OverlayService:
                 stdout=subprocess.DEVNULL,
                 stderr=None,
                 start_new_session=True,
-                env=os.environ.copy(),
+                env=umgebung,
             )
         except OSError as exc:
             raise RuntimeError(texte.t("overlay.overlay_liess_nicht_starten", exc=exc)) from exc
+
+        # Fehlt dem Programm etwas, etwa ein Qt-Modul oder der Zugang zu
+        # XWayland, stirbt es gleich nach dem Start. Ohne diesen Blick meldete
+        # die Oberfläche ein Overlay, das niemand sieht.
+        prozess = self._prozesse[deck_key]
+        for _ in range(ANLAUF_SCHRITTE):
+            await asyncio.sleep(ANLAUF_S / ANLAUF_SCHRITTE)
+            # Wer es inzwischen selbst versteckt hat, wollte das so.
+            if self._prozesse.get(deck_key) is not prozess:
+                return
+            code = prozess.poll()
+            if code is not None:
+                del self._prozesse[deck_key]
+                raise RuntimeError(texte.t("overlay.overlay_sofort_beendet", code=code))
 
         # Alles neu zeichnen — das frische Overlay hat noch keine Bilder.
         deck._mark_all_dirty()

@@ -125,7 +125,86 @@ async def main():
           frisch["access_token"] == "a3" and discord.aufrufe == 0)
 
 
+async def verbindung_abbauen():
+    print("\n== Abbau der IPC-Verbindung ==")
+    import os, tempfile
+    ordner = tempfile.mkdtemp()
+    alt = os.environ.get("XDG_RUNTIME_DIR")
+    os.environ["XDG_RUNTIME_DIR"] = ordner
+
+    async def stumm(_r, _w):
+        await asyncio.sleep(3600)
+
+    server = await asyncio.start_unix_server(stumm, path=os.path.join(ordner, "discord-ipc-0"))
+    try:
+        def lesende():
+            return [t for t in asyncio.all_tasks() if t.get_name() == "discord-ipc" and not t.done()]
+
+        ipc = ipcmod.DiscordIpc("123")
+        aufbau = asyncio.create_task(ipc.connect())
+        await asyncio.sleep(0.3)
+        aufbau.cancel()
+        try:
+            await aufbau
+        except asyncio.CancelledError:
+            pass
+        check("Abbruch mitten im Handshake lässt keine Leseschleife zurück", not lesende(),
+              str(lesende()))
+
+        ipc = ipcmod.DiscordIpc("123")
+        ipc.reader, ipc.writer = await asyncio.open_unix_connection(os.path.join(ordner, "discord-ipc-0"))
+        ipc._reader_task = asyncio.create_task(ipc._read_loop(), name="discord-ipc")
+        await ipc.close()
+        check("close() wartet, bis die Leseschleife beendet ist", not lesende(), str(lesende()))
+    finally:
+        server.close()
+        if alt is None:
+            os.environ.pop("XDG_RUNTIME_DIR", None)
+        else:
+            os.environ["XDG_RUNTIME_DIR"] = alt
+
+
+async def abbau_waehrend_anmeldung():
+    print("\n== Abbau während der Anmeldung ==")
+
+    class HaengendeAnmeldung:
+        geschlossen = False
+
+        def __init__(self, client_id):
+            self.client_id = client_id
+
+        async def connect(self):
+            pass
+
+        async def authenticate(self, token):
+            await asyncio.sleep(3600)
+
+        async def close(self):
+            HaengendeAnmeldung.geschlossen = True
+
+    echt = dcmod.DiscordIpc
+    dcmod.DiscordIpc = HaengendeAnmeldung
+    try:
+        config.plugin_settings["discord"] = {"client_id": "123", "client_secret": "geheim"}
+        dcmod._store_token("123", {"access_token": "a", "refresh_token": "r", "expires_in": TAG})
+        plugin = dcmod.DiscordPlugin(manifest, services)
+        aufbau = asyncio.create_task(plugin._connect())
+        await asyncio.sleep(0.1)
+        aufbau.cancel()
+        try:
+            await aufbau
+        except asyncio.CancelledError:
+            pass
+        check("eine halb angemeldete Verbindung wird beim Abbau geschlossen",
+              HaengendeAnmeldung.geschlossen)
+        check("und gilt nicht als verbunden", plugin.ipc is None and not plugin.authenticated)
+    finally:
+        dcmod.DiscordIpc = echt
+
+
 asyncio.run(main())
+asyncio.run(verbindung_abbauen())
+asyncio.run(abbau_waehrend_anmeldung())
 print()
 if FAILS:
     print(f"FEHLGESCHLAGEN ({len(FAILS)}): " + ", ".join(FAILS)); sys.exit(1)

@@ -211,6 +211,10 @@ class Manifest(BaseModel):
     #: Was sich zuletzt geändert hat, kurz gehalten. Steht in der
     #: Detailansicht unter „Was ist neu".
     changelog: LocalizedText = ""
+    #: Was das Plugin außer seinen Dateien braucht, siehe
+    #: :mod:`deckswitch.plugins.abhaengigkeiten`. Der Inhalt wird beim
+    #: Installieren geprüft, dort lässt sich genau sagen, was nicht stimmt.
+    dependencies: dict[str, Any] = Field(default_factory=dict)
     icons_dir: str = "icons"
     #: Nur bei type="iconset": Lizenzhinweis, den die GUI anzeigt.
     license: str = ""

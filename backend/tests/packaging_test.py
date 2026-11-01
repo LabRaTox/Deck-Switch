@@ -14,7 +14,9 @@ Aufruf (braucht keine Konfiguration, schreibt nichts):
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -143,6 +145,25 @@ def main() -> None:
     check("die Binärdatei geht nicht direkt nach /usr/bin",
           '"$pkgdir/usr/bin/deckswitch-gui"' not in text.replace(
               'packaging/deckswitch-gui.sh \\\n    "$pkgdir/usr/bin/deckswitch-gui"', ""))
+
+    print("\nInstaller")
+    wurzel = Path(__file__).resolve().parents[2]
+    skripte = wurzel / "scripts"
+    for name in ("get.sh", "install.sh", "fetch-release.sh", "build-release-files.sh"):
+        ergebnis = subprocess.run(["bash", "-n", str(skripte / name)], capture_output=True, text=True)
+        check(f"{name} ist gültiges bash", ergebnis.returncode == 0, ergebnis.stderr.strip())
+        check(f"{name} ist ausführbar", os.access(skripte / name, os.X_OK))
+
+    def python_fassung(name):
+        return re.search(r'^PYTHON_VERSION="(.+)"$', (skripte / name).read_text(encoding="utf-8"), re.M)[1]
+
+    # Die Wheels des Releases passen nur zu der Python, für die sie gebaut sind.
+    check("Wheels und venv nehmen dieselbe Python",
+          python_fassung("install.sh") == python_fassung("build-release-files.sh"))
+
+    verzeichnisse = re.search(r"^CODE_DIRS=\((.+)\)$", (skripte / "get.sh").read_text(encoding="utf-8"), re.M)[1]
+    check("get.sh ersetzt nur, was es gibt",
+          all((wurzel / name).is_dir() for name in verzeichnisse.split()), verzeichnisse)
 
     print()
     if FAILS:

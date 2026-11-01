@@ -15,6 +15,7 @@ from PIL import Image
 from deckswitch.plugins.base import ActionPlugin, SlotContext
 from deckswitch.services.audio import DEFAULT_SINK, DEFAULT_SOURCE
 from deckswitch.services.backgrounds import parse_color
+from deckswitch.services.pegel import Pegelmesser
 
 ACCENT = "#3b82f6"
 
@@ -32,6 +33,12 @@ class AudioPlugin(ActionPlugin):
     def __init__(self, manifest, services):
         super().__init__(manifest, services)
         self._streams: tuple[float, list[dict]] | None = None
+        self._pegel = Pegelmesser(
+            services.audio.get_default_sink, services.runtime.request_redraw
+        )
+
+    async def teardown(self) -> None:
+        self._pegel.stoppen()
 
     # -- Eingaben ----------------------------------------------------------
 
@@ -148,6 +155,8 @@ class AudioPlugin(ActionPlugin):
         if ctx.scratch.get("signature") != signature:
             ctx.scratch["signature"] = signature
             ctx.request_redraw()
+        if self._zeigt_pegel(action_id, ctx) and state != "muted":
+            self._lies_pegel(settings, ctx)
 
     # -- Darstellung -------------------------------------------------------
 
@@ -164,15 +173,24 @@ class AudioPlugin(ActionPlugin):
             and ctx.setting("show_bar", True)
             and level is not None
         )
+        mit_pegel = self._zeigt_pegel(action_id, ctx)
         box = (10, height - 12, width - 10, height - 6)
+        # Der Pegel steht über dem Balken, ohne Balken an dessen Stelle.
+        pegel_box = (box[0], box[1] - 7, box[2], box[1] - 3) if mit_balken else box
         image = self.services.render.render_slot(
             ctx,
             state=state,
             label_override=self.get_label(action_id, settings, ctx),
             accent=ACCENT,
             # Platz für den Balken, sonst läge er auf der Beschriftung.
-            reserve_bottom=self.services.render.bar_reserve(ctx.size, box) if mit_balken else 0,
+            reserve_bottom=self.services.render.bar_reserve(
+                ctx.size, pegel_box if mit_pegel else box
+            )
+            if mit_balken or mit_pegel
+            else 0,
         )
+        if mit_pegel:
+            self._zeichne_pegel(image, settings, ctx, state, pegel_box)
         if mit_balken:
             self.services.render.draw_bar(
                 image, level, box=box, color=ctx.setting("bar_color", ACCENT)
@@ -204,9 +222,17 @@ class AudioPlugin(ActionPlugin):
         show_percent = level is not None and ctx.setting("show_percent", True)
         show_bar = level is not None and ctx.setting("show_bar", True)
 
-        # Der Balken sitzt am unteren Rand; alles andere teilt sich den Rest
-        # darüber. So bleibt bei jeder Höhe Luft zwischen Zahl und Balken.
-        inhalt_hoehe = (balken[1] - rand) if show_bar else (height - rand)
+        show_meter = self._zeigt_pegel(action_id, ctx)
+        pegel_hoehe = max(3, round(height * 0.06))
+        pegel_y1 = balken[1] - max(2, rand // 2) if show_bar else height - rand
+        pegel_box = (balken[0], pegel_y1 - pegel_hoehe, balken[2], pegel_y1)
+
+        # Balken und Pegel sitzen am unteren Rand; alles andere teilt sich den
+        # Rest darüber. So bleibt bei jeder Höhe Luft zwischen Zahl und Balken.
+        if show_meter:
+            inhalt_hoehe = pegel_box[1] - rand
+        else:
+            inhalt_hoehe = (balken[1] - rand) if show_bar else (height - rand)
 
         icon_px = max(
             16,
@@ -262,9 +288,29 @@ class AudioPlugin(ActionPlugin):
                 color=color,
             )
 
+        if show_meter:
+            self._zeichne_pegel(image, settings, ctx, state, pegel_box)
+
         if action_id in ("output_device", "volume_set") and state == "active":
             render.draw_badge(image, ctx.setting("active_badge", "#22c55e"), width=3)
         return image
+
+    def _zeigt_pegel(self, action_id, ctx: SlotContext) -> bool:
+        return (
+            action_id in ("volume", "volume_set")
+            and self._pegel.verfuegbar
+            and bool(ctx.setting("show_meter", True))
+        )
+
+    def _lies_pegel(self, settings, ctx: SlotContext) -> tuple[float, float]:
+        ziel = _target(settings)
+        return self._pegel.lesen(ziel, ziel == DEFAULT_SINK, ctx)
+
+    def _zeichne_pegel(self, image, settings, ctx: SlotContext, state, box) -> None:
+        # Stumm wird nicht gemessen, das Signal käme ohnehin nicht an.
+        stumm = state == "muted"
+        pegel, spitze = (0.0, 0.0) if stumm else self._lies_pegel(settings, ctx)
+        self.services.render.draw_meter(image, pegel, spitze, box=box, aktiv=not stumm)
 
     # -- GUI ---------------------------------------------------------------
 
