@@ -30,12 +30,18 @@ main() {
     local version="${DECKSWITCH_VERSION:-}"
 
     [ "$(uname -m)" = "x86_64" ] || fail "only x86_64 has releases, this is $(uname -m)"
-    command -v curl >/dev/null || fail "curl is needed"
-    command -v tar >/dev/null || fail "tar is needed"
+    # The uv installer and install.sh need these too, a minimal system can lack
+    # any of them. Better to name it here than to fail on a checksum later.
+    local tool
+    for tool in curl tar gzip awk sha256sum; do
+        command -v "$tool" >/dev/null || fail "${tool} is needed, install it with your package manager"
+    done
 
     if ! command -v uv >/dev/null && [ ! -x "${HOME}/.local/bin/uv" ]; then
         log "installing uv"
-        curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null
+        # Fest nach ~/.local/bin: Mit gesetztem XDG_BIN_HOME oder
+        # XDG_DATA_HOME legte der Installer uv sonst woanders ab.
+        curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="${HOME}/.local/bin" sh >/dev/null
     fi
     export PATH="${HOME}/.local/bin:${PATH}"
     command -v uv >/dev/null || fail "uv could not be installed"
@@ -51,6 +57,23 @@ main() {
         *) fail "no release found (got '${version}')" ;;
     esac
     log "DECK//SWITCH ${version} into ${target}"
+
+    # Nur einen leeren Ordner oder eine frühere Installation anfassen. Gleich
+    # werden darin Ordner gelöscht, und delete.sh entfernt ihn später ganz.
+    case "$(cd "$target" 2>/dev/null && pwd -P || echo "$target")" in
+        / | "$HOME" | "$(cd "$HOME" && pwd -P)") fail "${target} cannot be the install folder" ;;
+    esac
+    if [ -d "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ] &&
+       [ ! -f "${target}/backend/deckswitch/__init__.py" ]; then
+        fail "${target} is not empty and holds no DECK//SWITCH, choose another folder"
+    fi
+
+    # Die fertigen Dateien entstehen erst nach dem Veröffentlichen. Fehlen sie
+    # noch, bliebe nach dem Löschen unten kein Fenster und keine Oberfläche.
+    local asset="${repository}/releases/download/v${version}/deckswitch-${version}-x86_64-linux.tar.gz"
+    if ! curl -fsSLI -o /dev/null "$asset"; then
+        fail "the files of version ${version} are not ready yet, try again in a few minutes"
+    fi
 
     # Nicht lokal: Die Falle läuft erst, wenn main längst zurück ist.
     WORK=$(mktemp -d)

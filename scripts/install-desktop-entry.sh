@@ -11,13 +11,22 @@
 
 set -eu
 REPO=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-APPS="$HOME/.local/share/applications"
-ICONS="$HOME/.local/share/icons/hicolor"
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
+APPS="$DATA/applications"
+ICONS="$DATA/icons/hicolor"
 ENTRY="$APPS/deckswitch.desktop"
 
 # KDE führt einen eigenen Katalog der Desktop-Dateien. Ohne diesen Schritt
 # kennt die Fensterleiste den Eintrag nicht und kann dem Fenster kein Symbol
 # zuordnen. Muss laufen, *nachdem* die Datei geschrieben oder gelöscht wurde.
+# Pfad für die Exec-Zeile: in Anführungszeichen, damit Leerzeichen ihn nicht
+# teilen, mit den Zeichen maskiert, die dort und im Ersatztext von sed
+# besonders zählen (", `, $, %, &, |).
+exec_pfad() {
+    printf '"%s"' "$(printf '%s' "$1" | sed -e 's/["`$]/\\\\&/g' -e 's/%/%%/g')" |
+        sed -e 's/[&|]/\\&/g'
+}
+
 katalog_neu_lesen() {
     if command -v kbuildsycoca6 >/dev/null 2>&1; then
         kbuildsycoca6 >/dev/null 2>&1 || true
@@ -65,7 +74,7 @@ fi
 # start-gui.sh statt der Binärdatei: Es prüft, ob überhaupt gebaut wurde,
 # und meldet ein fehlendes Backend, statt ein leeres Fenster zu zeigen.
 mkdir -p "$APPS"
-sed "s|__EXEC__|$REPO/scripts/start-gui.sh|" \
+sed "s|__EXEC__|$(exec_pfad "$REPO/scripts/start-gui.sh")|" \
     "$REPO/packaging/deckswitch.desktop" > "$ENTRY"
 update-desktop-database "$APPS" 2>/dev/null || true
 katalog_neu_lesen
@@ -79,6 +88,6 @@ echo "  Start:   $REPO/scripts/start-gui.sh"
 if [ ! -x "$REPO/gui/src-tauri/target/release/deckswitch" ]; then
     printf '\033[33m  ! Das Fenster ist noch nicht gebaut. Der erste Start aus dem\n    Menü baut es — das dauert Minuten ohne sichtbare Rückmeldung.\n    Besser vorher einmal: ./scripts/start-gui.sh\033[0m\n'
 fi
-if [ ! -f "$HOME/.config/systemd/user/deckswitch.service" ]; then
+if [ ! -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/deckswitch.service" ]; then
     printf '\033[33m  ! Das Fenster bringt das Backend mit, danach läuft es bis zur\n    Abmeldung. Damit es schon beim Anmelden da ist und nach einem\n    Absturz neu startet: ./scripts/install-service.sh\033[0m\n'
 fi

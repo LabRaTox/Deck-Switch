@@ -11,7 +11,7 @@
 #   - adds the menu entry and the streamdeck:// links
 #   - starts the backend, now and at every login
 #
-# Works on Arch, Debian, Ubuntu and Fedora. Running it again is safe.
+# Works on Arch, Debian, Ubuntu, Fedora and openSUSE. Running it again is safe.
 #
 # Options:
 #   --no-root       change nothing that needs root, print what is left instead
@@ -73,6 +73,12 @@ elif command -v rpm-ostree >/dev/null && [ -e /run/ostree-booted ]; then
     FAMILY=ostree
     RUNTIME="hidapi wireplumber pipewire-utils pulseaudio-utils webkit2gtk4.1 qt6-qtdeclarative-devel layer-shell-qt"
     BUILD="gcc kernel-headers pkgconf-pkg-config libxkbcommon-devel"
+elif command -v zypper >/dev/null; then
+    # Tumbleweed und Leap haben nicht dieselben Namen, der Filter unten
+    # nimmt, was es gibt. Deshalb stehen beide Schriftpakete hier.
+    FAMILY=suse
+    RUNTIME="libhidapi-libusb0 libhidapi-hidraw0 libusb-1_0-0 libcairo2 libxkbcommon0 google-noto-sans-fonts noto-sans-fonts wireplumber pipewire-tools pulseaudio-utils qt6-declarative-tools qt6-declarative-imports layer-shell-qt6-imports libwebkit2gtk-4_1-0 libayatana-appindicator3-1 xdg-utils curl"
+    BUILD="gcc glibc-devel linux-glibc-devel pkgconf libxkbcommon-devel"
 elif command -v dnf >/dev/null; then
     FAMILY=fedora
     RUNTIME="hidapi libusb1 cairo libxkbcommon google-noto-sans-fonts wireplumber pipewire-utils pulseaudio-utils qt6-qtdeclarative-devel layer-shell-qt webkit2gtk4.1 libayatana-appindicator-gtk3 xdg-utils curl"
@@ -83,11 +89,16 @@ else
     BUILD=""
 fi
 
-# Was davon fehlt. Unbekannte Namen fallen unter Debian heraus: Ubuntu 22.04
-# hat zum Beispiel kein layer-shell-qt, und ein einziger unbekannter Name ließe
-# apt alles abbrechen. Das Overlay fehlt dann eben, die Sitzungsanzeige sagt es.
+# Was davon fehlt. Unbekannte Namen fallen unter Debian und openSUSE heraus:
+# Ubuntu 22.04 hat zum Beispiel kein layer-shell-qt, Leap kein layer-shell-qt6,
+# und ein einziger unbekannter Name ließe apt oder zypper alles abbrechen. Das
+# Overlay fehlt dann eben, die Sitzungsanzeige sagt es.
 missing_packages() {
-    local name
+    local name available=""
+    if [ "$FAMILY" = suse ]; then
+        available=$(zypper -q --no-refresh search -x -t package "$@" 2>/dev/null |
+            awk -F'|' 'NR > 2 { gsub(/ /, "", $2); print $2 }')
+    fi
     for name in "$@"; do
         case "$FAMILY" in
             arch) pacman -Q "$name" >/dev/null 2>&1 || echo "$name" ;;
@@ -98,6 +109,11 @@ missing_packages() {
                 fi
                 ;;
             fedora|ostree) rpm -q "$name" >/dev/null 2>&1 || echo "$name" ;;
+            suse)
+                if ! rpm -q "$name" >/dev/null 2>&1 && printf '%s\n' "$available" | grep -qx "$name"; then
+                    echo "$name"
+                fi
+                ;;
         esac
     done
 }
@@ -110,8 +126,14 @@ log "system: ${FAMILY}"
     hidapi, libusb, cairo, libxkbcommon, wireplumber, pipewire, webkit2gtk-4.1"
 
 if ! command -v uv >/dev/null; then
-    [ -x "${HOME}/.local/bin/uv" ] || fail "'uv' not found. Install it with: curl -LsSf https://astral.sh/uv/install.sh | sh"
-    PATH="${HOME}/.local/bin:${PATH}"
+    # Der uv-Installer folgt XDG_BIN_HOME und XDG_DATA_HOME, wenn sie gesetzt sind.
+    for dir in "${HOME}/.local/bin" "${XDG_BIN_HOME:-}" "${XDG_DATA_HOME:+${XDG_DATA_HOME}/../bin}"; do
+        if [ -n "$dir" ] && [ -x "${dir}/uv" ]; then
+            PATH="${dir}:${PATH}"
+            break
+        fi
+    done
+    command -v uv >/dev/null || fail "'uv' not found. Install it with: curl -LsSf https://astral.sh/uv/install.sh | sh"
 fi
 log "uv: $(command -v uv)"
 
@@ -150,6 +172,9 @@ MISSING=${MISSING% }
 if [ "$FAMILY" = debian ] && ! ls /var/lib/apt/lists/*_Packages* >/dev/null 2>&1; then
     note "apt has no package lists yet, run 'sudo apt update' and this installer again"
 fi
+if [ "$FAMILY" = suse ] && [ -z "$(zypper -q --no-refresh search -x -t package curl 2>/dev/null)" ]; then
+    note "zypper has no package lists yet, run 'sudo zypper refresh' and this installer again"
+fi
 
 {
     echo "set -e"
@@ -161,15 +186,20 @@ fi
                 echo "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $MISSING"
                 ;;
             fedora) echo "dnf install -y --skip-unavailable $MISSING" ;;
+            suse) echo "zypper --non-interactive install --no-recommends $MISSING" ;;
         esac
     fi
-    if ! cmp -s packaging/70-streamdeck.rules /etc/udev/rules.d/70-streamdeck.rules; then
+    # Ohne cmp, das fehlt auf Arch, Fedora und Tumbleweed oft. Dann galt die
+    # Regel bei jedem Lauf als geändert und kostete ein Passwort.
+    if [ "$(cat packaging/70-streamdeck.rules)" != "$(cat /etc/udev/rules.d/70-streamdeck.rules 2>/dev/null)" ]; then
         echo "install -D -m 644 '${REPO}/packaging/70-streamdeck.rules' /etc/udev/rules.d/70-streamdeck.rules"
         # Im Container gibt es kein udev, das ist kein Grund abzubrechen.
         echo "udevadm control --reload-rules 2>/dev/null || true"
         echo "udevadm trigger --subsystem-match=usb --subsystem-match=hidraw --subsystem-match=misc 2>/dev/null || true"
     fi
-    if ! id -nG | tr ' ' '\n' | grep -qx input; then
+    # Nach der Gruppe des Kontos fragen, nicht der laufenden Sitzung: Bis zum
+    # nächsten Login kennt die Sitzung eine neue Gruppe noch nicht.
+    if ! id -nG "$(id -un)" | tr ' ' '\n' | grep -qx input; then
         # Fast überall legt udev die Gruppe an, verlassen kann man sich nicht.
         # -f: Gibt es sie schon, ist das kein Fehler.
         echo "groupadd -rf input"
@@ -193,10 +223,21 @@ else
     [ -z "$MISSING" ] || log "installing: ${MISSING}"
     log "changing the system, this needs your password once"
     IN_GROUP_BEFORE=$(grep -c usermod "$ROOT_SCRIPT" || true)
+    ROOT_TOOL=sudo
+    command -v sudo >/dev/null || ! command -v doas >/dev/null || ROOT_TOOL=doas
     if [ "$(id -u)" = 0 ]; then
         sh "$ROOT_SCRIPT" && ROOT_OK=1 || ROOT_OK=0
     elif [ -t 0 ] && command -v sudo >/dev/null; then
-        sudo sh "$ROOT_SCRIPT" && ROOT_OK=1 || ROOT_OK=0
+        # Wer sudo hat, aber doas benutzt, kommt mit sudo nicht weiter.
+        if sudo sh "$ROOT_SCRIPT"; then
+            ROOT_OK=1
+        elif command -v doas >/dev/null && doas sh "$ROOT_SCRIPT"; then
+            ROOT_OK=1
+        else
+            ROOT_OK=0
+        fi
+    elif [ -t 0 ] && command -v doas >/dev/null; then
+        doas sh "$ROOT_SCRIPT" && ROOT_OK=1 || ROOT_OK=0
     elif sudo -n true 2>/dev/null; then
         sudo -n sh "$ROOT_SCRIPT" && ROOT_OK=1 || ROOT_OK=0
     elif command -v pkexec >/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
@@ -210,7 +251,7 @@ else
         note "if the Stream Deck is plugged in, unplug it and plug it back in once"
     else
         note "this could not run as root. Run it yourself, then run this installer again:
-$(sed -e '1d' -e 's/^/    sudo /' "$ROOT_SCRIPT")"
+$(sed -e '1d' -e "s/^/    ${ROOT_TOOL} /" "$ROOT_SCRIPT")"
     fi
 fi
 

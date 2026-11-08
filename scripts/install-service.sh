@@ -11,7 +11,7 @@
 
 set -eu
 REPO=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-UNIT_DIR="$HOME/.config/systemd/user"
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT="$UNIT_DIR/deckswitch.service"
 
 if [ "${1:-}" = "--remove" ]; then
@@ -33,11 +33,20 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 mkdir -p "$UNIT_DIR"
-sed "s|__REPO__|$REPO|g" "$REPO/packaging/deckswitch.service" > "$UNIT"
+# Zeichen, die sed im Ersatztext besonders behandelt, maskieren: Ein Ordner
+# wie "R&D" ergäbe sonst einen kaputten Pfad.
+# Dazu % verdoppeln, systemd liest es sonst als Platzhalter.
+REPO_SED=$(printf '%s' "$REPO" | sed -e 's/%/%%/g' -e 's/[&|\\]/\\&/g')
+sed "s|__REPO__|$REPO_SED|g" "$REPO/packaging/deckswitch.service" > "$UNIT"
 
 systemctl --user daemon-reload
 # ``restart`` statt ``--now``: Nach einem Update läuft noch die alte Fassung.
-[ "${1:-}" = "--no-enable" ] || systemctl --user enable deckswitch.service
+if [ "${1:-}" = "--no-enable" ]; then
+    # Auch eine frühere Aktivierung zurücknehmen, sonst startet er doch.
+    systemctl --user disable deckswitch.service 2>/dev/null || true
+else
+    systemctl --user enable deckswitch.service
+fi
 systemctl --user restart deckswitch.service
 
 printf '\033[32m✔ Service installed and started\033[0m\n'

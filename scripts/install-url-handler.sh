@@ -12,7 +12,15 @@
 
 set -eu
 REPO=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-APPS="$HOME/.local/share/applications"
+APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+
+# Pfad für die Exec-Zeile: in Anführungszeichen, damit Leerzeichen ihn nicht
+# teilen, mit den Zeichen maskiert, die dort und im Ersatztext von sed
+# besonders zählen (", `, $, %, &, |).
+exec_pfad() {
+    printf '"%s"' "$(printf '%s' "$1" | sed -e 's/["`$]/\\\\&/g' -e 's/%/%%/g')" |
+        sed -e 's/[&|]/\\&/g'
+}
 ENTRY="$APPS/streamdeck-url-handler.desktop"
 
 if [ "${1:-}" = "--remove" ]; then
@@ -26,7 +34,7 @@ HANDLER="$REPO/packaging/streamdeck-url-handler.py"
 chmod +x "$HANDLER"
 
 mkdir -p "$APPS"
-sed "s|__HANDLER__|$HANDLER|" "$REPO/packaging/streamdeck-url-handler.desktop" > "$ENTRY"
+sed "s|__HANDLER__|$(exec_pfad "$HANDLER")|" "$REPO/packaging/streamdeck-url-handler.desktop" > "$ENTRY"
 update-desktop-database "$APPS" 2>/dev/null || true
 
 if command -v xdg-mime >/dev/null 2>&1; then

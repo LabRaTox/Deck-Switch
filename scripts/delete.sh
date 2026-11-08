@@ -53,9 +53,20 @@ main() {
     "$repo/scripts/install-desktop-entry.sh" --remove
     "$repo/scripts/install-url-handler.sh" --remove
 
+    # Ein Backend, das das Fenster oder start-backend.sh ohne systemd gestartet
+    # hat, liefe aus dem gelöschten Ordner weiter und hielte Deck und Port.
+    if command -v pgrep >/dev/null 2>&1; then
+        laufend=$(pgrep -f -- "$repo/.venv/bin/python -m deckswitch" || true)
+        [ -z "$laufend" ] || warn "still running outside the service, stop it with: kill $(echo $laufend)"
+    fi
+    rm -rf -- "${XDG_CACHE_HOME:-$HOME/.cache}/deckswitch"
+
     # The folder about to go must not be the current one.
     cd /
-    if [ "$repo" = "$target" ]; then
+    # Nur eine echte Installation löschen, nie das Home oder die Wurzel, auch
+    # wenn DECKSWITCH_INSTALL_DIR dorthin zeigt.
+    if [ "$repo" = "$target" ] && [ -f "$repo/backend/deckswitch/__init__.py" ] &&
+       [ "$repo" != "/" ] && [ "$repo" != "$(CDPATH='' cd -- "$HOME" && pwd -P)" ]; then
         rm -rf -- "$repo"
         log "Program removed"
     else
