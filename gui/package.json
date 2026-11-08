@@ -1,7 +1,7 @@
 {
   "name": "deckswitch-gui",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Oberfläche von DECK//SWITCH, React-Frontend im Tauri-Fenster",
   "author": "Heiko Stuhrmann",
   "license": "MIT",

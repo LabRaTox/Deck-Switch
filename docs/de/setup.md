@@ -59,8 +59,8 @@ Dann das Paket laden und installieren. Mit der Adresse direkt in `pacman -U`
 geht es nicht, pacman sucht dort eine Signatur:
 
 ```sh
-curl -fLO https://github.com/LabRaTox/Deck-Switch/releases/download/v1.4.1/deckswitch-1.4.1-1-x86_64.pkg.tar.zst
-sudo pacman -U ./deckswitch-1.4.1-1-x86_64.pkg.tar.zst
+curl -fLO https://github.com/LabRaTox/Deck-Switch/releases/download/v1.4.2/deckswitch-1.4.2-1-x86_64.pkg.tar.zst
+sudo pacman -U ./deckswitch-1.4.2-1-x86_64.pkg.tar.zst
 systemctl --user enable --now deckswitch.service
 ```
 

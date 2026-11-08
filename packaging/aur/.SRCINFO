@@ -1,6 +1,6 @@
 pkgbase = deckswitch
 	pkgdesc = Independent Elgato Stream Deck control software with its own plugin system
-	pkgver = 1.4.1
+	pkgver = 1.4.2
 	pkgrel = 1
 	url = https://github.com/LabRaTox/Deck-Switch
 	install = deckswitch.install
@@ -30,6 +30,7 @@ pkgbase = deckswitch
 	depends = python-watchfiles
 	depends = python-httptools
 	depends = python-uvloop
+	depends = python-websockets
 	depends = hidapi
 	depends = libusb
 	depends = cairo
@@ -45,7 +46,7 @@ pkgbase = deckswitch
 	optdepends = spectacle: Bildschirmfotos
 	optdepends = kscreen-doctor: Bildschirme an- und ausschalten
 	optdepends = noto-fonts: Schriften für Tastenbeschriftungen
-	source = deckswitch-1.4.1.tar.gz::https://github.com/LabRaTox/Deck-Switch/archive/refs/tags/v1.4.1.tar.gz
+	source = deckswitch-1.4.2.tar.gz::https://github.com/LabRaTox/Deck-Switch/archive/refs/tags/v1.4.2.tar.gz
 	sha256sums = 4df3c40ede8a253e6d6219c812d0b7a09f0122385ceb3d4f21a35a174374117f
 
 pkgname = deckswitch

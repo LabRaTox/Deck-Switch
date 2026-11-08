@@ -1,5 +1,77 @@
 # Changelog
 
+## 1.4.2 · 8 November 2026
+
+### New
+
+- **openSUSE**: the installer knows Tumbleweed and Leap 15.6, and plugins
+  can name their packages for it (`suse`). Tested in fresh images of Arch,
+  Debian 12 and 13, Ubuntu 22.04, 24.04 and 25.04, Fedora 42 and 43 and
+  both openSUSE versions
+- Where sudo is missing or does not work, the installer asks through doas
+- Clicking the author on a plugin page filters the list to that author
+- `min_app_version` in a manifest is checked on every install: a plugin
+  that needs a newer DECK//SWITCH is refused with a message naming the
+  version
+
+### Changed
+
+- About half the CPU load when idle, for the backend and for PipeWire:
+  the default output and the device lists are no longer asked for on
+  every tick
+- Images that did not change are no longer sent to the device again
+- The window reloads less: a plugin status refreshes only the keys of
+  that plugin, a changed key no longer fetches the whole plugin list
+- Error messages from rejected input are readable instead of
+  "[object Object]", and failed actions without feedback now show up in
+  the error bar
+- The window starts in your language even before the backend answers
+- Stopping the backend is limited to 15 s and cleans up every part on
+  its own, so one stuck plugin no longer keeps the deck lit
+- The network deck page follows the language setting
+
+### Fixed
+
+- **Network deck**: a key could stay pressed forever when the release got
+  lost or arrived first. Keys are now released on logout, session end and
+  after a few seconds without contact
+- **Network deck**: failed logins counted per address only, a successful
+  login to another deck reset them. They now count per address and deck,
+  with a limit per deck on top. The minimum password length is also
+  checked by the backend
+- Recorded key combinations stored the US key position. On a German
+  layout Ctrl+Z was saved as Ctrl+Y. Already saved combinations keep
+  working
+- "Switch output device" also moved loopback and filter streams such as
+  EasyEffects, and could feed a virtual sink into itself
+- Two plugin installs at the same time could delete one of the plugins
+- A repeating multi-action kept running after its key was removed
+- Press and release of a key could run in the wrong order
+- Two devices with the same serial reset each other every few seconds
+- A config.json in the wrong encoding, a manifest that cannot be read or a
+  port out of range stopped the backend from starting
+- Restoring a backup did not end network deck sessions after a password
+  change
+- DDC: brightness changes no longer start a second write while the first
+  is running, and monitor names no longer shift when ddcutil lists an
+  invalid display first
+- GPU, temperature and disk values recover after a single failed reading
+- Soundboard: volume 0 played at full volume, and the fallback players
+  ignored volume and output
+- "ß" in an overlay shortcut stopped the shortcuts of all following decks
+- Ctrl++ could not be used as a key combination
+- Moving a key onto a dial (and back) is checked against what the action
+  supports
+- **Installer**: `get.sh` only touches an empty folder or an earlier
+  installation, and stops while the files of a new release are not
+  uploaded yet. `delete.sh` never removes the home folder
+- **Installer**: service, menu entry and `streamdeck://` handler work with
+  spaces, `&` and `%` in the path and follow `XDG_DATA_HOME` and
+  `XDG_CONFIG_HOME`. A second run no longer asks for the password every
+  time
+- The Arch package depends on `python-websockets`, without it the window
+  got no events
+
 ## 1.4.1 · 1 November 2026
 
 ### New
