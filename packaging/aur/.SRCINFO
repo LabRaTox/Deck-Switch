@@ -47,6 +47,6 @@ pkgbase = deckswitch
 	optdepends = kscreen-doctor: Bildschirme an- und ausschalten
 	optdepends = noto-fonts: Schriften für Tastenbeschriftungen
 	source = deckswitch-1.4.2.tar.gz::https://github.com/LabRaTox/Deck-Switch/archive/refs/tags/v1.4.2.tar.gz
-	sha256sums = 4df3c40ede8a253e6d6219c812d0b7a09f0122385ceb3d4f21a35a174374117f
+	sha256sums = bb9be6c513f683f6a1f9c2eb251b9a4b92bf6cc4f69d23906e9df14011f21eb4
 
 pkgname = deckswitch
