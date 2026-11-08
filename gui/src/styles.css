@@ -2177,6 +2177,43 @@ input[type="checkbox"] {
   width: 170px;
 }
 
+/* Der Autorname auf einer Detailseite führt zu allen seinen Plugins. Er liest
+   sich wie Text, bis der Zeiger darauf steht. */
+.autor-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.autor-link:hover {
+  color: var(--accent);
+  text-decoration-style: solid;
+}
+
+/* Der gesetzte Autorenfilter neben der Suche; ein Klick hebt ihn auf. */
+.autor-chip {
+  flex: none;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.autor-chip:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* Schmale Fenster: Das Menü wandert über den Inhalt und legt sich um. */
 @media (max-width: 900px) {
   .plugin-layout {

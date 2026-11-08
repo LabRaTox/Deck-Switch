@@ -15,7 +15,21 @@ import { TopBar } from "./components/TopBar";
 import { Wordmark } from "./components/Wordmark";
 import i18n from "./i18n";
 import { echosVergessen, istEigenesEcho, seitenEcho, slotEcho, useStore } from "./store";
-import type { BackendError, DeckInfo, DeviceInfo } from "./types";
+import type { BackendError, DeckInfo, DeviceInfo, PluginInfo } from "./types";
+
+/** Config-Änderungen, bei denen sich an den Plugins nichts ändert. */
+const GRUENDE_OHNE_PLUGINS = new Set([
+  "slot_changed",
+  "brightness",
+  "page_created",
+  "page_deleted",
+  "page_moved",
+  "page_updated",
+  "profile_changed",
+  "profile_created",
+  "profile_deleted",
+  "profile_switched",
+]);
 
 export default function App() {
   const { t } = useTranslation();
@@ -25,10 +39,10 @@ export default function App() {
   const language = useStore((s) => s.config?.app.language);
 
   useEffect(() => {
-    void useStore
-      .getState()
-      .load()
-      .catch(() => undefined);
+    // Den Stand lädt das Öffnen der Ereignisverbindung weiter unten, beim
+    // Start wie nach jedem Abriss. Ein zusätzliches Laden hier holte alles
+    // doppelt.
+    //
     // Einmal beim Start und dann alle fünf Minuten: Eine wartende Einreichung
     // ist nichts, was auf die Sekunde ankommt — aber sie soll auffallen, ohne
     // dass jemand die App neu startet.
@@ -37,6 +51,9 @@ export default function App() {
       () => void useStore.getState().refreshStoreKonto(),
       5 * 60 * 1000,
     );
+
+    const kachelTakt = new Map<string, number>();
+    let verbindung = 0;
 
     // Alles, was das Backend von sich aus meldet, landet hier: Gerät
     // verbunden/getrennt, Seitenwechsel, Plugin-Fehler, Zustände von außen.
@@ -118,7 +135,8 @@ export default function App() {
               break;
             }
             if (grund === "page_updated" && istEigenesEcho(seitenEcho(seite))) break;
-            store.ladeBald();
+            // Nur was die Plugins selbst betrifft, braucht deren Liste neu.
+            store.ladeBald(!GRUENDE_OHNE_PLUGINS.has(grund));
             break;
           }
           case "plugin_error":
@@ -126,12 +144,29 @@ export default function App() {
             else store.pushError(event.data as unknown as BackendError);
             store.bumpPreview();
             break;
-          case "plugin_state":
-            store.bumpPreview();
-            // Verbindungszustand eines Plugins hat sich geändert (OBS
-            // gestartet, Discord getrennt) — Statusanzeige nachziehen.
-            if (event.data.plugin_id) void store.refreshPlugins();
+          case "plugin_state": {
+            // Ein Plugin meldet einen neuen Zustand (OBS gestartet, Discord
+            // getrennt, Lautstärke von außen geändert). Neu gezeichnet werden
+            // nur die Kacheln, die es benutzen. Bringt die Meldung einen
+            // Status mit, wird nur dieser übernommen.
+            const pluginId = String(event.data.plugin_id ?? "");
+            if (!pluginId) break;
+            // Beim Ziehen eines Lautstärkereglers kommen Dutzende Meldungen
+            // in der Sekunde. Gesammelt wird je Plugin eine Auffrischung.
+            if (!kachelTakt.has(pluginId)) {
+              kachelTakt.set(
+                pluginId,
+                window.setTimeout(() => {
+                  kachelTakt.delete(pluginId);
+                  useStore.getState().bumpPluginTiles(pluginId);
+                }, 150),
+              );
+            }
+            if ("status" in event.data) {
+              store.setPluginStatus(pluginId, event.data.status as PluginInfo["status"]);
+            }
             break;
+          }
           case "install_request":
             // Über streamdeck:// angefragte Installation — wird nur
             // angezeigt, nie automatisch ausgeführt.
@@ -148,15 +183,30 @@ export default function App() {
         if (isOnline) {
           // Was vor dem Abriss unterwegs war, wird nie mehr gemeldet.
           echosVergessen();
-          void useStore
-            .getState()
-            .load()
-            .catch(() => undefined);
+          // Geladen wird, bis ein Laden gelingt. Gezählt wird der Erfolg,
+          // nicht das eigene Versprechen: Ein Laden kann auch von einem
+          // späteren verdrängt werden, das dann scheitert. Eine neue
+          // Verbindung beendet die Versuche der alten.
+          const meine = ++verbindung;
+          const seit = Date.now();
+          const versuche = (abstand: number) => {
+            void useStore
+              .getState()
+              .load()
+              .catch(() => undefined)
+              .finally(() => {
+                const s = useStore.getState();
+                if (meine !== verbindung || !s.online || s.zuletztGeladen >= seit) return;
+                window.setTimeout(() => versuche(Math.min(abstand * 2, 15000)), abstand);
+              });
+          };
+          versuche(2000);
         }
       },
     );
     return () => {
       window.clearInterval(pruefungen);
+      kachelTakt.forEach((zeitgeber) => window.clearTimeout(zeitgeber));
       disconnect();
     };
   }, []);
@@ -173,7 +223,7 @@ export default function App() {
         <div className="boot-card">
           <h1><Wordmark /></h1>
           <p>{online ? t("common.loading") : t("device.backendOffline")}</p>
-          <code>{t("device.backendOfflineHint")}</code>
+          {!online && <code>{t("device.backendOfflineHint")}</code>}
         </div>
       </div>
     );

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import { localized } from "../i18n";
-import { useStore, vorschauStand } from "../store";
+import { toError, useStore, vorschauStand } from "../store";
 import type { ActionDescriptor, InputType, PluginInfo, Slot } from "../types";
 import { DRAG_MIME, type ActionDragPayload } from "./ActionLibrary";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
@@ -156,22 +156,23 @@ function SlotTile({
   // Profil, fällt beides auf die Startseite zurück, statt auseinanderzulaufen.
   const pageId = useStore((s) => s.currentPage()?.id ?? s.currentPageId);
   const previewVersion = useStore((s) => vorschauStand(s, pageId, inputType, index));
-  const selection = useStore((s) => s.selection);
+  // Schmale Abfragen: Jede Kachel zeichnet sich nur neu, wenn sich für sie
+  // etwas ändert, nicht bei jeder Auswahl einer anderen Kachel.
+  const selected = useStore(
+    (s) => s.selection?.inputType === inputType && s.selection.index === index,
+  );
   const select = useStore((s) => s.select);
-  const plugins = useStore((s) => s.plugins);
   const setSlot = useStore((s) => s.setSlot);
   const moveSlot = useStore((s) => s.moveSlot);
   const copySlot = useStore((s) => s.copySlot);
   const cutSlot = useStore((s) => s.cutSlot);
   const pasteSlot = useStore((s) => s.pasteSlot);
   const canPasteInto = useStore((s) => s.canPasteInto);
-  const clipboard = useStore((s) => s.clipboard);
+  const clipboard = useStore((s) => s.clipboard !== null);
   const slot = useStore((s) =>
     s.slotAt({ inputType, index }),
   );
-
-  const selected = selection?.inputType === inputType && selection.index === index;
-  const plugin = plugins.find((p) => p.id === slot?.plugin_id);
+  const plugin = useStore((s) => s.plugins.find((p) => p.id === slot?.plugin_id));
   const action = plugin?.manifest.actions.find((a) => a.id === slot?.action_id);
 
   const handleDrop = async (event: React.DragEvent) => {
@@ -189,7 +190,7 @@ function SlotTile({
     if (!actionPayload) return;
     const { plugin_id, action_id } = JSON.parse(actionPayload) as ActionDragPayload;
 
-    const targetPlugin = plugins.find((p) => p.id === plugin_id);
+    const targetPlugin = useStore.getState().plugins.find((p) => p.id === plugin_id);
     const targetAction = targetPlugin?.manifest.actions.find((a) => a.id === action_id);
     if (!targetPlugin || !targetAction) return;
     // Aktionen, die diese Eingabeart nicht können, gar nicht erst ablegen.
@@ -302,7 +303,9 @@ function SlotTile({
             title={t("grid.test")}
             onClick={(event) => {
               event.stopPropagation();
-              void api.triggerSlot(pageId, inputType, index).catch(() => undefined);
+              void api
+                .triggerSlot(pageId, inputType, index)
+                .catch((fehler) => useStore.getState().pushError(toError(fehler, "trigger")));
             }}
           >
             ▶

@@ -37,7 +37,7 @@
     "firmware": "Firmware",
     "serial": "Seriennummer",
     "backendOffline": "Backend nicht erreichbar",
-    "backendOfflineHint": "Läuft das Backend? Starte es mit: ./scripts/start-backend.sh",
+    "backendOfflineHint": "Läuft das Backend? Starte es mit: systemctl --user start deckswitch.service",
     "brightnessVirtual": "Ein Overlay hat keine Hintergrundbeleuchtung. Die Kacheln sehen so aus, wie sie gestaltet wurden."
   },
   "pages": {
@@ -249,7 +249,7 @@
     "screensavers": "Bildschirmschoner",
     "screensaversHint": "Malen den Schoner über das ganze Deck. Ausgewählt wird er unter Einstellungen → Bildschirmschoner.",
     "wallpapers": "Touchstrip-Hintergrund",
-    "wallpapersHint": "Malen den Grund hinter den Dial-Segmenten. Ausgewählt wird er unter Einstellungen → Hintergrundbild Touchstrip.",
+    "wallpapersHint": "Malen den Grund hinter den Dial-Segmenten. Ausgewählt wird er je Seite im Editor unter Hintergrundbild Touchstrip.",
     "noneInstalled": "Keins installiert.",
     "categories": {
       "all": "Alle",
@@ -297,6 +297,9 @@
     "details": "Angaben",
     "noDescription": "Keine Beschreibung hinterlegt.",
     "by": "von {{author}}",
+    "authorOnly": "Nur von {{author}}",
+    "authorFilter": "Alle Plugins von {{author}}",
+    "authorFilterClear": "Wieder alle Plugins zeigen",
     "detail": {
       "type": "Art",
       "category": "Kategorie",
@@ -417,6 +420,7 @@
     "loading": "Lädt …",
     "reset": "Zurücksetzen",
     "remove": "Entfernen",
+    "pathPlaceholder": "/pfad/zur/datei",
     "choose": "Auswählen"
   },
   "screensaver": {
@@ -523,7 +527,8 @@
     "overlayShow": "Overlay zeigen",
     "overlayHide": "Overlay verstecken",
     "hotkey": "Kurzbefehl",
-    "hotkeyHint": "Holt dieses Overlay und schickt es wieder weg, von überall aus und ohne die Oberfläche zu öffnen. Der Kurzbefehl wird bei Plasma angemeldet und steht danach auch in den Systemeinstellungen unter „DECK//SWITCH“. Leeres Feld = kein Kurzbefehl.",
+    "hotkeyPlaceholder": "Strg+Alt+D",
+    "hotkeyHint": "Holt dieses Overlay und schickt es wieder weg, von überall aus und ohne die Oberfläche zu öffnen. Der Kurzbefehl wird beim Desktop angemeldet. Unter Plasma steht er danach auch in den Systemeinstellungen unter „DECK//SWITCH“, andere Desktops fragen einmal nach und vergeben eventuell eine andere Kombination. Leeres Feld = kein Kurzbefehl.",
     "addVirtual": "Virtuelles Deck anlegen",
     "newVirtualName": "Virtuelles Deck",
     "virtualHint": "Raster und Kachelgröße dieses Overlays. Änderungen sind sofort zu sehen.",
@@ -543,7 +548,7 @@
     "passwordSet": "gesetzt, zum Ändern ein neues eingeben",
     "passwordNone": "noch keins gesetzt",
     "passwordSave": "Speichern",
-    "passwordHint": "Mindestens 4 Zeichen. Das Passwort wird nur verschlüsselt abgelegt und nie wieder angezeigt. Wer es ändert, trennt damit alle, die gerade verbunden sind.",
+    "passwordHint": "Mindestens 4 Zeichen. Gespeichert wird nur ein daraus abgeleiteter Hash, das Passwort selbst wird nie wieder angezeigt. Wer es ändert, trennt damit alle, die gerade verbunden sind.",
     "passwordClear": "Passwort entfernen",
     "passwordClearConfirm": "Ohne Passwort wird das Deck nicht mehr im Netz angeboten. Entfernen?",
     "networkEnabled": "Im Netz anbieten",

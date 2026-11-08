@@ -302,7 +302,7 @@ function VirtualDeckSection() {
         <HotkeyInput
           id="overlay-hotkey"
           value={deck.overlay_hotkey ?? ""}
-          placeholder="Strg+Alt+D"
+          placeholder={t("decks.hotkeyPlaceholder")}
           warning={deck.hotkey_reason || null}
           onChange={(wert) => void setGrid(deck.id, { overlay_hotkey: wert })}
         />

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api, SYSTEM_ICONSET } from "../api/client";
 import { localized } from "../i18n";
-import { useStore, vorschauStand } from "../store";
+import { toError, useStore, vorschauStand } from "../store";
 import type { ActionDescriptor, IconRef, InputType, Slot, Step } from "../types";
 import { ActionPicker, defaultAction } from "./ActionPicker";
 import { BackgroundEditor } from "./BackgroundEditor";
@@ -821,7 +821,7 @@ function StackSection({
               void api
                 .cycleStack(pageId, index)
                 .then(() => bumpTile(pageId, "dial", index))
-                .catch(() => undefined);
+                .catch((fehler) => useStore.getState().pushError(toError(fehler, "stack")));
             }}
           >
             {t("stack.cycle")}

@@ -124,6 +124,8 @@ export function PluginsView() {
    */
   const [filter, setFilter] = useState<"alle" | "installiert" | PluginCategory>("alle");
   const [suche, setSuche] = useState("");
+  /** Nur die Plugins dieses Autors, nach einem Klick auf der Detailseite. */
+  const [autor, setAutor] = useState("");
   const [sortierung, setSortierung] = useState<Sortierung>("nameAsc");
   const [updates, setUpdates] = useState<StoreUpdate[]>([]);
   const [alleLaufen, setAlleLaufen] = useState(false);
@@ -281,9 +283,20 @@ export function PluginsView() {
   // Reiter und Menü zählen, was die Suche übrig lässt: So sieht man, wo die
   // Treffer liegen, auch wenn sie unter einem anderen Reiter stehen.
   const nadel = suche.trim().toLowerCase();
+  const autorVon = (e: Eintrag) =>
+    e.art === "installiert"
+      ? e.plugin.builtin ? "" : (e.plugin.manifest.author ?? "")
+      : e.plugin.author;
   const treffer = eintraege.filter(
-    (e) => !nadel || suchtextVon(e, i18n.language).includes(nadel),
+    (e) =>
+      (!autor || autorVon(e) === autor) &&
+      (!nadel || suchtextVon(e, i18n.language).includes(nadel)),
   );
+  const zeigeAutor = (name: string) => {
+    setAutor(name);
+    setFilter("alle");
+    setDetail(null);
+  };
 
   /** Alles vom gewählten Typ — die Grundlage für Menü und Liste. */
   const vomTyp = treffer
@@ -315,6 +328,7 @@ export function PluginsView() {
           plugin={gezeigt}
           storeEintrag={katalog?.find((s) => s.slug === gezeigt.id) ?? null}
           onBack={() => setDetail(null)}
+          onAutor={zeigeAutor}
         />
       </div>
     );
@@ -329,6 +343,7 @@ export function PluginsView() {
           laeuft={laeuft === detail.id}
           onInstallieren={(eintrag) => void installiere(eintrag)}
           onBack={() => setDetail(null)}
+          onAutor={zeigeAutor}
         />
       </div>
     );
@@ -491,6 +506,17 @@ export function PluginsView() {
               aria-label={t("plugins.search")}
               onChange={(event) => setSuche(event.target.value)}
             />
+            {autor && (
+              <button
+                type="button"
+                className="autor-chip"
+                title={t("plugins.authorFilterClear")}
+                onClick={() => setAutor("")}
+              >
+                {t("plugins.authorOnly", { author: autor })}
+                <span aria-hidden="true"> ✕</span>
+              </button>
+            )}
             <select
               value={sortierung}
               aria-label={t("plugins.sortBy")}
@@ -506,7 +532,7 @@ export function PluginsView() {
 
           {sichtbar.length === 0 ? (
             <p className="empty-note">
-              {t(nadel ? "plugins.noMatch" : "plugins.emptyCategory")}
+              {t(nadel || autor ? "plugins.noMatch" : "plugins.emptyCategory")}
             </p>
           ) : (
             <div className="plugin-list">

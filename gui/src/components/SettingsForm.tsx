@@ -299,7 +299,7 @@ function FileInput({
         id={id}
         type="text"
         value={value}
-        placeholder="/pfad/zur/datei"
+        placeholder={t("common.pathPlaceholder")}
         onChange={(event) => onChange(event.target.value)}
       />
       <label className="btn small">

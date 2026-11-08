@@ -37,7 +37,7 @@
     "firmware": "Firmware",
     "serial": "Serial number",
     "backendOffline": "Backend unreachable",
-    "backendOfflineHint": "Is the backend running? Start it with: ./scripts/start-backend.sh",
+    "backendOfflineHint": "Is the backend running? Start it with: systemctl --user start deckswitch.service",
     "brightnessVirtual": "An overlay has no backlight. Its tiles look exactly as they were designed."
   },
   "pages": {
@@ -249,7 +249,7 @@
     "screensavers": "Screensavers",
     "screensaversHint": "Draw the screensaver across the whole deck. Pick one under Settings → Screensaver.",
     "wallpapers": "Touch strip background",
-    "wallpapersHint": "Draw the background behind the dial segments. Pick one under Settings → Touch strip wallpaper.",
+    "wallpapersHint": "Draw the background behind the dial segments. Pick one per page in the editor, under Touch strip wallpaper.",
     "noneInstalled": "None installed.",
     "categories": {
       "all": "All",
@@ -297,6 +297,9 @@
     "details": "Details",
     "noDescription": "No description provided.",
     "by": "by {{author}}",
+    "authorOnly": "Only by {{author}}",
+    "authorFilter": "All plugins by {{author}}",
+    "authorFilterClear": "Show all plugins again",
     "detail": {
       "type": "Type",
       "category": "Category",
@@ -417,6 +420,7 @@
     "loading": "Loading …",
     "reset": "Reset",
     "remove": "Remove",
+    "pathPlaceholder": "/path/to/file",
     "choose": "Choose"
   },
   "screensaver": {
@@ -523,7 +527,8 @@
     "overlayShow": "Show overlay",
     "overlayHide": "Hide overlay",
     "hotkey": "Shortcut",
-    "hotkeyHint": "Brings this overlay up and sends it away again, from anywhere and without opening the interface. The shortcut is registered with Plasma and also shows up in System Settings under “DECK//SWITCH”. Empty field = no shortcut.",
+    "hotkeyPlaceholder": "Ctrl+Alt+D",
+    "hotkeyHint": "Brings this overlay up and sends it away again, from anywhere and without opening the interface. The shortcut is registered with the desktop. Under Plasma it also shows up in System Settings under “DECK//SWITCH”, other desktops may ask once and assign a different combination. Empty field = no shortcut.",
     "addVirtual": "Add virtual deck",
     "newVirtualName": "Virtual deck",
     "virtualHint": "Grid and tile size of this overlay. Changes take effect immediately.",
@@ -543,7 +548,7 @@
     "passwordSet": "set, enter a new one to change it",
     "passwordNone": "none set yet",
     "passwordSave": "Save",
-    "passwordHint": "At least 4 characters. The password is only stored encrypted and never shown again. Changing it disconnects everyone currently connected.",
+    "passwordHint": "At least 4 characters. Only a hash derived from it is stored, the password itself is never shown again. Changing it disconnects everyone currently connected.",
     "passwordClear": "Remove password",
     "passwordClearConfirm": "Without a password the deck is no longer offered on the network. Remove it?",
     "networkEnabled": "Offer on the network",

@@ -453,7 +453,8 @@ export interface BackendState {
   active_deck: string;
   config: Config;
   current_page_id: string;
-  plugins: PluginInfo[];
+  /** Fehlt, wenn mit ``plugins=false`` geladen wurde. */
+  plugins?: PluginInfo[];
   errors: BackendError[];
   backgrounds: BackgroundPreset[];
 }

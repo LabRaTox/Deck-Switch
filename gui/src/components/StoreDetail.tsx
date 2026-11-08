@@ -9,6 +9,7 @@ import { type Angaben, DetailAngaben } from "./DetailAngaben";
 import { PfadText } from "./PfadText";
 import { storeAenderungen, storeBeschreibung, storeName } from "./storeTexte";
 import { UiIcon } from "./UiIcon";
+import { VonAutor } from "./VonAutor";
 import { Warnungen } from "./StoreView";
 
 /**
@@ -31,7 +32,10 @@ export function StoreDetail({
   laeuft,
   onInstallieren,
   onBack,
+  onAutor,
 }: {
+  /** Zeigt alle Plugins dieses Autors in der Liste. */
+  onAutor?: (autor: string) => void;
   slug: string;
   bekannt: StorePlugin | null;
   laeuft: boolean;
@@ -116,7 +120,9 @@ export function StoreDetail({
         <div>
           <small className="detail-kategorie">{t(`plugins.categories.${plugin.category}`)}</small>
           <h2>{storeName(plugin, i18n.language)}</h2>
-          <small className="detail-autor">{t("plugins.by", { author: plugin.author })}</small>
+          <small className="detail-autor">
+            <VonAutor autor={plugin.author} onAutor={onAutor} />
+          </small>
         </div>
         <div className="detail-kopf-knoepfe">
           <button

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
-import { useStore } from "../store";
+import { toError, useStore } from "../store";
 import type { DeckInfo } from "../types";
 import { HilfeMenue } from "./HilfeMenue";
 import { Wordmark } from "./Wordmark";
@@ -194,7 +194,11 @@ export function TopBar() {
           <button
             type="button"
             className="btn"
-            onClick={() => void api.reconnect().catch(() => undefined)}
+            onClick={() =>
+              void api
+                .reconnect()
+                .catch((fehler) => useStore.getState().pushError(toError(fehler, "reconnect")))
+            }
           >
             {t("device.reconnect")}
           </button>

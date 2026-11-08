@@ -11,6 +11,7 @@ import { create } from "zustand";
 import { api, setActiveDeck } from "./api/client";
 import type {
   BackendError,
+  BackendState,
   Config,
   Profile,
   DeckInfo,
@@ -29,6 +30,8 @@ import type {
 
 interface StoreState {
   ready: boolean;
+  /** Wann zuletzt ein Laden gelang (ms seit 1970), 0 vor dem ersten. */
+  zuletztGeladen: number;
   online: boolean;
   device: DeviceInfo | null;
   /** Alle bekannten Decks — auch gerade nicht angeschlossene. */
@@ -61,9 +64,10 @@ interface StoreState {
    */
   storeKonto: StoreAccount | null;
 
-  load: () => Promise<void>;
+  load: (mitPlugins?: boolean) => Promise<void>;
   /** Neu laden, aber gebündelt: Mehrere Anlässe kurz hintereinander laden einmal. */
-  ladeBald: () => void;
+  /** Lädt kurz verzögert neu. ``mitPlugins=false`` lässt die Plugin-Liste aus. */
+  ladeBald: (mitPlugins?: boolean) => void;
   /** Deckliste übernehmen, wie sie das Backend von sich aus meldet. */
   setDecks: (decks: DeckInfo[]) => void;
   setOnline: (online: boolean) => void;
@@ -111,6 +115,10 @@ interface StoreState {
   select: (selection: Selection | null) => void;
   bumpPreview: () => void;
   bumpTile: (pageId: string, inputType: InputType, index: number) => void;
+  /** Frischt die Kacheln der aktuellen Seite auf, die dieses Plugin benutzen. */
+  bumpPluginTiles: (pluginId: string) => void;
+  /** Übernimmt einen gemeldeten Status, ohne die Plugin-Liste neu zu holen. */
+  setPluginStatus: (pluginId: string, status: PluginInfo["status"]) => void;
 
   currentPage: () => Page | null;
   slotAt: (selection: Selection | null) => Slot | null;
@@ -194,7 +202,28 @@ let lokalerStand = 0;
 /** Ein Laden kam, während noch geschrieben wurde — danach nachholen. */
 let ladenNachSchreiben = false;
 let ladeNummer = 0;
+
+/** Per Ereignis gemeldete Status samt dem Ladestand, zu dem sie kamen. */
+const gemeldeterStatus = new Map<string, { status: PluginInfo["status"]; ladeStand: number }>();
+
+/**
+ * Legt Status, die erst während dieses Ladens gemeldet wurden, über die
+ * Antwort. Ältere sind in der Antwort schon enthalten und werden vergessen.
+ */
+function mitGemeldetemStatus(plugins: PluginInfo[], nummer: number): PluginInfo[] {
+  for (const [id, eintrag] of gemeldeterStatus) {
+    if (eintrag.ladeStand < nummer) gemeldeterStatus.delete(id);
+  }
+  if (gemeldeterStatus.size === 0) return plugins;
+  return plugins.map((p) => {
+    const eintrag = gemeldeterStatus.get(p.id);
+    return eintrag ? { ...p, status: eintrag.status } : p;
+  });
+}
 let ladeUhr: number | null = null;
+let ladeMitPlugins = false;
+/** Wie viele Ladevorgänge mit Plugin-Liste gerade unterwegs sind. */
+let vollesLaden = 0;
 
 function geaendert(): void {
   lokalerStand += 1;
@@ -289,6 +318,21 @@ export function seitenEcho(pageId: string): string {
   return `page|${pageId}`;
 }
 
+/**
+ * Kann diese Belegung auf dieser Eingabeart liegen?
+ *
+ * Kennt die GUI die Aktion nicht, etwa weil das Plugin inzwischen
+ * deaktiviert ist, steht sie nicht im Weg und lässt das Backend entscheiden.
+ * Ein grundlos gesperrter Eintrag ärgert mehr als eine Fehlerkachel, die man
+ * sofort wieder löschen kann.
+ */
+function passtAuf(plugins: PluginInfo[], slot: Slot, inputType: InputType): boolean {
+  const action = plugins
+    .find((p) => p.id === slot.plugin_id)
+    ?.manifest.actions.find((a) => a.id === slot.action_id);
+  return action ? action.inputs.includes(inputType) : true;
+}
+
 function kachelSchluessel(pageId: string, inputType: string, index: number): string {
   return `${pageId}|${inputType}|${index}`;
 }
@@ -305,6 +349,7 @@ export function vorschauStand(
 
 export const useStore = create<StoreState>((set, get) => ({
   ready: false,
+  zuletztGeladen: 0,
   online: false,
   device: null,
   decks: [],
@@ -320,10 +365,19 @@ export const useStore = create<StoreState>((set, get) => ({
   kachelStand: {},
   view: "editor",
 
-  load: async () => {
+  load: async (mitPlugins = true) => {
     const nummer = ++ladeNummer;
     const standVorher = lokalerStand;
-    const state = await api.state();
+    // Ein späteres Laden verdrängt ein früheres. Wartet noch eines mit
+    // Plugin-Liste, muss das spätere sie ebenfalls holen.
+    const plugins = mitPlugins || vollesLaden > 0;
+    if (plugins) vollesLaden += 1;
+    let state: BackendState;
+    try {
+      state = await api.state(plugins);
+    } finally {
+      if (plugins) vollesLaden -= 1;
+    }
     // Ein späteres Laden ist schon unterwegs: Dessen Antwort ist die neuere.
     if (nummer !== ladeNummer) return;
     const decks = state.decks ?? [];
@@ -358,23 +412,31 @@ export const useStore = create<StoreState>((set, get) => ({
       device: activeInfo ?? state.device,
       decks,
       activeDeck: active,
+      // Ein anderes Deck hat andere Tasten: Die alte Auswahl zeigte sonst
+      // auf eine Taste, die es dort nicht gibt, oder auf eine fremde Belegung.
+      ...(previous !== active ? { selection: null } : {}),
       ...(configSicher || !get().config
         ? { config: state.config, previewVersion: get().previewVersion + 1 }
         : {}),
       version: state.version ?? "",
-      plugins: state.plugins,
+      ...(state.plugins ? { plugins: mitGemeldetemStatus(state.plugins, nummer) } : {}),
+      zuletztGeladen: Date.now(),
       errors: state.errors,
       backgroundPresets: state.backgrounds,
       currentPageId,
     });
   },
 
-  ladeBald: () => {
+  ladeBald: (mitPlugins = true) => {
     if (ladeUhr !== null) window.clearTimeout(ladeUhr);
+    // Will einer der gesammelten Anlässe die Plugins, werden sie mitgeholt.
+    ladeMitPlugins = ladeMitPlugins || mitPlugins;
     ladeUhr = window.setTimeout(() => {
       ladeUhr = null;
+      const plugins = ladeMitPlugins;
+      ladeMitPlugins = false;
       void get()
-        .load()
+        .load(plugins)
         .catch(() => undefined);
     }, 150);
   },
@@ -519,6 +581,35 @@ export const useStore = create<StoreState>((set, get) => ({
   setView: (view) => set({ view }),
   select: (selection) => set({ selection }),
   bumpPreview: () => set((s) => ({ previewVersion: s.previewVersion + 1 })),
+  bumpPluginTiles: (pluginId) => {
+    const page = get().currentPage();
+    if (!page) return;
+    // Auch eine Multi-Aktion oder ein Dial-Stapel kann das Plugin enthalten,
+    // deshalb wird die ganze Belegung durchsucht.
+    const nadel = `"plugin_id":${JSON.stringify(pluginId)}`;
+    const stand = { ...get().kachelStand };
+    let geaendert = false;
+    for (const [inputType, slots] of [
+      ["key", page.keys],
+      ["dial", page.dials],
+    ] as const) {
+      for (const [index, slot] of Object.entries(slots)) {
+        if (!JSON.stringify(slot).includes(nadel)) continue;
+        const schluessel = kachelSchluessel(page.id, inputType, Number(index));
+        stand[schluessel] = (stand[schluessel] ?? 0) + 1;
+        geaendert = true;
+      }
+    }
+    if (geaendert) set({ kachelStand: stand });
+  },
+  setPluginStatus: (pluginId, status) => {
+    // Gemerkt mit dem Stand der Ladevorgänge: Ein Laden, das vor dieser
+    // Meldung begann, brächte sonst den alten Status zurück.
+    gemeldeterStatus.set(pluginId, { status, ladeStand: ladeNummer });
+    set((s) => ({
+      plugins: s.plugins.map((p) => (p.id === pluginId ? { ...p, status } : p)),
+    }));
+  },
   bumpTile: (pageId, inputType, index) =>
     set((s) => {
       const schluessel = kachelSchluessel(pageId, inputType, index);
@@ -598,6 +689,10 @@ export const useStore = create<StoreState>((set, get) => ({
     const source = get().slotAt(from);
     if (!source) return;
     const target = get().slotAt(to);
+    // Getauscht wird nur, wenn beide Belegungen an der neuen Stelle laufen.
+    // Sonst läge ein Ordner auf einem Dial oder eine Lautstärke auf einer Taste.
+    if (!passtAuf(get().plugins, source, to.inputType)) return;
+    if (target && !passtAuf(get().plugins, target, from.inputType)) return;
 
     // Tauschen statt überschreiben — beim Umsortieren die freundlichere Geste.
     // Scheitert eine Hälfte, lädt die Schreibspur den echten Stand nach.
@@ -637,14 +732,7 @@ export const useStore = create<StoreState>((set, get) => ({
   canPasteInto: (inputType) => {
     const { clipboard, plugins } = get();
     if (!clipboard) return false;
-    const action = plugins
-      .find((p) => p.id === clipboard.plugin_id)
-      ?.manifest.actions.find((a) => a.id === clipboard.action_id);
-    // Kennt die GUI die Aktion nicht — etwa weil das Plugin inzwischen
-    // deaktiviert ist —, nicht im Weg stehen und das Backend entscheiden
-    // lassen. Ein Eintrag, der grundlos gesperrt ist, ärgert mehr als eine
-    // Fehlerkachel, die man sofort wieder löschen kann.
-    return action ? action.inputs.includes(inputType) : true;
+    return passtAuf(plugins, clipboard, inputType);
   },
 
   navigate: async (pageId) => {
@@ -694,6 +782,9 @@ export const useStore = create<StoreState>((set, get) => ({
   movePage: async (pageId, parentId, index) => {
     const previous = get().config;
     if (!previous) return;
+    // Festhalten: Wird während der Anfrage das Deck gewechselt, gehört die
+    // Antwort trotzdem zu diesem.
+    const deck = get().activeDeck;
 
     // Optimistisch: Das Backend rechnet die ``order``-Werte ohnehin neu und
     // schickt sie zurück — bis dahin soll die Zeile aber sofort dort stehen,
@@ -718,8 +809,18 @@ export const useStore = create<StoreState>((set, get) => ({
       const { pages } = await api.movePage(pageId, parentId, index);
       const fresh = get().config;
       if (fresh) {
-        const profileNow = activeProfile(fresh, get().activeDeck);
-        if (profileNow) profileNow.pages = pages;
+        const profileNow = activeProfile(fresh, deck);
+        // Nur die Lage übernehmen. Ganze Seiten zu ersetzen, verwürfe
+        // Kachel-Änderungen, die noch auf dem Weg ins Backend sind.
+        if (profileNow) {
+          for (const [id, neu] of Object.entries(pages)) {
+            const seite = profileNow.pages[id];
+            if (seite) {
+              seite.parent_id = neu.parent_id;
+              seite.order = neu.order;
+            }
+          }
+        }
         geaendert();
         set({ config: { ...fresh }, previewVersion: get().previewVersion + 1 });
       }
@@ -940,7 +1041,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }),
 }));
 
-function toError(error: unknown, source: string): BackendError {
+export function toError(error: unknown, source: string): BackendError {
   return {
     plugin_id: "",
     message: error instanceof Error ? error.message : String(error),

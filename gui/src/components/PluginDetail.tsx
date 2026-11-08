@@ -9,6 +9,7 @@ import { Bewertung } from "./Bewertung";
 import { type Angaben, DetailAngaben } from "./DetailAngaben";
 import { PfadText } from "./PfadText";
 import { UiIcon } from "./UiIcon";
+import { VonAutor } from "./VonAutor";
 
 /**
  * Die Detailseite eines Plugins.
@@ -26,7 +27,10 @@ export function PluginDetail({
   plugin,
   storeEintrag,
   onBack,
+  onAutor,
 }: {
+  /** Zeigt alle Plugins dieses Autors in der Liste. */
+  onAutor?: (autor: string) => void;
   plugin: PluginInfo;
   /**
    * Derselbe Plugin im Katalog, sofern es ihn dort gibt. Damit stehen auch
@@ -102,7 +106,8 @@ export function PluginDetail({
           <h2>{localized(manifest.name, i18n.language)}</h2>
           {manifest.author && (
             <small className="detail-autor">
-              {t("plugins.by", { author: manifest.author })}
+              {/* Bei eingebauten Plugins ist der Autor die App selbst. */}
+              <VonAutor autor={manifest.author} onAutor={plugin.builtin ? undefined : onAutor} />
             </small>
           )}
         </div>

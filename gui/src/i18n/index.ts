@@ -15,14 +15,40 @@ import en from "./en.json";
 export const SUPPORTED_LANGUAGES = ["de", "en"] as const;
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
+/** Wo die zuletzt gewählte Sprache liegt, für den Start vor der Config. */
+const SPRACHE_MERKEN = "deckswitch-sprache";
+
+/**
+ * Die Sprache für die ersten Augenblicke. Die eigentliche Einstellung kommt
+ * mit der Config. Bis dahin, und wenn das Backend gar nicht antwortet, gilt
+ * die zuletzt benutzte oder die des Systems.
+ */
+function startSprache(): Language {
+  try {
+    const gemerkt = window.localStorage.getItem(SPRACHE_MERKEN);
+    if (gemerkt === "de" || gemerkt === "en") return gemerkt;
+  } catch {
+    /* Kein Speicher, dann eben die Systemsprache */
+  }
+  return navigator.language?.toLowerCase().startsWith("de") ? "de" : "en";
+}
+
 void i18n.use(initReactI18next).init({
   resources: {
     de: { translation: de },
     en: { translation: en },
   },
-  lng: "de",
+  lng: startSprache(),
   fallbackLng: "en",
   interpolation: { escapeValue: false },
+});
+
+i18n.on("languageChanged", (sprache) => {
+  try {
+    window.localStorage.setItem(SPRACHE_MERKEN, sprache);
+  } catch {
+    /* Ohne Speicher gilt beim nächsten Start die Systemsprache */
+  }
 });
 
 export default i18n;

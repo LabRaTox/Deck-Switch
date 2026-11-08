@@ -130,8 +130,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let detail = response.statusText;
     try {
-      const body = await response.json();
-      detail = body?.detail ?? detail;
+      detail = detailText(await response.json()) || detail;
     } catch {
       /* Antwort war kein JSON — Statustext genügt */
     }
@@ -144,7 +143,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  state: () => request<BackendState>("/api/state"),
+  state: (mitPlugins = true) =>
+    request<BackendState>(mitPlugins ? "/api/state" : "/api/state?plugins=false"),
 
   /** Ganze Config ersetzen — nur für den Import gedacht. */
   putConfig: (config: Config) =>
@@ -500,7 +500,7 @@ export const api = {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new ApiError(body?.detail ?? i18n.t("errors.installFailed"), response.status);
+      throw new ApiError(detailText(body) || i18n.t("errors.installFailed"), response.status);
     }
     return (await response.json()) as { installed: string; version: string };
   },
@@ -660,7 +660,7 @@ export const api = {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new ApiError(body?.detail ?? i18n.t("errors.uploadFailed"), response.status);
+      throw new ApiError(detailText(body) || i18n.t("errors.uploadFailed"), response.status);
     }
     return (await response.json()) as { filename: string; url: string };
   },
@@ -749,11 +749,26 @@ export interface Snapshot {
   size: number;
 }
 
+/**
+ * Die Begründung aus einer Fehlerantwort als Text, leer wenn keine da ist.
+ * Eine abgelehnte Eingabe meldet FastAPI als Liste von Einwänden.
+ */
+function detailText(body: unknown): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((einwand: { msg?: unknown }) => String(einwand?.msg ?? ""))
+      .filter(Boolean)
+      .join("; ");
+  }
+  return detail == null ? "" : String(detail);
+}
+
 /** Holt die Begründung aus einer Fehlerantwort — sonst bleibt nur "500". */
 async function fehlertext(response: Response): Promise<string> {
   try {
-    const daten = (await response.json()) as { detail?: string };
-    if (daten.detail) return daten.detail;
+    const text = detailText(await response.json());
+    if (text) return text;
   } catch {
     // Keine JSON-Antwort — dann muss der Status genügen.
   }
