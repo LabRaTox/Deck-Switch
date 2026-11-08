@@ -94,7 +94,9 @@ def trigger_aus_combo(combo: str) -> str:
             raise PortalError(texte.t("portal.geht_als_globaler_kurzbefehl", modifier=modifier))
         teile.append(name)
 
-    teile.append(key)
+    # Die Spec nennt Tasten mit ihrem xkb-Namen. Bei Plus und Minus ist
+    # das nötig, weil „CTRL++" nicht eindeutig zu lesen ist.
+    teile.append({"+": "plus", "-": "minus"}.get(key, key))
     return "+".join(teile)
 
 

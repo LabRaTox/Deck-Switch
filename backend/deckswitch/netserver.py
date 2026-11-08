@@ -22,8 +22,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
+import re
 import socket
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +44,15 @@ log = logging.getLogger(__name__)
 
 #: Die Seite, die der Gast im Browser bekommt.
 CLIENT_HTML = Path(__file__).resolve().parent / "web" / "netdeck.html"
+
+#: Mindestlänge eines Passworts für ein Netz-Deck.
+MIN_PASSWORT = 4
+
+#: So lange darf eine Sitzung, die Tasten hält, ohne jede Anfrage bleiben.
+#: Die Seite fragt etwa alle halbe Sekunde nach dem Stand, ein Tab im
+#: Hintergrund immer noch einmal je Sekunde. Bleibt sie länger stumm, ist
+#: der Browser weg, und das Loslassen käme nie.
+WACHHUND_S = 5.0
 
 
 class StillerServer(uvicorn.Server):
@@ -68,9 +81,143 @@ class Eingabe(BaseModel):
     #: ``down``/``up`` einzeln, ``click`` für beides, ``rotate`` fürs Drehen.
     action: str = "click"
     delta: int = 0
+    #: Laufende Nummer vom Browser, je Eingabe steigend. Drücken und
+    #: Loslassen sind getrennte Anfragen und können sich überholen; eine
+    #: Meldung, die älter ist als die zuletzt angenommene, zählt nicht mehr.
+    seq: int | None = None
 
 
-def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
+@dataclass
+class _Stand:
+    """Was eine Sitzung gerade gedrückt hält."""
+
+    deck: Any
+    zuletzt: float = field(default_factory=time.monotonic)
+    #: (Eingabeart, Index) → letzte angenommene Nummer
+    folge: dict[tuple[str, int], int] = field(default_factory=dict)
+    gehalten: set[tuple[str, int]] = field(default_factory=set)
+
+
+class NetzTasten:
+    """Führt Buch, welche Tasten über das Netz gehalten werden.
+
+    Am Gerät folgt auf jedes Drücken ein Loslassen, im Netz nicht: Die
+    Anfrage kann verloren gehen, der Browser zugeklappt werden, die Sitzung
+    enden. Hält die Taste dann Push-to-Talk oder eine Umschalttaste, bleibt
+    das hängen. Deshalb merkt sich jede Sitzung, was sie drückt, und lässt
+    es los, sobald sie endet oder verstummt.
+    """
+
+    def __init__(self, runtime) -> None:
+        self.runtime = runtime
+        self._staende: dict[str, _Stand] = {}
+
+    def lebenszeichen(self, token: str) -> None:
+        stand = self._staende.get(token)
+        if stand is not None:
+            stand.zuletzt = time.monotonic()
+
+    def eingabe(self, token: str, deck, payload: Eingabe) -> bool:
+        """Wendet ein Drücken oder Loslassen an. ``False`` = verworfen."""
+        stand = self._staende.get(token)
+        if stand is None or stand.deck is not deck:
+            if stand is not None:
+                self._loslassen(stand)
+            stand = self._staende[token] = _Stand(deck)
+        stand.zuletzt = time.monotonic()
+
+        ziel = (payload.input_type, payload.index)
+        if payload.seq is not None:
+            if payload.seq <= stand.folge.get(ziel, -1):
+                return False
+            stand.folge[ziel] = payload.seq
+
+        device = deck.device
+        if payload.action == "down":
+            if ziel in stand.gehalten:
+                return False
+            stand.gehalten.add(ziel)
+            device.press(payload.input_type, payload.index, True)
+        elif payload.action == "up":
+            # Ohne vorheriges Drücken dieser Sitzung gibt es nichts
+            # loszulassen, etwa wenn das Loslassen das Drücken überholt hat.
+            if ziel not in stand.gehalten:
+                return False
+            stand.gehalten.discard(ziel)
+            device.press(payload.input_type, payload.index, False)
+        return True
+
+    def sitzung_endet(self, token: str, _deck_key: str = "") -> None:
+        stand = self._staende.pop(token, None)
+        if stand is not None:
+            self._loslassen(stand)
+
+    def alle_loslassen(self) -> None:
+        for token in list(self._staende):
+            self.sitzung_endet(token)
+
+    def pruefen(self, sitzungen: netauth.Sitzungen | None = None) -> None:
+        """Lässt los, was verstummte oder nicht mehr erreichbare Sitzungen halten."""
+        jetzt = time.monotonic()
+        for token, stand in list(self._staende.items()):
+            erreichbar = _erreichbares_deck(self.runtime, stand.deck.key) is stand.deck
+            if not erreichbar:
+                if sitzungen is not None:
+                    sitzungen.verwerfen(token)
+                self.sitzung_endet(token)
+            elif stand.gehalten and jetzt - stand.zuletzt > WACHHUND_S:
+                log.info("Netz-Deck '%s': Sitzung verstummt, gehaltene Tasten losgelassen",
+                         stand.deck.label)
+                self._loslassen(stand)
+
+    async def wache(self, sitzungen: netauth.Sitzungen) -> None:
+        while True:
+            await asyncio.sleep(1.0)
+            try:
+                self.pruefen(sitzungen)
+            except Exception:  # noqa: BLE001 - die Wache darf nicht sterben
+                log.exception("Prüfen der gehaltenen Netz-Tasten fehlgeschlagen")
+
+    def _loslassen(self, stand: _Stand) -> None:
+        gehalten, stand.gehalten = stand.gehalten, set()
+        for art, index in sorted(gehalten):
+            with contextlib.suppress(Exception):
+                stand.deck.device.press(art, index, False)
+        if gehalten and self.runtime.decks.get(stand.deck.key) is not stand.deck:
+            # Das Deck ist schon entfernt, seine Eingaben laufen womöglich
+            # nicht mehr durch. Dann wenigstens gehaltene Tasten freigeben.
+            with contextlib.suppress(Exception):
+                self.runtime.input.release_all()
+
+    @staticmethod
+    def fuer(runtime, sitzungen: netauth.Sitzungen) -> "NetzTasten":
+        """Die Buchführung zu diesen Sitzungen, notfalls eine neue."""
+        netz = getattr(runtime, "netz", None)
+        if netz is not None and getattr(netz, "sitzungen", None) is sitzungen:
+            return netz.tasten
+        tasten = NetzTasten(runtime)
+        sitzungen.bei_ende.append(tasten.sitzung_endet)
+        return tasten
+
+
+def create_net_app(
+    runtime, sitzungen: netauth.Sitzungen, tasten: NetzTasten | None = None
+) -> FastAPI:
+    if tasten is None:
+        tasten = NetzTasten.fuer(runtime, sitzungen)
+
+    @contextlib.asynccontextmanager
+    async def lebenslauf(_app):
+        wache = asyncio.create_task(tasten.wache(sitzungen), name="netz-tasten")
+        try:
+            yield
+        finally:
+            wache.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await wache
+            # Ohne Server kommt kein Loslassen mehr an.
+            tasten.alle_loslassen()
+
     app = FastAPI(
         title="DECK//SWITCH · Netz-Deck",
         # Keine Schnittstellenbeschreibung ins Netz: Sie verrät den Aufbau
@@ -78,13 +225,14 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lebenslauf,
     )
 
     # Kein CORS. Die Seite kommt vom selben Server wie die Daten; alles
     # andere hat hier nichts zu suchen.
 
-    def deck_aus_token(authorization: str = Header(default="")) -> Any:
-        """Löst das Token auf und liefert das Deck — oder wirft 401."""
+    def sitzung_aus_token(authorization: str = Header(default="")) -> tuple[str, Any]:
+        """Löst das Token auf und liefert Token und Deck — oder wirft 401."""
         token = ""
         if authorization.lower().startswith("bearer "):
             token = authorization[7:].strip()
@@ -97,7 +245,11 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
             # angemeldet war. Dann endet die Sitzung sofort mit.
             sitzungen.verwerfen(token)
             raise HTTPException(403, texte.t("netserver.dieses_deck_wird_nicht"))
-        return deck
+        tasten.lebenszeichen(token)
+        return token, deck
+
+    def deck_aus_token(sitzung: tuple[str, Any] = Depends(sitzung_aus_token)) -> Any:
+        return sitzung[1]
 
     # -- Seite -------------------------------------------------------------
 
@@ -133,7 +285,7 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
         # ohnehin steht.
         seite = CLIENT_HTML.read_text(encoding="utf-8")
         seite = seite.replace("{{DECKNAME}}", _escape(deck.label))
-        return HTMLResponse(seite)
+        return HTMLResponse(_setze_texte(seite))
 
     # -- Anmelden ----------------------------------------------------------
 
@@ -141,11 +293,16 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
     async def login(payload: Anmeldung, request: Request) -> dict[str, Any]:
         adresse = request.client.host if request.client else "?"
 
-        sperre = sitzungen.gesperrt_bis(adresse)
+        deck = _erreichbares_deck(runtime, payload.deck)
+        # Gezählt wird je Adresse *und* Deck. Unbekannte Decks laufen unter
+        # einem gemeinsamen Eintrag, sonst füllte jeder erfundene Name den
+        # Speicher.
+        ziel = deck.key if deck is not None else ""
+
+        sperre = sitzungen.gesperrt_bis(adresse, ziel)
         if sperre:
             raise HTTPException(429, texte.t("netserver.viele_fehlversuche_bitte_spaeter"))
 
-        deck = _erreichbares_deck(runtime, payload.deck)
         # Auch bei unbekanntem Deck dieselbe Meldung geben: Sonst verriete
         # die Antwort, welche Decks es gibt.
         gespeichert = deck.binding.password_hash if deck is not None else ""
@@ -153,7 +310,7 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
         # Thread, damit der Schlüssel den Loop nicht anhält; ohne Vormerken
         # kämen parallele Anfragen alle an der Sperre vorbei, bevor die erste
         # ihren Fehlversuch einträgt.
-        sitzungen.melde_fehlversuch(adresse)
+        versuch = sitzungen.melde_fehlversuch(adresse, ziel)
         stimmt = await asyncio.to_thread(
             netauth.pruefe_passwort, payload.password, gespeichert
         )
@@ -162,7 +319,7 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
             log.warning("Fehlgeschlagene Anmeldung von %s", adresse)
             raise HTTPException(401, texte.t("netserver.deck_oder_passwort_stimmt"))
 
-        sitzungen.melde_erfolg(adresse)
+        sitzungen.melde_erfolg(adresse, ziel, versuch)
         token, gueltig = sitzungen.neues_token(deck.key)
         log.info("Netz-Deck '%s': Anmeldung von %s", deck.label, adresse)
         return {"token": token, "expires_in": gueltig, "name": deck.label}
@@ -199,15 +356,16 @@ def create_net_app(runtime, sitzungen: netauth.Sitzungen) -> FastAPI:
                         headers={"Cache-Control": "no-store"})
 
     @app.post("/api/input")
-    async def eingabe(payload: Eingabe, deck=Depends(deck_aus_token)) -> dict[str, bool]:
+    async def eingabe(
+        payload: Eingabe, sitzung: tuple[str, Any] = Depends(sitzung_aus_token)
+    ) -> dict[str, bool]:
         """Ein Druck aus dem Netz — derselbe Weg wie am echten Gerät."""
+        token, deck = sitzung
         device = deck.device
         if payload.action == "rotate":
             device.rotate(payload.index, payload.delta or 1)
-        elif payload.action == "down":
-            device.press(payload.input_type, payload.index, True)
-        elif payload.action == "up":
-            device.press(payload.input_type, payload.index, False)
+        elif payload.action in ("down", "up"):
+            return {"ok": tasten.eingabe(token, deck, payload)}
         else:
             device.press(payload.input_type, payload.index, True)
             await asyncio.sleep(0.02)
@@ -223,6 +381,8 @@ class NetzService:
     def __init__(self, runtime) -> None:
         self.runtime = runtime
         self.sitzungen = netauth.Sitzungen()
+        self.tasten = NetzTasten(runtime)
+        self.sitzungen.bei_ende.append(self.tasten.sitzung_endet)
         self._server: uvicorn.Server | None = None
         self._task: asyncio.Task | None = None
         self._port: int = 0
@@ -243,6 +403,9 @@ class NetzService:
         Netz, hört der Server auf zu lauschen — ein offener Port ohne Zweck
         ist eine Angriffsfläche ohne Gegenwert.
         """
+        # Ein abgeschaltetes oder entferntes Deck lässt sofort los, was über
+        # das Netz gedrückt war, nicht erst beim nächsten Rundgang der Wache.
+        self.tasten.pruefen(self.sitzungen)
         gebraucht = any(_erreichbar(deck) for deck in self.runtime.decks.values())
         port = self.runtime.config.app.network_port
 
@@ -266,7 +429,7 @@ class NetzService:
             # bleibt davon unberührt auf 127.0.0.1.
             sock.bind(("0.0.0.0", port))  # noqa: S104
             sock.setblocking(False)
-        except OSError as exc:
+        except (OSError, OverflowError) as exc:
             sock.close()
             log.error("Netz-Server auf Port %s ließ sich nicht starten: %s", port, exc)
             return
@@ -323,6 +486,8 @@ class NetzService:
         deck = self.runtime.decks.get(deck_key)
         if deck is None or not deck.binding.is_network:
             raise RuntimeError(texte.t("netserver.kein_netz_deck"))
+        if passwort and len(passwort) < MIN_PASSWORT:
+            raise ValueError(texte.t("netserver.passwort_zu_kurz", n=MIN_PASSWORT))
         deck.binding.password_hash = netauth.hash_passwort(passwort) if passwort else ""
         # Ein Passwortwechsel muss auch die trennen, die schon drin sind —
         # sonst wechselt man es genau in dem Moment umsonst, in dem es zählt.
@@ -333,6 +498,25 @@ class NetzService:
 
 # ---------------------------------------------------------------------------
 # Hilfen
+
+_PLATZHALTER = re.compile(r"\{\{([TJ]):([a-z_.]+)\}\}")
+
+
+def _setze_texte(seite: str) -> str:
+    """Setzt die Texte der Seite in der eingestellten Sprache ein.
+
+    ``{{T:schluessel}}`` steht in HTML und wird maskiert, ``{{J:schluessel}}``
+    steht in Skript und wird zu einem JavaScript-String.
+    """
+
+    def ersetze(treffer: re.Match[str]) -> str:
+        text = str(texte.t(treffer.group(2)))
+        if treffer.group(1) == "T":
+            return _escape(text)
+        return json.dumps(text, ensure_ascii=False).replace("</", "<\\/")
+
+    seite = seite.replace("{{LANG}}", texte.sprache())
+    return _PLATZHALTER.sub(ersetze, seite)
 # ---------------------------------------------------------------------------
 
 

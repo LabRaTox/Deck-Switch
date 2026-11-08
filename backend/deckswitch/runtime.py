@@ -29,7 +29,7 @@ import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import device as device_module
 from . import events as ev
@@ -39,8 +39,8 @@ from .netserver import NetzService
 from .virtualdeck import DECK_TYPE as VIRTUAL_DECK_TYPE
 from .virtualdeck import NETWORK_DECK_TYPE
 from .virtualdeck import VirtualDevice
-from .deck import Deck, bindungs_key
-from .events import EventBus, im_loop
+from .deck import PLATZHALTER_KEY, Deck, bindungs_key
+from .events import EventBus, beende_tasks, im_loop
 from .plugins.base import Services, SlotContext
 from .plugins.loader import PluginRegistry
 from .services.audio import AudioService
@@ -54,6 +54,9 @@ from .services.render import RenderService
 from .services.session import SessionCapabilities
 from .services.shortcuts import ShortcutService
 from .services.sound import SoundService
+
+if TYPE_CHECKING:
+    from .plugins.installer import InstallRequest
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +120,11 @@ class Runtime:
         self.decks: dict[str, Deck] = {}
         #: Geräteknoten der Decks, die wir schon offen haben.
         self._open_paths: dict[str, str] = {}
+        #: Geräteknoten → Deck-Schlüssel für Geräte, die eine Seriennummer
+        #: melden, die schon an einem anderen Anschluss hängt. Jedes Öffnen
+        #: setzt ein Deck zurück; ohne diese Liste würfen sich beide alle
+        #: paar Sekunden gegenseitig hinaus.
+        self._doppelte_pfade: dict[str, str] = {}
 
         self.errors: list[dict[str, Any]] = []
         self.install_requests: list[Any] = []
@@ -185,15 +193,17 @@ class Runtime:
             )
 
     async def stop(self) -> None:
-        for task in self._tasks:
-            task.cancel()
-        for task in self._tasks:
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        # Jeder Schritt für sich: Was beim einen schiefgeht, darf die
+        # folgenden nicht verhindern, sonst bleiben Kurzbefehle, das
+        # KWin-Skript oder Overlay-Prozesse stehen.
+        await beende_tasks(self._tasks, "Runtime")
         self._tasks.clear()
 
         for deck in list(self.decks.values()):
-            await deck.stop()
+            try:
+                await deck.stop()
+            except Exception:
+                log.exception("Deck %s ließ sich nicht sauber beenden", deck.key)
 
         with contextlib.suppress(Exception):
             await self.netz.stop()
@@ -207,9 +217,11 @@ class Runtime:
         with contextlib.suppress(Exception):
             await self.smartprofile.stop()
 
-        self.audio.stop_watcher()
-        self.sound.close()
-        self.input.close()
+        for schliessen in (self.audio.stop_watcher, self.sound.close, self.input.close):
+            try:
+                schliessen()
+            except Exception:
+                log.exception("Beim Beenden fehlgeschlagen: %s", schliessen.__qualname__)
         with contextlib.suppress(Exception):
             await self.overlay.shutdown()
         with contextlib.suppress(Exception):
@@ -230,6 +242,19 @@ class Runtime:
         # Loop erledigen lässt (speichern, blättern), braucht den Loop dafür.
         await asyncio.to_thread(self._executor.shutdown, True)
         await asyncio.to_thread(self._tick_executor.shutdown, True)
+
+    def stop_hart(self) -> None:
+        """Rückfallweg, wenn :meth:`stop` hängt: Gerät dunkel, Worker loslassen.
+
+        Ein hängender Plugin-Hook hielte das Beenden sonst auf, bis systemd
+        nach 90 s hart abbricht, und das Deck bliebe mit dem letzten Bild stehen.
+        """
+        for deck in list(self.decks.values()):
+            with contextlib.suppress(Exception):
+                deck.device.clear()
+                deck.device.close()
+        self._executor.shutdown(wait=False, cancel_futures=True)
+        self._tick_executor.shutdown(wait=False, cancel_futures=True)
 
     # ======================================================================
     # Decks
@@ -462,21 +487,27 @@ class Runtime:
             if path in paths_now and deck is not None and deck.connected:
                 continue
             self._open_paths.pop(key, None)
+            # Ist das Original weg, darf ein Gerät mit derselben Nummer an
+            # seine Stelle treten.
+            for doppelt in [p for p, k in self._doppelte_pfade.items() if k == key]:
+                self._doppelte_pfade.pop(doppelt, None)
             if deck is not None:
                 deck.detach()
                 deck._publish_state()
             changed = True
+        for doppelt in [p for p in self._doppelte_pfade if p not in paths_now]:
+            self._doppelte_pfade.pop(doppelt, None)
 
         # Neue Geräte übernehmen. Geöffnet wird im Worker-Thread — das ist
         # blockierende USB-Arbeit —, zugeordnet wird hier im Loop.
         taken = set(self._open_paths.values())
         for path, raw in paths_now.items():
-            if path in taken:
+            if path in taken or path in self._doppelte_pfade:
                 continue
             device = await loop.run_in_executor(self._executor, self._open_device, raw)
             if device is None:
                 continue
-            deck = self._adopt(device)
+            deck = self._adopt(device, path)
             if deck is None:
                 device.close()
                 continue
@@ -497,7 +528,7 @@ class Runtime:
             return None
         return device
 
-    def _adopt(self, device: device_module.StreamDeckDevice) -> Deck | None:
+    def _adopt(self, device: device_module.StreamDeckDevice, path: str = "") -> Deck | None:
         """Ordnet ein geöffnetes Gerät seiner Bindung zu.
 
         Die Zuordnung hängt an der **Seriennummer**, nicht am Geräteknoten:
@@ -507,7 +538,22 @@ class Runtime:
         serial = device.info.serial
         deck_type = device.info.deck_type
 
-        deck = self.decks.get(serial)
+        # Ohne lesbare Seriennummer gilt der Schlüssel des Platzhalters,
+        # wie überall sonst auch.
+        key = serial or PLATZHALTER_KEY
+        deck = self.decks.get(key)
+        if deck is not None and deck.connected and self._open_paths.get(deck.key) != path:
+            # Dieselbe Nummer hängt schon an einem anderen Anschluss. Das
+            # neue Gerät bleibt zu, statt dem ersten die Sitzung zu nehmen.
+            self._doppelte_pfade[path] = deck.key
+            log.warning("Seriennummer %r an %s ist schon verbunden, Gerät bleibt aus",
+                        serial, path)
+            self._record_error(
+                "device",
+                texte.t("runtime.seriennummer_doppelt", serial=serial or "?", path=path),
+                source="device",
+            )
+            return None
         if deck is None:
             # Der Platzhalter einer Ein-Deck-Config übernimmt das erste
             # Gerät — samt bestehender Belegung.
@@ -547,7 +593,7 @@ class Runtime:
         )
         self.config.decks[serial] = binding
         deck = Deck(self, binding)
-        self.decks[serial] = deck
+        self.decks[bindungs_key(binding)] = deck
         log.info("Neues Deck '%s' (Serial %s) angelegt", binding.name, serial)
         return deck
 
@@ -991,6 +1037,11 @@ class Runtime:
 
     def apply_config(self, config: Config, *, save: bool = True) -> None:
         """Übernimmt eine geänderte Config sofort — ohne Neustart des Backends."""
+        netz_vorher = {
+            key: (deck.binding.password_hash, deck.binding.network_enabled)
+            for key, deck in self.decks.items()
+            if deck.binding.is_network
+        }
         self._carry_over_live_decks(config)
         self.config = config
         self.store.config = config
@@ -1027,7 +1078,45 @@ class Runtime:
             # Startet auch Schleifen neu, die unerwartet geendet haben.
             deck.start()
 
+        self._netz_nach_config(netz_vorher)
         self.bus.publish(ev.EVT_CONFIG_CHANGED)
+
+    def _netz_nach_config(self, vorher: dict[str, tuple[str, bool]]) -> None:
+        """Zieht Netz-Decks nach einer ausgetauschten Config nach.
+
+        Ein Import oder ein wiederhergestellter Stand kann ein anderes
+        Passwort mitbringen, ein Deck abschalten oder ganz entfernen. Wer
+        dann noch angemeldet ist, fliegt raus, genau wie beim Ändern von
+        Hand. Und der Server lauscht nur, solange ihn ein Deck braucht.
+        """
+        for key, (hash_alt, an_alt) in vorher.items():
+            deck = self.decks.get(key)
+            binding = deck.binding if deck is not None else None
+            if (
+                binding is None
+                or not binding.is_network
+                or binding.password_hash != hash_alt
+                or not binding.network_enabled
+            ):
+                self.netz.sitzungen.alle_verwerfen(key)
+
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+
+        def starte() -> None:
+            aufgabe = loop.create_task(self.netz.sync(), name="netz-sync")
+            self._aufraeumen.add(aufgabe)
+            aufgabe.add_done_callback(self._aufraeumen.discard)
+
+        try:
+            laufend = asyncio.get_running_loop()
+        except RuntimeError:
+            laufend = None
+        if laufend is loop:
+            starte()
+        elif loop.is_running():
+            loop.call_soon_threadsafe(starte)
 
     def _carry_over_live_decks(self, incoming: Config) -> None:
         """Rettet angeschlossene Decks über eine veraltete Config hinweg.
@@ -1043,8 +1132,11 @@ class Runtime:
         zu entfernen bleibt möglich — dafür gibt es den eigenen Weg, und
         dort ist es ohnehin nicht verbunden.
         """
+        # Verglichen über ``bindungs_key``: Die Bindung ohne Seriennummer
+        # steht in der Config unter ``""``, in der Runtime unter ihrem Namen.
+        vorhanden = {bindungs_key(b) for b in incoming.decks.values()}
         for key, deck in self.decks.items():
-            if key in incoming.decks:
+            if key in vorhanden:
                 continue
             if not deck.connected or deck.binding.is_virtual:
                 continue
@@ -1052,7 +1144,7 @@ class Runtime:
                 "Deck '%s' fehlte in der eingehenden Config, Bindung behalten",
                 deck.label,
             )
-            incoming.decks[key] = deck.binding
+            incoming.decks[deck.binding.serial] = deck.binding
             profile = self.config.profiles.get(deck.binding.profile_id)
             if profile is not None:
                 incoming.profiles.setdefault(profile.id, profile)

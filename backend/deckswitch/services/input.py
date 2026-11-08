@@ -112,6 +112,16 @@ NAMED_KEYS = {
 }
 NAMED_KEYS.update({f"f{i}": f"KEY_F{i}" for i in range(1, 25)})
 
+#: Zeichen, die sich in einer Kombination schlecht hinschreiben lassen,
+#: unter ihrem Namen. Sie bleiben Zeichen und werden wie jedes andere über
+#: die Belegung gesucht: „ctrl+plus" ist die Taste, die hier ein Plus
+#: schreibt, auf einer deutschen Tastatur also eine andere als auf einer
+#: amerikanischen.
+KEY_CHAR_ALIASES = {
+    "plus": "+",
+    "minus": "-",
+}
+
 #: xkb-Modifiername → Taste, die wir dafür halten.
 _XKB_MODIFIER_KEYS = {
     "Shift": "KEY_LEFTSHIFT",
@@ -144,7 +154,15 @@ def parse_combo(combo: str) -> tuple[list[str], str]:
     über :data:`NAMED_KEYS` aufgelöst wird, entscheidet sich erst beim
     Senden, wenn die Belegung bekannt ist.
     """
-    parts = [p.strip() for p in re.split(r"[+\s]+", combo or "") if p.strip()]
+    text = (combo or "").strip()
+    # Das Plus ist zugleich Trennzeichen. „ctrl++" und „+" meinen die
+    # Plus-Taste; ein einzelnes Plus am Ende nach einem Modifier („ctrl+")
+    # ist dagegen eine halb fertige Eingabe.
+    plus_am_ende = text == "+" or bool(re.search(r"\+\s*\+$", text))
+    if plus_am_ende:
+        text = text[:-1]
+
+    parts = [p.strip() for p in re.split(r"[+\s]+", text) if p.strip()]
     modifiers: list[str] = []
     key = ""
     for part in parts:
@@ -153,7 +171,9 @@ def parse_combo(combo: str) -> tuple[list[str], str]:
             if alias not in modifiers:
                 modifiers.append(alias)
         else:
-            key = part
+            key = KEY_CHAR_ALIASES.get(part.lower(), part)
+    if plus_am_ende:
+        key = "+"
     return modifiers, key
 
 

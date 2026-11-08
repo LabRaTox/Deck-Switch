@@ -43,7 +43,7 @@ from .config import (
     TouchWallpaper,
 )
 from .device import StreamDeckDevice
-from .events import im_loop
+from .events import beende_tasks, im_loop, starte_task
 from .plugins.base import ActionPlugin, Services, SlotContext
 from .services import screensaver, wallpaper
 from . import texte
@@ -158,6 +158,13 @@ class Deck:
 
         # Laufende Multi-Aktionen, je Belegung eine
         self._chains: dict[str, asyncio.Task] = {}
+        #: Kontext, mit dem jede Kette gestartet wurde. Daran erkennt
+        #: :meth:`pruefe_ketten`, ob ihre Belegung noch existiert.
+        self._chain_ctx: dict[str, SlotContext] = {}
+
+        #: Letzte Eingabe je Taste, Dial und Touchstrip. Die nächste Eingabe
+        #: derselben Stelle wartet, bis sie durch ist.
+        self._eingaben: dict[str, asyncio.Task] = {}
 
         # Animation
         self._started_at = time.monotonic()
@@ -253,11 +260,7 @@ class Deck:
         ]
 
     async def stop(self) -> None:
-        for task in self._tasks:
-            task.cancel()
-        for task in self._tasks:
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        await beende_tasks(self._tasks, f"Deck {self.key}")
         self._tasks.clear()
 
         for timers in (self._long_timers, self._pending_single, self._dial_long_timers):
@@ -268,6 +271,7 @@ class Deck:
         for task in self._chains.values():
             task.cancel()
         self._chains.clear()
+        self._chain_ctx.clear()
 
         self._stop_screensaver()
         self.device.clear()
@@ -518,6 +522,7 @@ class Deck:
         prefix = f"{page_id}:{input_type}:{index}"
         for key in [k for k in self._contexts if k == prefix or k.startswith(prefix + ":")]:
             self._contexts.pop(key, None)
+        self.pruefe_ketten()
 
     # ======================================================================
     # Multi-Aktionen
@@ -544,15 +549,59 @@ class Deck:
             self._run_chain(usable, ctx, repeat), name=f"chain-{self.key}-{key}"
         )
         self._chains[key] = task
+        self._chain_ctx[key] = ctx
         task.add_done_callback(lambda t, k=key: self._chain_finished(k, t))
 
     @_im_loop
     def stop_steps(self, ctx: SlotContext) -> bool:
         task = self._chains.pop(ctx.key, None)
+        self._chain_ctx.pop(ctx.key, None)
         if task is None:
             return False
         task.cancel()
         return True
+
+    @_im_loop
+    def pruefe_ketten(self) -> None:
+        """Bricht Ketten ab, deren Belegung es so nicht mehr gibt.
+
+        Eine wiederholende Kette endet sonst nur durch einen zweiten Druck
+        auf ihre Taste. Ist die gelöscht, ersetzt, ihre Seite weg oder das
+        Profil gewechselt, gibt es diesen Druck nicht mehr.
+        """
+        for key, ctx in list(self._chain_ctx.items()):
+            if self._kette_gilt(ctx):
+                continue
+            self._chain_ctx.pop(key, None)
+            task = self._chains.pop(key, None)
+            if task is not None:
+                task.cancel()
+                log.info("Kette an %s abgebrochen, ihre Belegung gibt es nicht mehr", key)
+
+    def _kette_gilt(self, ctx: SlotContext) -> bool:
+        profile = self.profile
+        if ctx.profile_id != profile.id:
+            return False
+        page = profile.pages.get(ctx.page_id)
+        if page is None:
+            return False
+        mapping = page.keys if ctx.input_type == "key" else page.dials
+        base = mapping.get(ctx.index)
+        if base is None:
+            return False
+        # Gestartet haben kann sie auch ein Zweig der Belegung: Halten,
+        # Doppeldruck, eine Drehrichtung oder ein Eintrag im Dial-Stack.
+        offen = [base]
+        while offen:
+            slot = offen.pop()
+            if slot is ctx.slot or slot == ctx.slot:
+                return True
+            offen.extend(
+                s for s in (slot.long_press, slot.double_press, slot.turn_left, slot.turn_right)
+                if s is not None
+            )
+            offen.extend(slot.stack)
+        return False
 
     def steps_running(self, ctx: SlotContext) -> bool:
         task = self._chains.get(ctx.key)
@@ -564,6 +613,7 @@ class Deck:
         # die nächste läuft.
         if task is None or self._chains.get(key) is task:
             self._chains.pop(key, None)
+            self._chain_ctx.pop(key, None)
         self._mark_all_dirty()
 
     async def _run_chain(self, steps: list[Step], ctx: SlotContext, repeat: bool) -> None:
@@ -658,13 +708,19 @@ class Deck:
             await self._render_event.wait()
             self._render_event.clear()
 
-            if self._redraw_all:
-                self._redraw_all = False
-                self._dirty.clear()
-                targets = self._all_targets()
-            else:
-                targets = sorted(self._dirty)
-                self._dirty.clear()
+            # Ein Fehler beim Zusammenstellen darf die Schleife nicht
+            # beenden, das Deck stünde sonst bis zum Neustart still.
+            try:
+                if self._redraw_all:
+                    self._redraw_all = False
+                    self._dirty.clear()
+                    targets = self._all_targets()
+                else:
+                    targets = sorted(self._dirty)
+                    self._dirty.clear()
+            except Exception:
+                log.exception("Ziele von Deck %s nicht ermittelbar", self.key)
+                continue
 
             for input_type, index in targets:
                 try:
@@ -1404,23 +1460,48 @@ class Deck:
     # Eingaben — Einstieg aus dem Reader-Thread
     # ======================================================================
 
-    def _dispatch(self, coro_factory) -> None:
+    def _dispatch(self, coro_factory, stelle: str = "") -> None:
         loop = self.runtime._loop
         if loop is None or loop.is_closed():
             return
-        loop.call_soon_threadsafe(lambda: asyncio.ensure_future(coro_factory()))
+        loop.call_soon_threadsafe(self._reihe_ein, stelle, coro_factory)
+
+    def _reihe_ein(self, stelle: str, coro_factory) -> None:
+        """Startet eine Eingabe erst, wenn die vorige derselben Stelle durch ist.
+
+        Jede Eingabe läuft als eigene Aufgabe, und synchrone Hooks landen im
+        Thread-Pool. Ohne diese Reihe liefe das Loslassen einer Taste schon,
+        während ihr Drücken noch arbeitet, und ein Push-to-Talk ließe los,
+        bevor es gedrückt hat. Gereiht wird je Stelle, nicht je Deck: Ein
+        langsamer Hook auf einer Taste hält die übrigen nicht auf.
+        """
+        vorher = self._eingaben.get(stelle)
+
+        async def nacheinander() -> None:
+            if vorher is not None and not vorher.done():
+                await asyncio.wait([vorher])
+            await coro_factory()
+
+        task = starte_task(nacheinander(), f"Eingabe an Deck {self.key}")
+        self._eingaben[stelle] = task
+
+        def fertig(t: asyncio.Task) -> None:
+            if self._eingaben.get(stelle) is t:
+                self._eingaben.pop(stelle, None)
+
+        task.add_done_callback(fertig)
 
     def _key_event_threadsafe(self, index: int, pressed: bool) -> None:
-        self._dispatch(lambda: self.handle_key(index, pressed))
+        self._dispatch(lambda: self.handle_key(index, pressed), f"key:{index}")
 
     def _dial_rotate_threadsafe(self, index: int, delta: int) -> None:
-        self._dispatch(lambda: self.handle_dial_rotate(index, delta))
+        self._dispatch(lambda: self.handle_dial_rotate(index, delta), f"dial:{index}")
 
     def _dial_push_threadsafe(self, index: int, pressed: bool) -> None:
-        self._dispatch(lambda: self.handle_dial_push(index, pressed))
+        self._dispatch(lambda: self.handle_dial_push(index, pressed), f"dial:{index}")
 
     def _touch_threadsafe(self, kind: str, value: dict) -> None:
-        self._dispatch(lambda: self.handle_touch(kind, value))
+        self._dispatch(lambda: self.handle_touch(kind, value), "touch")
 
     def _disconnected_threadsafe(self) -> None:
         self._publish_state_threadsafe()
@@ -1482,7 +1563,8 @@ class Deck:
             loop = asyncio.get_running_loop()
             delay = max(0.05, self.settings.long_press_ms / 1000)
             self._long_timers[index] = loop.call_later(
-                delay, lambda: asyncio.ensure_future(self._fire_long_press(index))
+                delay,
+                lambda: starte_task(self._fire_long_press(index), f"Halten an Deck {self.key}"),
             )
 
     async def _on_key_up(self, index: int) -> None:
@@ -1521,7 +1603,9 @@ class Deck:
             elapsed = time.monotonic() - started if started else 0.0
             self._pending_single[index] = loop.call_later(
                 max(0.02, window - elapsed),
-                lambda: asyncio.ensure_future(self._fire_pending_single(index)),
+                lambda: starte_task(
+                    self._fire_pending_single(index), f"Einfachdruck an Deck {self.key}"
+                ),
             )
             return
 
@@ -1851,6 +1935,10 @@ class Deck:
             ziel = self._voriges_profil
             if not ziel or ziel == self.binding.profile_id:
                 return False
+            if ziel not in self.runtime.config.profiles:
+                # Das vorige Profil wurde inzwischen gelöscht.
+                self._voriges_profil = ""
+                return False
         else:
             gesucht = name.strip().casefold()
             ziel = next(
@@ -1886,6 +1974,8 @@ class Deck:
             if not self._auto_grundprofil:
                 return False
             ziel, self._auto_grundprofil = self._auto_grundprofil, ""
+            if ziel not in self.runtime.config.profiles:
+                return False
         else:
             if profile_id not in self.runtime.config.profiles:
                 return False
@@ -1906,6 +1996,13 @@ class Deck:
     def apply_config(self) -> None:
         """Nach einer Änderung an der Config alles Abhängige auffrischen."""
         profile = self.profile
+        # Ein gelöschtes Profil taugt nicht mehr als Rückweg.
+        profile_ids = self.runtime.config.profiles
+        if self._voriges_profil not in profile_ids:
+            self._voriges_profil = ""
+        if self._auto_grundprofil not in profile_ids:
+            self._auto_grundprofil = ""
+        self.pruefe_ketten()
         if self.current_page_id_value not in profile.pages:
             self.current_page_id_value = profile.root_page().id
         self._contexts.clear()

@@ -24,7 +24,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
 
 from . import paths
 from . import texte
@@ -517,12 +517,31 @@ class AppSettings(BaseModel):
     # Kacheln da und werden je Belegung gewählt. Ältere Konfigurationen
     # tragen das Feld noch — Pydantic übergeht es beim Laden.
     host: str = "127.0.0.1"
-    port: int = 8770
+    port: int = Field(default=8770, ge=0, le=65535)
     #: Eigener Port für Netz-Decks. Bewusst getrennt vom Port oben: Der
     #: bedient die Oberfläche und darf deshalb das Gerät und die gesamte
     #: Konfiguration ändern — der gehört ausschließlich auf ``127.0.0.1``.
     #: Ins Netz geht nur die zweite, viel kleinere Anwendung.
-    network_port: int = 8771
+    network_port: int = Field(default=8771, ge=0, le=65535)
+
+    @field_validator("port", "network_port", mode="before")
+    @classmethod
+    def _port_im_bereich(cls, wert: Any, info: ValidationInfo) -> Any:
+        """Ein unmöglicher Port fällt auf den Standard zurück.
+
+        Würde er abgelehnt, gälte die ganze Datei als kaputt und alle
+        Belegungen landeten in der Sicherungskopie, nur wegen dieses Werts.
+        """
+        try:
+            zahl = int(wert)
+        except (TypeError, ValueError):
+            zahl = -1
+        if 0 <= zahl <= 65535:
+            return zahl
+        standard = cls.model_fields[info.field_name].default
+        log.warning("Port %r für %s ungültig, nehme %s", wert, info.field_name, standard)
+        return standard
+
     #: Vom User festgelegte Reihenfolge der Plugins (IDs). Was hier fehlt —
     #: etwa ein frisch installiertes Plugin — wird hinten angehängt.
     plugin_order: list[str] = Field(default_factory=list)
@@ -656,17 +675,27 @@ class ConfigStore:
             self.save()
             return self.config
 
-        raw = self.path.read_text(encoding="utf-8")
         try:
+            # Das Lesen gehört mit hinein: Eine Datei in falscher Kodierung
+            # scheitert schon hier, und das bei jedem Start aufs Neue.
+            raw = self.path.read_text(encoding="utf-8")
             data = json.loads(raw)
             self.config = Config.model_validate(data)
-        except (json.JSONDecodeError, ValidationError) as exc:
+        except (ValueError, ValidationError, OSError) as exc:
             # Mit Zeitstempel: Geht die Datei ein zweites Mal kaputt, bliebe
             # sonst nur die jüngere Kopie übrig.
             stempel = time.strftime("%Y%m%d-%H%M%S")
             backup = self.path.with_name(f"{self.path.stem}.broken-{stempel}.json")
-            shutil.copy2(self.path, backup)
             self.config = default_config()
+            try:
+                shutil.copy2(self.path, backup)
+            except OSError:
+                # Ohne Kopie wird die Datei nicht überschrieben, sonst wäre
+                # die Belegung ersatzlos weg.
+                log.exception("Kopie der unlesbaren Config nicht möglich")
+                raise ConfigLoadError(
+                    texte.t("config.config_unlesbar_ohne_kopie", exc=exc)
+                ) from exc
             self.save()
             raise ConfigLoadError(
                 texte.t("config.config_unlesbar_kopie_liegt", exc=exc, backup=backup)

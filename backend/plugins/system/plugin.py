@@ -595,10 +595,29 @@ def _spawn(command: list[str], cwd: str | None = None) -> None:
     )
 
 
+#: So viele Zeichen des Programmnamens führt der Kernel (``comm``).
+COMM_LEN = 15
+
+
+def _ere_escape(text: str) -> str:
+    """Der Name als wörtliches Muster. pgrep liest es als regulären Ausdruck."""
+    return "".join("\\" + z if z in ".[]()*+?{}|^$\\" else z for z in text)
+
+
 def _is_running(name: str) -> bool:
     if shutil.which("pgrep") is None:
         return False
-    result = subprocess.run(
-        ["pgrep", "-x", name], capture_output=True, text=True, check=False
-    )
+    # ``pgrep -x`` vergleicht mit dem gekürzten Namen. Ein längerer, etwa
+    # ``signal-desktop-beta``, passte sonst nie, und „nur einmal starten"
+    # startete jedes Mal neu.
+    try:
+        result = subprocess.run(
+            ["pgrep", "-x", "--", _ere_escape(name[:COMM_LEN])],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
     return result.returncode == 0

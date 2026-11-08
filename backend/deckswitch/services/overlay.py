@@ -82,6 +82,10 @@ class OverlayService:
         self._bus: MessageBus | None = None
         self._cursor: asyncio.Future | None = None
         self._script_id: int | None = None
+        #: Je Deck eine Sperre. Zeigen wartet auf die Zeigerposition und den
+        #: Anlauf; ein schneller zweiter Druck startete sonst ein zweites
+        #: Overlay, und das erste bliebe ohne Besitzer auf dem Schirm.
+        self._sperren: dict[str, asyncio.Lock] = {}
 
     # -- Zustand -----------------------------------------------------------
 
@@ -99,7 +103,7 @@ class OverlayService:
 
             cap = session.caps.get(CAP_OVERLAY)
             if cap is not None and not cap.available:
-                return False, cap.reason
+                return False, texte.aktuell(cap.reason)
 
         if not OVERLAY_QML.is_file():
             return False, texte.t("overlay.overlay_datei_nicht_gefunden", OVERLAY_QML=OVERLAY_QML)
@@ -126,13 +130,24 @@ class OverlayService:
 
     async def toggle(self, deck_key: str, *, at_cursor: bool = True) -> bool:
         """Umschalten. Liefert, ob das Overlay jetzt zu sehen ist."""
-        if self.is_visible(deck_key):
-            self.hide(deck_key)
-            return False
-        await self.show(deck_key, at_cursor=at_cursor)
-        return True
+        async with self._sperre(deck_key):
+            if self.is_visible(deck_key):
+                self.hide(deck_key)
+                return False
+            await self._show(deck_key, at_cursor=at_cursor)
+            return True
+
+    def _sperre(self, deck_key: str) -> asyncio.Lock:
+        sperre = self._sperren.get(deck_key)
+        if sperre is None:
+            sperre = self._sperren[deck_key] = asyncio.Lock()
+        return sperre
 
     async def show(self, deck_key: str, *, at_cursor: bool = True) -> None:
+        async with self._sperre(deck_key):
+            await self._show(deck_key, at_cursor=at_cursor)
+
+    async def _show(self, deck_key: str, *, at_cursor: bool = True) -> None:
         deck = self.runtime.decks.get(deck_key)
         if deck is None:
             raise RuntimeError(texte.t("overlay.deck_gibt_nicht", deck_key=deck_key))
@@ -173,6 +188,9 @@ class OverlayService:
         if self._auf_x11():
             befehl.append("--x11")
         umgebung = os.environ.copy()
+        # Was in der Zwischenzeit für dieses Deck gestartet wurde, geht vor
+        # dem neuen. Zwei Overlays desselben Decks gibt es nicht.
+        self.hide(deck_key)
         if self._anbieter() == "xwayland":
             # Qt nähme sonst Wayland und bekäme dort ein gewöhnliches Fenster.
             umgebung["QT_QPA_PLATFORM"] = "xcb"

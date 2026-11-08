@@ -13,9 +13,11 @@ noch laufen soll.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from .. import texte
@@ -28,6 +30,14 @@ PLAYABLE_SUFFIXES = {".wav", ".flac", ".ogg", ".oga", ".opus", ".mp3", ".m4a", "
 
 #: Zweitweg für Formate, die pw-play nicht kennt.
 FALLBACK_PLAYERS = (["mpv", "--no-video", "--really-quiet"], ["ffplay", "-nodisp", "-autoexit"])
+
+#: Kürzester Abstand zwischen zwei Durchläufen einer Schleife. Eine leere
+#: oder winzige Datei wäre sonst in Millisekunden durch und startete den
+#: Player viele Male pro Sekunde neu.
+LOOP_MIN_INTERVAL_S = 0.5
+
+#: Obergrenze, bis zu der die Pause bei lauter zu kurzen Durchläufen wächst.
+LOOP_MAX_BACKOFF_S = 5.0
 
 
 class SoundError(RuntimeError):
@@ -46,6 +56,8 @@ class Playback:
     #: Schleife nicht neu.
     cancelled: bool = False
     thread: threading.Thread | None = field(default=None, repr=False)
+    #: Weckt eine Schleife, die gerade zwischen zwei Durchläufen wartet.
+    stopped: threading.Event = field(default_factory=threading.Event, repr=False)
 
 
 class SoundService:
@@ -115,6 +127,7 @@ class SoundService:
         if entry is None:
             return
         entry.cancelled = True
+        entry.stopped.set()
         _terminate(entry.process)
 
     def stop_all(self) -> int:
@@ -123,6 +136,7 @@ class SoundService:
             self._playing.clear()
         for entry in entries:
             entry.cancelled = True
+            entry.stopped.set()
             _terminate(entry.process)
         return len(entries)
 
@@ -153,7 +167,9 @@ class SoundService:
         # Der Zweitweg wird pro Wiedergabe höchstens einmal versucht. Ohne
         # diese Grenze startete eine kaputte Datei die Player endlos neu.
         fallback_tried = False
+        pause = LOOP_MIN_INTERVAL_S
         while True:
+            started = time.monotonic()
             _, stderr = entry.process.communicate()
             if entry.cancelled:
                 return
@@ -163,7 +179,7 @@ class SoundService:
                 message = (stderr or b"").decode(errors="replace").strip()
                 # pw-play kann manche Formate nicht. Dann den Zweitweg
                 # versuchen, statt die Taste stumm scheitern zu lassen.
-                fallback = None if fallback_tried else self._spawn_fallback(file, sink)
+                fallback = None if fallback_tried else self._spawn_fallback(file, sink, volume)
                 fallback_tried = True
                 if fallback is not None:
                     if not self._replace_process(entry, fallback):
@@ -174,6 +190,17 @@ class SoundService:
             # Neu starten nur nach einem sauberen Durchlauf. Scheitert die
             # Wiedergabe, bringt ein weiterer Versuch nichts.
             if entry.loop and ok and not entry.cancelled:
+                # War der Durchlauf zu kurz, erst warten. Bleibt es dabei,
+                # wird die Pause länger, bis zur Obergrenze.
+                dauer = time.monotonic() - started
+                if dauer < LOOP_MIN_INTERVAL_S:
+                    if entry.stopped.wait(max(0.0, pause - dauer)):
+                        return
+                    pause = min(pause * 2, LOOP_MAX_BACKOFF_S)
+                else:
+                    pause = LOOP_MIN_INTERVAL_S
+                if entry.cancelled:
+                    return
                 try:
                     if not self._replace_process(entry, self._respawn(entry, file, sink, volume, fallback_tried)):
                         return
@@ -197,7 +224,7 @@ class SoundService:
     ) -> subprocess.Popen:
         """Der nächste Durchlauf einer Schleife, mit dem Player, der zuletzt lief."""
         if via_fallback:
-            process = self._spawn_fallback(file, sink)
+            process = self._spawn_fallback(file, sink, volume)
             if process is None:
                 raise SoundError(str(file))
             return process
@@ -213,21 +240,53 @@ class SoundService:
         return True
 
     @staticmethod
-    def _spawn_fallback(file: Path, sink: str) -> subprocess.Popen | None:
-        for argv in FALLBACK_PLAYERS:
-            if shutil.which(argv[0]) is None:
-                continue
-            command = list(argv)
-            if argv[0] == "mpv" and sink:
-                command.append(f"--audio-device=pipewire/{sink}")
-            command.append(str(file))
+    def _spawn_fallback(file: Path, sink: str, volume: int = 100) -> subprocess.Popen | None:
+        command = fallback_command(file, sink, volume)
+        while command is not None:
+            argv, env = command
             try:
                 return subprocess.Popen(
-                    command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+                    argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env
                 )
             except OSError:
-                continue
+                command = fallback_command(file, sink, volume, skip=argv[0])
         return None
+
+
+def fallback_command(
+    file: Path, sink: str, volume: int, *, skip: str = ""
+) -> tuple[list[str], dict[str, str] | None] | None:
+    """Aufruf des Zweitwegs samt Umgebung, oder ``None`` ohne Player.
+
+    Lautstärke und Ziel gelten auch hier. Das Ziel geht zusätzlich über die
+    Umgebung: ``PIPEWIRE_NODE`` lesen PipeWire-Programme, ``PULSE_SINK``
+    alles, was über pipewire-pulse spielt. ffplay kennt keinen eigenen
+    Schalter dafür.
+    """
+    volume = max(0, min(150, int(volume)))
+    env = None
+    if sink:
+        env = dict(os.environ)
+        env["PIPEWIRE_NODE"] = sink
+        env["PULSE_SINK"] = sink
+    gefunden = not skip
+    for argv in FALLBACK_PLAYERS:
+        if not gefunden:
+            gefunden = argv[0] == skip
+            continue
+        if shutil.which(argv[0]) is None:
+            continue
+        command = list(argv)
+        if argv[0] == "mpv":
+            command += ["--volume-max=150", f"--volume={volume}"]
+            if sink:
+                command.append(f"--audio-device=pipewire/{sink}")
+        elif argv[0] == "ffplay":
+            # ffplay reicht nur bis 100.
+            command += ["-volume", str(min(volume, 100))]
+        command.append(str(file))
+        return command, env
+    return None
 
 
 def _terminate(process: subprocess.Popen) -> None:

@@ -36,7 +36,7 @@ import asyncio
 import logging
 import os
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from .. import texte
 
@@ -197,8 +197,9 @@ class SessionCapabilities:
         return [cap_id for cap_id in required if not self.has(cap_id)]
 
     def reason_for(self, cap_id: str) -> str:
+        """Warum die Fähigkeit fehlt, in der Sprache, die jetzt gilt."""
         cap = self.caps.get(cap_id)
-        return cap.reason if cap else ""
+        return texte.aktuell(cap.reason) if cap else ""
 
     def as_dict(self) -> dict:
         return {
@@ -394,12 +395,20 @@ class SessionCapabilities:
         # das ist Absicht. Wer es trotzdem anbietet, tut das über eine
         # eigene Schnittstelle: Plasma über kglobalaccel, Hyprland und Sway
         # über ihre IPC. GNOME bietet gar keine — dort bleibt es aus.
-        if "org.kde.kglobalaccel" in namen:
+        #
+        # Der laufende Compositor geht vor. kglobalaccel kann auch unter
+        # Hyprland oder Sway am Bus stehen, sobald ein KDE-Programm es
+        # nachgestartet hat. Seine Fensterbefehle erreichen dort aber keinen
+        # Fenstermanager, der sie ausführt.
+        kglobalaccel = "org.kde.kglobalaccel" in namen
+        if kglobalaccel and self.info.is_plasma:
             self._set(WINDOW_CONTROL, True, "kglobalaccel")
         elif _hyprland_laeuft():
             self._set(WINDOW_CONTROL, True, "hyprland")
         elif _sway_laeuft():
             self._set(WINDOW_CONTROL, True, "sway")
+        elif kglobalaccel:
+            self._set(WINDOW_CONTROL, True, "kglobalaccel")
         else:
             self._set(
                 WINDOW_CONTROL,

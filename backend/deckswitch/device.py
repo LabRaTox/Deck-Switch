@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -26,6 +27,9 @@ from StreamDeck.Transport.Transport import TransportError
 from . import texte
 
 log = logging.getLogger(__name__)
+
+#: So lange gilt ein gesendetes Bild als noch auf dem Gerät.
+GESENDET_GILT_S = 60.0
 
 #: Nur das Plus hat Dials + Touchstrip. Andere Decks laufen im Tastenbetrieb.
 SUPPORTED_TYPES = {"Stream Deck +", "Stream Deck Plus"}
@@ -96,6 +100,9 @@ class StreamDeckDevice:
         self.deck = None
         self.info = DeviceInfo()
         self._lock = threading.RLock()
+        #: Was zuletzt an jeder Stelle steht, als fertige Gerätedaten mit
+        #: Zeitpunkt. Ein Neuzeichnen ohne Änderung schickt so nichts über USB.
+        self._gesendet: dict[tuple, tuple[float, bytes]] = {}
 
         # Von der Runtime gesetzt. Werden aus dem Reader-Thread gerufen.
         self.on_key: Callable[[int, bool], None] | None = None
@@ -145,6 +152,7 @@ class StreamDeckDevice:
                 return False
 
             self.deck = deck
+            self._gesendet.clear()
             # key_layout() liefert (Reihen, Spalten) — die einzige Quelle
             # dafür, wie das Gerät wirklich aussieht.
             rows, columns = _layout(deck)
@@ -176,6 +184,7 @@ class StreamDeckDevice:
     def close(self) -> None:
         with self._lock:
             deck, self.deck = self.deck, None
+            self._gesendet.clear()
             if deck is None:
                 return
             try:
@@ -258,11 +267,14 @@ class StreamDeckDevice:
         deck = self.deck
         if deck is None or native is None:
             return
+        if self._schon_da(("taste", index), native):
+            return
         try:
             deck.set_key_image(index, native)
         except (TransportError, OSError) as exc:
             self._handle_transport_error(exc)
         except Exception as exc:
+            self._gesendet.pop(("taste", index), None)
             log.warning("Tastenbild %s fehlgeschlagen: %s", index, exc)
 
     def set_touchscreen_image(
@@ -290,21 +302,58 @@ class StreamDeckDevice:
         deck = self.deck
         if deck is None or native is None or not hasattr(deck, "set_touchscreen_image"):
             return
+        if self._schon_da(("streifen", x, y, width, height), native):
+            return
         try:
             deck.set_touchscreen_image(native, x, y, width, height)
         except (TransportError, OSError) as exc:
             self._handle_transport_error(exc)
         except Exception as exc:
+            self._gesendet.pop(("streifen", x, y, width, height), None)
             log.warning("Touchstrip-Bild fehlgeschlagen: %s", exc)
+
+    def _schon_da(self, stelle: tuple, native: Any) -> bool:
+        """Steht genau dieses Bild schon dort? Merkt es sich sonst.
+
+        Ein Bild auf dem Touchstrip kann Teile anderer überdecken, etwa ein
+        Bildschirmschoner über die ganze Breite. Was sich überschneidet, wird
+        deshalb vergessen. Nach einer Weile wird ohnehin neu gesendet, falls
+        das Gerät doch einmal etwas verloren hat.
+        """
+        daten = bytes(native)
+        jetzt = time.monotonic()
+        with self._lock:
+            alt = self._gesendet.get(stelle)
+            if alt is not None and alt[1] == daten and jetzt - alt[0] < GESENDET_GILT_S:
+                return True
+            if stelle[0] == "streifen":
+                for andere in [s for s in self._gesendet if s[0] == "streifen" and s != stelle]:
+                    if _ueberschneiden(andere[1:], stelle[1:]):
+                        del self._gesendet[andere]
+            self._gesendet[stelle] = (jetzt, daten)
+        return False
 
     def clear(self) -> None:
         deck = self.deck
+        self._gesendet.clear()
         if deck is None:
             return
         try:
             deck.reset()
         except Exception as exc:
             log.debug("Reset ignoriert: %s", exc)
+
+
+def _ueberschneiden(a: tuple, b: tuple) -> bool:
+    """Überlappen zwei Bereiche ``(x, y, breite, höhe)``?
+
+    Breite oder Höhe 0 heißt bei der Bibliothek „ganzer Streifen“.
+    """
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    if not (aw and ah and bw and bh):
+        return True
+    return ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
 
 
 def enumerate_decks() -> list:

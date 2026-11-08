@@ -16,7 +16,7 @@ import logging
 import os
 import sys
 import traceback
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -183,12 +183,16 @@ class PluginRegistry:
                 datei = directory / "manifest.json"
                 if not datei.is_file():
                     continue
+                # ValueError deckt auch UnicodeDecodeError ab: Ein Manifest,
+                # das kein UTF-8 ist, darf den Abgleich nicht abbrechen.
                 try:
                     roh = json.loads(datei.read_text(encoding="utf-8"))
-                    kennung = str(roh.get("id") or "")
-                    fassung = str(roh.get("version") or "")
-                except (json.JSONDecodeError, OSError):
+                except (ValueError, OSError):
                     continue
+                if not isinstance(roh, dict):
+                    continue
+                kennung = str(roh.get("id") or "")
+                fassung = str(roh.get("version") or "")
                 if kennung and kennung not in gefunden:
                     gefunden[kennung] = (directory, fassung)
         return gefunden
@@ -215,7 +219,9 @@ class PluginRegistry:
             manifest = Manifest.model_validate(
                 json.loads(manifest_file.read_text(encoding="utf-8"))
             )
-        except (json.JSONDecodeError, ValidationError) as exc:
+        except (ValueError, ValidationError, OSError) as exc:
+            # ValueError schließt UnicodeDecodeError ein. Ein kaputtes
+            # Manifest kostet nur dieses eine Plugin, nicht alle übrigen.
             self._fail(directory.name, directory, texte.t("loader.manifest_ungueltig", exc=exc))
             return
 

@@ -24,13 +24,14 @@ import logging
 import re
 import shutil
 import tempfile
+import threading
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ValidationError
 
-from .. import paths
+from .. import __version__, paths
 from . import abhaengigkeiten
 from .base import Manifest
 from .. import texte
@@ -43,6 +44,11 @@ MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 MAX_ENTRIES = 20_000
 
 VALID_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+#: Hält Installieren und Entfernen nacheinander. Zwei Installationen zur
+#: selben Zeit wählten sonst dieselbe freie Ordnernummer und denselben
+#: Zwischenordner, und die zweite überschriebe die erste still.
+_ORDNER_LOCK = threading.Lock()
 
 
 class InstallError(RuntimeError):
@@ -105,12 +111,13 @@ def download(url: str) -> bytes:
         raise InstallError(texte.t("installer.adresse_unvollstaendig"))
 
     request = urllib.request.Request(
-        url, headers={"User-Agent": "StreamDeckApp/0.1 (+local)"}
+        url, headers={"User-Agent": f"DeckSwitch/{__version__}"}
     )
     try:
         with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_S) as response:
-            length = response.headers.get("Content-Length")
-            if length and int(length) > MAX_ARCHIVE_BYTES:
+            length = response.headers.get("Content-Length") or ""
+            # Eine kaputte Angabe zählt wie keine, begrenzt wird ohnehin beim Lesen.
+            if length.isdigit() and int(length) > MAX_ARCHIVE_BYTES:
                 raise InstallError(texte.t("installer.archiv_gross_max_64"))
             # Ein Byte mehr lesen, um auch ohne Content-Length zu begrenzen.
             data = response.read(MAX_ARCHIVE_BYTES + 1)
@@ -278,6 +285,11 @@ def _find_plugin_root(staging: Path) -> Path | None:
 
 
 def _install_from_directory(source: Path, plugin_id: str) -> Manifest:
+    with _ORDNER_LOCK:
+        return _install_from_directory_gesperrt(source, plugin_id)
+
+
+def _install_from_directory_gesperrt(source: Path, plugin_id: str) -> Manifest:
     manifest = _read_manifest(source)
     if manifest is None:
         raise InstallError(texte.t("installer.manifest_json_unlesbar_oder"))
@@ -300,6 +312,8 @@ def _install_from_directory(source: Path, plugin_id: str) -> Manifest:
         raise InstallError(
             texte.t("installer.bereits_eingebaut_kann_nicht", id=manifest.id)
         )
+
+    _pruefe_app_version(manifest)
 
     # Vor dem Kopieren: Fehlt etwas, bleibt eine ältere Fassung, wie sie ist.
     try:
@@ -334,6 +348,24 @@ def _install_from_directory(source: Path, plugin_id: str) -> Manifest:
     return manifest
 
 
+def _pruefe_app_version(manifest: Manifest) -> None:
+    """Bricht ab, wenn das Plugin eine neuere Fassung der App verlangt."""
+    if not manifest.min_app_version:
+        return
+    from .. import __version__
+    from ..services.store import neuer_als
+
+    if neuer_als(manifest.min_app_version, __version__):
+        raise InstallError(
+            texte.t(
+                "installer.braucht_neuere_app",
+                id=manifest.id,
+                version=manifest.min_app_version,
+                app=__version__,
+            )
+        )
+
+
 def _ignore_junk(_directory: str, names: list[str]) -> set[str]:
     return {n for n in names if n in {"__pycache__", ".git", ".DS_Store"} or n.endswith(".pyc")}
 
@@ -350,6 +382,11 @@ def uninstall(plugin_id: str) -> None:
     if (paths.BUILTIN_PLUGINS_DIR / plugin_id).is_dir():
         raise InstallError(texte.t("installer.eingebaute_plugins_lassen_nicht"))
 
+    with _ORDNER_LOCK:
+        _uninstall_gesperrt(plugin_id)
+
+
+def _uninstall_gesperrt(plugin_id: str) -> None:
     # Gesucht wird über das Manifest und nicht über den Ordnernamen: Der ist
     # eine Nummer und sagt nichts darüber, was darin liegt.
     target = _finde_ordner(plugin_id)
@@ -420,10 +457,12 @@ def _read_manifest(directory: Path) -> Manifest | None:
     manifest_file = directory / "manifest.json"
     if not manifest_file.is_file():
         return None
+    # Kein UTF-8 (UnicodeDecodeError ist ein ValueError) oder eine Liste
+    # statt eines Objekts: unlesbar, aber kein Grund für einen Absturz.
     try:
         return Manifest.model_validate(
             json.loads(manifest_file.read_text(encoding="utf-8"))
         )
-    except (json.JSONDecodeError, ValidationError, OSError) as exc:
+    except (ValueError, ValidationError, OSError) as exc:
         log.debug("Manifest in %s unlesbar: %s", directory, exc)
         return None

@@ -90,6 +90,29 @@ m = json.loads((paths.USER_PLUGINS_DIR / "0002" / "manifest.json").read_text())
 check("und das andere Plugin bleibt unberührt", m["version"] == "1.0.0", m["version"])
 check("die passende ID geht durch", not abgelehnt(archiv("wetter", "3.0.0"), expected_id="wetter"))
 
+print("\nMindestfassung der App")
+from deckswitch import __version__
+def mit_mindestfassung(pid, mindestens):
+    puffer = io.BytesIO()
+    with zipfile.ZipFile(puffer, "w") as z:
+        z.writestr(f"{pid}/manifest.json", json.dumps({
+            "id": pid, "name": pid, "version": "1.0.0", "type": "action",
+            "entry": "plugin.py", "class": "P", "min_app_version": mindestens}))
+        z.writestr(f"{pid}/plugin.py", "class P:\n    pass\n")
+    return puffer.getvalue()
+
+try:
+    installer.install_archive(mit_mindestfassung("zukunft", "99.0.0"))
+    meldung = ""
+except installer.InstallError as exc:
+    meldung = str(exc)
+check("eine zu neue Mindestfassung wird abgelehnt", "99.0.0" in meldung, meldung)
+check("und nichts wird angelegt", not any(
+    json.loads((o / "manifest.json").read_text()).get("id") == "zukunft"
+    for o in paths.USER_PLUGINS_DIR.iterdir() if (o / "manifest.json").is_file()))
+check("die eigene Fassung geht durch",
+      not abgelehnt(mit_mindestfassung("heute", __version__)))
+
 print()
 if FAILS:
     print("FEHLGESCHLAGEN: " + ", ".join(FAILS)); sys.exit(1)

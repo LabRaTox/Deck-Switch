@@ -313,9 +313,14 @@ def create_app(
     # ======================================================================
 
     @app.get("/api/state")
-    async def get_state() -> dict[str, Any]:
+    async def get_state(plugins: bool = True) -> dict[str, Any]:
+        """Alles, was die Oberfläche zum Start braucht.
+
+        ``plugins=false`` lässt die Plugin-Liste weg. Sie macht den Großteil
+        der Antwort aus und ändert sich bei einer geänderten Belegung nicht.
+        """
         primary = runtime.primary
-        return {
+        antwort = {
             # Die Oberfläche zeigt die Version des *Backends*, nicht ihre
             # eigene: Bei einem Netz-Deck oder einer halb aktualisierten
             # Installation ist das die Zahl, die zählt.
@@ -327,10 +332,12 @@ def create_app(
             "active_deck": primary.key,
             "config": runtime.config.model_dump(mode="json"),
             "current_page_id": primary.current_page_id(),
-            "plugins": _plugins_payload(runtime),
             "errors": runtime.errors[-50:],
             "backgrounds": backgrounds.PRESETS,
         }
+        if plugins:
+            antwort["plugins"] = _plugins_payload(runtime)
+        return antwort
 
     @app.get("/api/device")
     async def get_device(deck: str | None = None) -> dict[str, Any]:
@@ -380,6 +387,8 @@ def create_app(
         """
         try:
             gesetzt = runtime.netz.set_password(key, payload.password)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(404, str(exc)) from exc
         await runtime.netz.sync()
@@ -431,7 +440,7 @@ def create_app(
                 except RuntimeError:
                     log.warning("Overlay ließ sich nicht neu setzen", exc_info=True)
 
-            asyncio.create_task(an_neue_stelle())
+            ev.starte_task(an_neue_stelle(), "Overlay an neue Stelle setzen")
 
         runtime.bus.publish(ev.EVT_DECKS_CHANGED, decks=runtime.decks_payload())
         return {"x": x, "y": y}
@@ -1176,6 +1185,10 @@ def create_app(
 
         if session.current_page_id() in removed:
             session.navigate(profile.root_page_id)
+        # Ketten auf den gelöschten Seiten enden mit, auch auf anderen Decks
+        # mit demselben Profil.
+        for jedes in runtime.decks.values():
+            jedes.pruefe_ketten()
         runtime.save_config()
         runtime.request_redraw()
         runtime.bus.publish(ev.EVT_CONFIG_CHANGED, reason="page_deleted", page_id=page_id)
@@ -1209,12 +1222,30 @@ def create_app(
         if payload.slot is None:
             mapping.pop(index, None)
         else:
-            if runtime.registry.get(payload.slot.plugin_id) is None:
+            geladen = runtime.registry.get(payload.slot.plugin_id)
+            if geladen is None:
                 raise HTTPException(404, texte.t("server.plugin_nicht_gefunden_2", plugin_id=payload.slot.plugin_id))
+            # Eine Aktion nur für Tasten gehört nicht auf einen Dial und
+            # umgekehrt. Unbekannte Aktionen entscheidet das Rendern.
+            aktion = geladen.manifest.action(payload.slot.action_id)
+            if aktion is not None and input_type not in aktion.inputs:
+                raise HTTPException(
+                    400,
+                    texte.t(
+                        "server.aktion_passt_nicht_eingabe",
+                        action_id=payload.slot.action_id,
+                        input_type=input_type,
+                    ),
+                )
             mapping[index] = payload.slot
 
         runtime.save_config()
         session.drop_context(page_id, input_type, index)
+        # Andere Decks können dasselbe Profil zeigen und dort eine Kette
+        # dieser Belegung laufen haben.
+        for jedes in runtime.decks.values():
+            if jedes is not session:
+                jedes.pruefe_ketten()
         if page_id == session.current_page_id():
             session._mark_dirty((input_type, index))
         runtime.bus.publish(

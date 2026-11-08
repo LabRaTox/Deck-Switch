@@ -44,6 +44,50 @@ EVT_LOG = "log"
 IM_LOOP_WARTEN_S = 10.0
 
 
+#: Hält laufende Hintergrund-Tasks fest. Ohne Referenz darf der
+#: Garbage Collector eine Task mitten im Lauf einsammeln.
+_HINTERGRUND: set[asyncio.Task] = set()
+
+
+def _melde_ende(wofuer: str, ergebnis: asyncio.Future | concurrent.futures.Future) -> None:
+    if ergebnis.cancelled():
+        return
+    fehler = ergebnis.exception()
+    if fehler is not None:
+        log.error("%s ist fehlgeschlagen", wofuer, exc_info=fehler)
+
+
+def starte_task(coro, wofuer: str) -> asyncio.Task:
+    """Startet eine Coroutine im laufenden Loop, ohne dass ihr Fehler verloren geht."""
+    task = asyncio.get_running_loop().create_task(coro)
+    _HINTERGRUND.add(task)
+    task.add_done_callback(_HINTERGRUND.discard)
+    task.add_done_callback(functools.partial(_melde_ende, wofuer))
+    return task
+
+
+def starte_aus_thread(coro, loop: asyncio.AbstractEventLoop, wofuer: str) -> None:
+    """Wie :func:`starte_task`, aber aus einem anderen Thread heraus."""
+    zukunft = asyncio.run_coroutine_threadsafe(coro, loop)
+    zukunft.add_done_callback(functools.partial(_melde_ende, wofuer))
+
+
+async def beende_tasks(tasks: list[asyncio.Task], wofuer: str) -> None:
+    """Bricht Tasks ab und wartet auf alle, auch wenn eine davon geworfen hat.
+
+    Mit einem einfachen ``await task`` endete das Aufräumen bei der ersten
+    Task, die vorher an einem Fehler gestorben war.
+    """
+    for task in tasks:
+        task.cancel()
+    ergebnisse = await asyncio.gather(*tasks, return_exceptions=True)
+    for task, ergebnis in zip(tasks, ergebnisse):
+        if isinstance(ergebnis, BaseException) and not isinstance(
+            ergebnis, asyncio.CancelledError
+        ):
+            log.error("%s: Task %s endete mit %r", wofuer, task.get_name(), ergebnis)
+
+
 def im_loop(
     loop: asyncio.AbstractEventLoop | None,
     fn: Callable[..., Any],

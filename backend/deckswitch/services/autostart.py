@@ -24,6 +24,7 @@ wurde und die alte Unit ins Leere zeigt.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -35,7 +36,8 @@ from .. import texte
 log = logging.getLogger(__name__)
 
 UNIT_NAME = "deckswitch.service"
-UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
+#: Dort sucht systemd die Units des Benutzers, auch mit gesetztem XDG_CONFIG_HOME.
+UNIT_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd" / "user"
 
 COMMAND_TIMEOUT_S = 5.0
 
@@ -174,7 +176,9 @@ def _write_unit() -> Path:
     except OSError as exc:
         raise AutostartError(texte.t("autostart.unit_vorlage_nicht_lesbar", template=template, exc=exc)) from exc
 
-    text = _use_running_interpreter(text.replace("__REPO__", str(repo)), repo)
+    # % verdoppeln, systemd liest es sonst als Platzhalter. Leerzeichen sind
+    # kein Problem, die Vorlage setzt den Pfad in Anführungszeichen.
+    text = _use_running_interpreter(text.replace("__REPO__", _fuer_unit(str(repo))), repo)
 
     UNIT_DIR.mkdir(parents=True, exist_ok=True)
     unit = UNIT_DIR / UNIT_NAME
@@ -194,4 +198,9 @@ def _use_running_interpreter(text: str, repo: Path) -> str:
     venv_python = repo / ".venv" / "bin" / "python"
     if venv_python.exists():
         return text
-    return text.replace(str(venv_python), sys.executable)
+    return text.replace(_fuer_unit(str(venv_python)), _fuer_unit(sys.executable))
+
+
+def _fuer_unit(pfad: str) -> str:
+    """Ein Pfad, wie er in einer Unit stehen muss."""
+    return pfad.replace("%", "%%")

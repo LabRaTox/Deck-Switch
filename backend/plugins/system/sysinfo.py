@@ -16,7 +16,7 @@ import glob
 import logging
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from deckswitch.plugins.base import plugin_text
@@ -26,6 +26,18 @@ log = logging.getLogger(__name__)
 #: So lange gilt ein Wert von ``nvidia-smi`` als frisch.
 GPU_TTL_S = 1.5
 GPU_TIMEOUT_S = 4.0
+
+#: Nach einem Fehlschlag von ``nvidia-smi`` wird so lange gewartet, bevor
+#: es erneut gefragt wird. Die Pause verdoppelt sich bis zur Obergrenze;
+#: ein einzelner Aussetzer (Treiber lädt noch, Zeitüberschreitung unter
+#: Last) legt die Kachel so nicht für immer still.
+GPU_RETRY_S = 10.0
+GPU_RETRY_MAX_S = 300.0
+
+#: So lange gilt „keine Temperatur gefunden", dann wird erneut gesucht.
+#: Treiber wie ``nvme`` oder ``k10temp`` erscheinen manchmal erst nach dem
+#: Start des Backends.
+TEMP_REPROBE_S = 60.0
 
 #: Mindestabstand zwischen zwei Messungen einer Rate. Tick, Zeichnen und
 #: Beschriftung fragen kurz nacheinander; ohne Sperre käme beim zweiten
@@ -71,8 +83,11 @@ class SystemInfo:
         self._net: dict[str, _Rate] = {}
         self._gpu: dict[str, float] = {}
         self._gpu_at = 0.0
-        self._gpu_failed = False
-        self._hwmon: dict[str, Path] = {}
+        #: Vor diesem Zeitpunkt (monotonic) wird ``nvidia-smi`` nicht gefragt.
+        self._gpu_retry_at = 0.0
+        self._gpu_pause = GPU_RETRY_S
+        #: Treiber → (Pfad oder ``None``, wann gesucht).
+        self._hwmon: dict[str, tuple[Path | None, float]] = {}
 
     # -- CPU ---------------------------------------------------------------
 
@@ -108,8 +123,7 @@ class SystemInfo:
         return reading
 
     def cpu_temp(self) -> Reading:
-        path = self._temp_path(CPU_TEMP_DRIVERS)
-        return self._read_temp(path, ceiling=95)
+        return self._temp(CPU_TEMP_DRIVERS, ceiling=95)
 
     # -- Speicher ----------------------------------------------------------
 
@@ -153,6 +167,15 @@ class SystemInfo:
         if not values:
             return Reading(0.0, None, "---", available=False)
 
+        # Jedes Feld zählt für sich. Meldet der Treiber für eines
+        # ``[N/A]``, bleiben die anderen Kacheln trotzdem gefüllt.
+        wanted = {
+            "temperature": "temperature.gpu",
+            "memory": "memory.used",
+        }.get(field_name, "utilization.gpu")
+        if wanted not in values:
+            return Reading(0.0, None, "---", available=False)
+
         if field_name == "temperature":
             celsius = values.get("temperature.gpu", 0.0)
             # Der Balken rechnet weiter in Celsius — 90 °C sind 90 °C, egal
@@ -160,17 +183,18 @@ class SystemInfo:
             return Reading(celsius, min(1.0, celsius / 95), self._temperature(celsius))
         if field_name == "memory":
             used = values.get("memory.used", 0.0)
-            total = values.get("memory.total", 0.0) or 1
-            return Reading(used, used / total, f"{used / 1024:.1f} GB")
+            total = values.get("memory.total", 0.0)
+            fraction = min(1.0, used / total) if total > 0 else None
+            return Reading(used, fraction, f"{used / 1024:.1f} GB")
         value = values.get("utilization.gpu", 0.0)
         return Reading(value, value / 100, f"{value:.0f} %")
 
     def _gpu_values(self) -> dict[str, float]:
         now = time.monotonic()
-        if self._gpu_failed:
-            return {}
         if self._gpu and now - self._gpu_at < GPU_TTL_S:
             return self._gpu
+        if now < self._gpu_retry_at:
+            return {}
 
         query = "utilization.gpu,temperature.gpu,memory.used,memory.total"
         try:
@@ -180,30 +204,38 @@ class SystemInfo:
                 text=True,
                 timeout=GPU_TIMEOUT_S,
             )
+        except FileNotFoundError:
+            # Kein nvidia-smi: Das ändert sich selten. Die längste Pause
+            # gleich, statt jede Sekunde einen Unterprozess zu versuchen.
+            return self._gpu_fehlschlag(now, GPU_RETRY_MAX_S)
         except (OSError, subprocess.SubprocessError):
-            # Keine NVIDIA-GPU oder kein Treiber — einmal merken und nicht
-            # jede Sekunde erneut einen Unterprozess dafür starten.
-            self._gpu_failed = True
-            return {}
+            return self._gpu_fehlschlag(now)
 
         line = result.stdout.strip().splitlines()
         if result.returncode != 0 or not line:
-            self._gpu_failed = True
-            return {}
+            return self._gpu_fehlschlag(now)
 
-        parts = [p.strip() for p in line[0].split(",")]
-        try:
-            self._gpu = dict(zip(query.split(","), (float(p) for p in parts)))
-        except ValueError:
-            self._gpu_failed = True
-            return {}
+        values = parse_gpu_line(query.split(","), line[0])
+        if not values:
+            return self._gpu_fehlschlag(now)
+        self._gpu = values
         self._gpu_at = now
+        self._gpu_retry_at = 0.0
+        self._gpu_pause = GPU_RETRY_S
         return self._gpu
+
+    def _gpu_fehlschlag(self, now: float, pause: float | None = None) -> dict[str, float]:
+        """Merkt sich den Fehlschlag und wann es wieder versucht wird."""
+        pause = self._gpu_pause if pause is None else pause
+        self._gpu = {}
+        self._gpu_retry_at = now + pause
+        self._gpu_pause = min(max(pause, self._gpu_pause) * 2, GPU_RETRY_MAX_S)
+        return {}
 
     # -- Datenträger und Netz ---------------------------------------------
 
     def nvme_temp(self) -> Reading:
-        return self._read_temp(self._temp_path(("nvme",)), ceiling=80)
+        return self._temp(("nvme",), ceiling=80)
 
     def disk_usage(self, path: str = "/") -> Reading:
         import shutil as _shutil
@@ -211,6 +243,9 @@ class SystemInfo:
         try:
             usage = _shutil.disk_usage(path or "/")
         except OSError:
+            return Reading(0.0, None, "---", available=False)
+        # Pseudo-Dateisysteme wie /proc melden eine Größe von null.
+        if usage.total <= 0:
             return Reading(0.0, None, "---", available=False)
         percent = usage.used / usage.total * 100
         return Reading(percent, percent / 100, _t("sysinfo.frei", wert=f"{usage.free / 1024**3:.0f}"))
@@ -278,10 +313,22 @@ class SystemInfo:
 
     # -- Temperaturen ------------------------------------------------------
 
+    def _temp(self, drivers: tuple[str, ...], ceiling: int) -> Reading:
+        path = self._temp_path(drivers)
+        reading = self._read_temp(path, ceiling=ceiling)
+        if path is not None and not reading.available:
+            # Der Sensor ist verschwunden (Treiber neu geladen, hwmon-Nummer
+            # gewechselt). Beim nächsten Mal neu suchen.
+            self._hwmon.pop(drivers[0], None)
+        return reading
+
     def _temp_path(self, drivers: tuple[str, ...]) -> Path | None:
         key = drivers[0]
-        if key in self._hwmon:
-            return self._hwmon[key]
+        cached = self._hwmon.get(key)
+        if cached is not None:
+            path, found_at = cached
+            if path is not None or time.monotonic() - found_at < TEMP_REPROBE_S:
+                return path
 
         for wanted in drivers:
             for name_file in sorted(glob.glob("/sys/class/hwmon/hwmon*/name")):
@@ -291,9 +338,9 @@ class SystemInfo:
                 except OSError:
                     continue
                 for candidate in sorted(Path(name_file).parent.glob("temp*_input")):
-                    self._hwmon[key] = candidate
+                    self._hwmon[key] = (candidate, time.monotonic())
                     return candidate
-        self._hwmon[key] = None  # type: ignore[assignment]
+        self._hwmon[key] = (None, time.monotonic())
         return None
 
     def _read_temp(self, path: Path | None, ceiling: int) -> Reading:
@@ -315,6 +362,21 @@ class SystemInfo:
 
 def _t(schluessel: str, **werte) -> str:
     return plugin_text(Path(__file__).resolve().parent, "system", schluessel, werte)
+
+
+def parse_gpu_line(fields: list[str], line: str) -> dict[str, float]:
+    """Eine Zeile von ``nvidia-smi --format=csv,noheader,nounits``.
+
+    Felder, die keine Zahl sind (``[N/A]``, ``[Not Supported]``), fehlen im
+    Ergebnis. Die übrigen bleiben nutzbar.
+    """
+    values: dict[str, float] = {}
+    for name, raw in zip(fields, (p.strip() for p in line.split(","))):
+        try:
+            values[name] = float(raw)
+        except ValueError:
+            continue
+    return values
 
 
 def _bytes_per_second(value: float) -> str:

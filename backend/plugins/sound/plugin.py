@@ -37,7 +37,7 @@ class SoundPlugin(ActionPlugin):
 
             options = {
                 "sink": (settings.get("sink") or "").strip(),
-                "volume": int(settings.get("volume") or 100),
+                "volume": _lautstaerke(settings.get("volume")),
                 "loop": bool(settings.get("loop")),
             }
             if settings.get("mode") == "toggle":
@@ -85,3 +85,13 @@ class SoundPlugin(ActionPlugin):
     def get_status(self):
         ok, reason = self.services.sound.available()
         return {"connected": ok, "detail": reason or self.t("status.bereit")}
+
+
+def _lautstaerke(wert) -> int:
+    """Lautstärke in Prozent. 0 ist stumm, nur eine fehlende Angabe heißt 100."""
+    if wert is None or (isinstance(wert, str) and not wert.strip()):
+        return 100
+    try:
+        return max(0, min(150, round(float(wert))))
+    except (TypeError, ValueError):
+        return 100

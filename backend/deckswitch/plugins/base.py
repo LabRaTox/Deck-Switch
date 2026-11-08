@@ -215,6 +215,9 @@ class Manifest(BaseModel):
     #: :mod:`deckswitch.plugins.abhaengigkeiten`. Der Inhalt wird beim
     #: Installieren geprüft, dort lässt sich genau sagen, was nicht stimmt.
     dependencies: dict[str, Any] = Field(default_factory=dict)
+    #: Älteste Fassung von DECK//SWITCH, mit der das Plugin läuft, etwa
+    #: ``"1.4.0"``. Eine ältere App lehnt die Installation ab.
+    min_app_version: str | None = None
     icons_dir: str = "icons"
     #: Nur bei type="iconset": Lizenzhinweis, den die GUI anzeigt.
     license: str = ""
@@ -600,10 +603,13 @@ class ActionPlugin:
         except RuntimeError:
             running = None
 
+        from ..events import starte_aus_thread, starte_task
+
+        wofuer = f"Hintergrundarbeit von Plugin '{self.manifest.id}'"
         if running is loop:
-            loop.create_task(coro)
+            starte_task(coro, wofuer)
         else:
-            asyncio.run_coroutine_threadsafe(coro, loop)
+            starte_aus_thread(coro, loop, wofuer)
 
     def notify_error(self, message: str) -> None:
         """Echter Fehler — erscheint in der Fehlerleiste der GUI."""

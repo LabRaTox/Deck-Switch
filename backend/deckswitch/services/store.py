@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -24,11 +25,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .. import paths
+from .. import __version__, paths
 from ..plugins import installer
 from .. import texte
 
 log = logging.getLogger(__name__)
+
+BENUTZERAGENT = f"DeckSwitch/{__version__}"
 
 #: Wo der Store steht. Über die Umgebung umstellbar — sonst ließe sich
 #: gegen eine Testinstanz nicht arbeiten, ohne den Quelltext zu ändern.
@@ -108,7 +111,7 @@ def _anfrage(
     lesen, aber wer angemeldet ist, soll dabei auch die eigene Stimme
     zurückbekommen.
     """
-    kopf = {"Accept": "application/json", "User-Agent": "DeckSwitch/1.0"}
+    kopf = {"Accept": "application/json", "User-Agent": BENUTZERAGENT}
     if typ:
         kopf["Content-Type"] = typ
     if mit_token:
@@ -293,7 +296,7 @@ def _hol_bild(adresse: str) -> tuple[bytes, str]:
         raise StoreError(texte.t("store.diese_bildadresse_zeigt_nicht"))
 
     anfrage = urllib.request.Request(
-        adresse, headers={"Accept": "image/*", "User-Agent": "DeckSwitch/1.0"}
+        adresse, headers={"Accept": "image/*", "User-Agent": BENUTZERAGENT}
     )
     try:
         with urllib.request.urlopen(anfrage, timeout=ZEITLIMIT_S) as antwort:
@@ -483,12 +486,17 @@ def schreib_token(token: str) -> None:
     if not token:
         TOKEN_DATEI.unlink(missing_ok=True)
         return
-    # Erst anlegen, dann die Rechte setzen, dann schreiben: Zwischen einem
-    # ``write_text`` und einem späteren ``chmod`` läge ein Moment, in dem
-    # die Datei für alle lesbar ist.
-    TOKEN_DATEI.touch(mode=0o600, exist_ok=True)
-    TOKEN_DATEI.chmod(0o600)
-    TOKEN_DATEI.write_text(token, encoding="utf-8")
+    # In eine eigene Datei mit 0600 schreiben und dann umbenennen: So ist die
+    # Datei nie für andere lesbar, und ein Absturz mittendrin lässt das alte
+    # Token stehen statt eines leeren.
+    fd, tmp = tempfile.mkstemp(dir=TOKEN_DATEI.parent, prefix=".store-token.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as datei:
+            datei.write(token)
+        os.replace(tmp, TOKEN_DATEI)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def anmeldung_starten() -> dict[str, Any]:

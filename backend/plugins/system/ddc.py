@@ -49,6 +49,27 @@ class Display:
     label: str
 
 
+def parse_detect(text: str) -> list[Display]:
+    """Monitore aus ``ddcutil detect --brief``.
+
+    Jeder Monitor steht in einem eigenen Block, getrennt durch Leerzeilen.
+    Gezählt werden nur Blöcke, die mit ``Display N`` beginnen. Ein Block
+    ``Invalid display`` hat ebenfalls eine Zeile ``Monitor:``. Würden Namen
+    und Nummern getrennt gesammelt, rutschten dadurch alle Namen um eins.
+    """
+    displays: list[Display] = []
+    for block in re.split(r"\n\s*\n", text or ""):
+        block = block.strip("\n")
+        kopf = _DISPLAY_RE.match(block.lstrip())
+        if kopf is None:
+            continue
+        number = int(kopf.group(1))
+        monitor = _MONITOR_RE.search(block)
+        raw = monitor.group(1).strip() if monitor else ""
+        displays.append(Display(number=number, label=_pretty(raw) or f"Monitor {number}"))
+    return displays
+
+
 class DdcController:
     """Kennt die Monitore und hält deren Helligkeit."""
 
@@ -57,6 +78,8 @@ class DdcController:
         self._values: dict[int, int] = {}
         self._pending: dict[int, int] = {}
         self._timers: dict[int, threading.Timer] = {}
+        #: Monitore, für die gerade ein setvcp läuft.
+        self._schreibt: set[int] = set()
         self._lock = threading.Lock()
         self._available: bool | None = None
         #: Letzter Fehler, entweder als Schlüssel samt Werten oder als
@@ -106,13 +129,7 @@ class DdcController:
             self._displays = []
             return self._displays
 
-        numbers = [int(n) for n in _DISPLAY_RE.findall(result.stdout)]
-        labels = [m.strip() for m in _MONITOR_RE.findall(result.stdout)]
-        displays = []
-        for index, number in enumerate(numbers):
-            raw = labels[index] if index < len(labels) else ""
-            displays.append(Display(number=number, label=_pretty(raw) or f"Monitor {number}"))
-
+        displays = parse_detect(result.stdout)
         self._displays = displays
         if not displays:
             self._error = ("ddc.kein_monitor", {})
@@ -194,11 +211,25 @@ class DdcController:
 
     def _flush(self, number: int) -> None:
         with self._lock:
-            value = self._pending.pop(number, None)
             self._timers.pop(number, None)
-        if value is None:
-            return
+            # Ein setvcp dauert Sekunden. Läuft schon einer für diesen
+            # Monitor, bleibt der neue Wert vorgemerkt und wird danach
+            # geschrieben, statt zwei Läufe gleichzeitig auf den Bus zu schicken.
+            if number in self._schreibt:
+                return
+            value = self._pending.pop(number, None)
+            if value is None:
+                return
+            self._schreibt.add(number)
+        try:
+            self._schreibe(number, value)
+        finally:
+            with self._lock:
+                self._schreibt.discard(number)
+                if number in self._pending and number not in self._timers:
+                    self._schedule(number)
 
+    def _schreibe(self, number: int, value: int) -> None:
         started = time.monotonic()
         try:
             result = subprocess.run(

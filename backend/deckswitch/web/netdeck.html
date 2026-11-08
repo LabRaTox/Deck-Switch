@@ -10,6 +10,7 @@
   Die Seite kann nichts ändern — sie zeigt Kacheln und meldet Druck und
   Drehung zurück. Mehr bietet der Server auch gar nicht an.
 -->
+<html lang="{{LANG}}">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <meta name="color-scheme" content="dark">
@@ -125,9 +126,9 @@
       <div class="deckname">{{DECKNAME}}</div>
     </div>
   </h1>
-  <input id="passwort" type="password" placeholder="Passwort" autocomplete="current-password"
+  <input id="passwort" type="password" placeholder="{{T:netdeck.passwort}}" autocomplete="current-password"
          autofocus enterkeyhint="go">
-  <button type="submit">Verbinden</button>
+  <button type="submit">{{T:netdeck.verbinden}}</button>
   <div class="fehler" id="fehler"></div>
 </form>
 
@@ -155,7 +156,7 @@
         <div class="deckname" id="name"></div>
       </div>
     </div>
-    <button type="button" class="abmelden" id="abmelden">Abmelden</button>
+    <button type="button" class="abmelden" id="abmelden">{{T:netdeck.abmelden}}</button>
   </div>
   <div class="flaeche-deck" id="flaeche">
     <div class="raster" id="raster"></div>
@@ -191,7 +192,7 @@ async function ruf(pfad, optionen = {}) {
   if (token) kopf["Authorization"] = "Bearer " + token;
   const antwort = await fetch(pfad, Object.assign({}, optionen, { headers: kopf }));
   if (antwort.status === 401 || antwort.status === 403) {
-    abmelden("Die Sitzung ist abgelaufen.");
+    abmelden({{J:netdeck.sitzung_abgelaufen}});
     throw new Error("nicht angemeldet");
   }
   return antwort;
@@ -213,7 +214,7 @@ anmeldung.addEventListener("submit", async (e) => {
     });
     if (!antwort.ok) {
       const daten = await antwort.json().catch(() => ({}));
-      fehlerFeld.textContent = daten.detail || "Anmeldung fehlgeschlagen";
+      fehlerFeld.textContent = daten.detail || {{J:netdeck.anmeldung_fehlgeschlagen}};
       return;
     }
     const daten = await antwort.json();
@@ -222,7 +223,7 @@ anmeldung.addEventListener("submit", async (e) => {
     document.getElementById("passwort").value = "";
     starte(daten.name);
   } catch (err) {
-    fehlerFeld.textContent = "Keine Verbindung zum Deck";
+    fehlerFeld.textContent = {{J:netdeck.keine_verbindung}};
   } finally {
     knopf.disabled = false;
   }
@@ -309,7 +310,7 @@ function baueRaster(daten) {
   }
 
   hinweisEl.textContent = daten.dials
-    ? "Tippen drückt, − und + drehen den Regler."
+    ? {{J:netdeck.hinweis_dials}}
     : "";
 }
 
@@ -354,11 +355,20 @@ async function schleife() {
 
 // -- Eingaben --------------------------------------------------------------
 
+/* Laufende Nummer je Meldung. Drücken und Loslassen gehen als getrennte
+   Anfragen los und können sich unterwegs überholen; der Server verwirft,
+   was älter ist als das zuletzt Angekommene. Sie startet bei der Uhrzeit,
+   damit sie auch nach einem Neuladen mit demselben Token weiter steigt. */
+let folge = Date.now();
+
 function melde(art, index, aktion, delta) {
+  folge = Math.max(folge + 1, Date.now());
   ruf("/api/input", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ input_type: art, index: index, action: aktion, delta: delta || 0 }),
+    body: JSON.stringify({
+      input_type: art, index: index, action: aktion, delta: delta || 0, seq: folge,
+    }),
   }).catch(() => {});
 }
 

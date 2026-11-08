@@ -118,6 +118,8 @@ def pruefe_vollstaendigkeit():
     for datei in KERN.rglob("*.py"):
         benutzt |= set(re.findall(r'texte\.t\(\s*"([^"]+)"', datei.read_text()))
         benutzt |= set(re.findall(r'"(desktop\.fenster\.[a-z_]+)"', datei.read_text()))
+    for datei in (KERN / "web").glob("*.html"):
+        benutzt |= set(re.findall(r"\{\{[TJ]:([a-z_.]+)\}\}", datei.read_text()))
     fehlt = sorted(benutzt - set(de))
     check("jeder benutzte Schlüssel steht im Katalog", not fehlt, str(fehlt))
     unbenutzt = sorted(set(de) - benutzt)

@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
@@ -20,6 +21,10 @@ from . import paths
 from .netserver import StillerServer
 from .runtime import Runtime
 from .server import create_app
+
+#: So lange darf das Aufräumen beim Beenden dauern. systemd bricht nach 90 s
+#: hart ab, dann bliebe das Deck mit dem letzten Bild stehen.
+STOP_TIMEOUT_S = 15
 
 
 def setup_logging(verbose: bool) -> None:
@@ -126,8 +131,32 @@ async def run(args: argparse.Namespace) -> int:
     server.should_exit = True
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await asyncio.wait_for(serve_task, timeout=5)
-    await runtime.stop()
+    await stoppe_runtime(runtime)
     return 0
+
+
+async def stoppe_runtime(runtime: Runtime, timeout: float = STOP_TIMEOUT_S) -> None:
+    """Beendet die Runtime; hängt das, endet der Prozess trotzdem.
+
+    Ein hängender Plugin-Hook belegt einen Worker-Thread. Auf den warten
+    sonst gleich zwei Stellen: ``asyncio.run`` beim Schließen seines
+    Thread-Pools und der Interpreter beim Beenden, der jeden Worker noch
+    einsammelt. Beides lässt sich nicht abbrechen, also endet der Prozess
+    in genau diesem Fall direkt, nachdem das Gerät dunkel ist.
+    """
+    log = logging.getLogger(__name__)
+    try:
+        await asyncio.wait_for(runtime.stop(), timeout=timeout)
+    except TimeoutError:
+        log.error("Beenden dauerte länger als %d s, Rest wird abgebrochen", timeout)
+        try:
+            runtime.stop_hart()
+        finally:
+            logging.shutdown()
+            with contextlib.suppress(Exception):
+                sys.stdout.flush()
+                sys.stderr.flush()
+            os._exit(0)
 
 
 async def _start_tray(runtime: Runtime, url: str, stopping: asyncio.Event):

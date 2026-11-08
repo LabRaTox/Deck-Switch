@@ -29,6 +29,7 @@ import urllib.request
 import uvicorn
 
 from deckswitch import netauth
+from deckswitch import texte
 from deckswitch.config import Appearance, Page, Slot
 from deckswitch.netserver import create_net_app
 from deckswitch.runtime import Runtime
@@ -177,6 +178,22 @@ async def main():
     check("jetzt wird es angeboten", deck.label.encode() in start)
     code, _ = await client.get(f"/deck/{deck.key}")
     check("und die Seite steht bereit", code == 200, str(code))
+    _, seite = await client.get(f"/deck/{deck.key}")
+    check("ohne offene Platzhalter", b"{{" not in seite)
+    check("mit deutschen Texten", "Verbinden".encode() in seite and b'lang="de"' in seite)
+    texte.verbinde_sprache(lambda: "en")
+    _, seite = await client.get(f"/deck/{deck.key}")
+    texte.verbinde_sprache(lambda: rt.config.app.language)
+    check("nach Umschalten englisch", b"Connect" in seite and b'lang="en"' in seite)
+
+    try:
+        rt.netz.set_password(deck.key, "abc")
+        zu_kurz = False
+    except ValueError:
+        zu_kurz = True
+    check("ein Passwort unter 4 Zeichen wird abgelehnt", zu_kurz)
+    _, koerper = await client.post("/api/login", {"deck": deck.key, "password": "streamteam2026"})
+    check("und das alte gilt weiter", b"token" in koerper, koerper[:80].decode(errors="replace"))
 
     code, _ = await client.post("/api/login", {"deck": deck.key, "password": "falsch"})
     check("ein falsches Passwort reicht nicht", code == 401, str(code))

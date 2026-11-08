@@ -138,9 +138,16 @@ def _key_code(key: str) -> int:
         return 0x01000005 | _QT_KEYPAD
 
     # Alles, was ein Zeichen ist: Qt nimmt dafür den Codepunkt des
-    # Großbuchstabens — ``d`` → ``Key_D``, ``ö`` → ``Key_Odiaeresis``.
-    if len(name) == 1 and ord(name.upper()) < 0x100:
-        return ord(name.upper())
+    # Großbuchstabens, ``d`` → ``Key_D``, ``ö`` → ``Key_Odiaeresis``. Das
+    # Zeichen gilt wie beim Senden auf der eingestellten Belegung: ``z`` ist
+    # die Taste, die ein Z schreibt, egal wo sie liegt.
+    # Manche Zeichen haben keinen einzelnen Großbuchstaben (``ß`` wird zu
+    # ``SS``). Qt führt sie unter ihrem eigenen Codepunkt (``Key_ssharp``).
+    if len(name) == 1:
+        gross = name.upper()
+        zeichen = gross if len(gross) == 1 else name
+        if ord(zeichen) < 0x100:
+            return ord(zeichen)
 
     raise ShortcutError(texte.t("shortcuts.taste_nicht_bekannt", key=key))
 
@@ -213,7 +220,12 @@ class ShortcutService:
             for key, (combo, name) in gewuenscht.items():
                 if self._angemeldet.get(key) == (combo, name):
                     continue
-                await self._anmelden(key, combo, name)
+                # Ein Deck, das scheitert, darf die übrigen nicht mitreißen.
+                try:
+                    await self._anmelden(key, combo, name)
+                except Exception as exc:
+                    log.warning("Kurzbefehl für Deck '%s': %s", key, exc)
+                    self._gruende[key] = str(exc)
 
     # -- Der Weg über das Portal -------------------------------------------
 

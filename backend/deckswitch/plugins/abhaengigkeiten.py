@@ -17,7 +17,7 @@ sie sich die zuerst geladene.
 
 ``system`` nennt Pakete der Distribution. Ein einfacher Name gilt überall, wo
 die Namen abweichen, nennt ein Objekt einen je Familie: ``arch``, ``debian``
-(auch Ubuntu) und ``fedora``. Dafür braucht es root, also fragt ``pkexec``
+(auch Ubuntu), ``fedora`` und ``suse`` (openSUSE). Dafür braucht es root, also fragt ``pkexec``
 nach dem Passwort. Geht das nicht oder lehnt jemand ab, nennt der Fehler den
 Befehl für die Hand. Auf einem Fedora mit Image wie Bazzite kommt ein Paket
 erst mit dem nächsten Start an, dort ist es immer Handarbeit. Ohne bekannten
@@ -185,6 +185,10 @@ APT = Paketmanager(
 DNF = Paketmanager(
     "fedora", _rpm_fehlt, ("sudo", "dnf", "install"), ("dnf", "install", "-y"),
 )
+ZYPPER = Paketmanager(
+    "suse", _rpm_fehlt, ("sudo", "zypper", "install"),
+    ("zypper", "--non-interactive", "install"),
+)
 RPM_OSTREE = Paketmanager(
     "fedora", _rpm_fehlt, ("sudo", "rpm-ostree", "install"),
     neustart=True,
@@ -203,6 +207,8 @@ def paketmanager() -> Paketmanager | None:
         return PACMAN
     if shutil.which("apt-get") and shutil.which("dpkg-query"):
         return APT
+    if shutil.which("zypper"):
+        return ZYPPER
     if shutil.which("dnf"):
         return DNF
     return None

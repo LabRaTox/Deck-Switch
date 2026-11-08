@@ -44,6 +44,10 @@ BILDER_JE_S = 12
 SCHWELLE = 1 / 60
 #: Wartezeit, bevor eine abgebrochene Messung neu startet.
 NEUSTART_S = 5.0
+#: So oft sieht der Wächter nach, ob noch eine Kachel misst. Ein ruhender
+#: Ausgang liefert über ``parec`` gar keine Daten, das Lesen kehrte dann
+#: nie zurück, und die Messung liefe ohne Kachel ewig weiter.
+WAECHTER_S = 1.0
 DEFAULT_TTL_S = 2.0
 
 
@@ -178,6 +182,13 @@ class Pegelmesser:
             stderr=subprocess.DEVNULL,
         )
         messung.prozess = prozess
+        fertig = threading.Event()
+        threading.Thread(
+            target=self._waechter,
+            args=(messung, prozess, fertig),
+            name=f"pegel-waechter-{messung.quelle}",
+            daemon=True,
+        ).start()
         zuletzt = time.monotonic()
         try:
             while True:
@@ -193,10 +204,30 @@ class Pegelmesser:
                 if self._beenden_wenn_ungenutzt(messung):
                     return
         finally:
+            fertig.set()
             prozess.terminate()
             with contextlib.suppress(subprocess.TimeoutExpired):
                 prozess.wait(timeout=1)
             prozess.stdout.close()
+
+    def _ungenutzt(self, messung: _Messung) -> bool:
+        """Zeigt keine Kachel diese Messung mehr? Ändert nichts."""
+        jetzt = time.monotonic()
+        with self._lock:
+            return self._aus or not any(v[0] > jetzt for v in messung.kacheln.values())
+
+    def _waechter(self, messung: _Messung, prozess, fertig: threading.Event) -> None:
+        """Beendet ``parec``, sobald niemand mehr hinsieht.
+
+        Das Lesen selbst kann das nicht: Es wartet auf Daten, die von einem
+        ruhenden Ausgang nicht kommen. Endet der Prozess, kehrt es mit
+        leerem Ergebnis zurück, und die Messung räumt sich auf.
+        """
+        while not fertig.wait(WAECHTER_S):
+            if self._ungenutzt(messung):
+                with contextlib.suppress(OSError):
+                    prozess.terminate()
+                return
 
     def _melde_aenderung(self, messung: _Messung, jetzt: float) -> None:
         with self._lock:

@@ -20,6 +20,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -63,6 +64,20 @@ _PACTL_DEFAULTS = {
 COMMAND_TIMEOUT_S = 3.0
 
 
+def cli_env() -> dict[str, str]:
+    """Umgebung für ``pactl`` und ``wpctl``: Meldungen unübersetzt.
+
+    Ausgewertet wird Text wie ``Event 'change' on sink #43`` oder
+    ``Volume: 0.50``. Eine übersetzte Fassung passt auf keinen der
+    Ausdrücke hier. ``C.UTF-8`` statt ``C``, damit Gerätenamen mit Umlauten
+    unverändert durchkommen. ``LANGUAGE`` ginge sonst vor.
+    """
+    env = dict(os.environ)
+    env["LC_ALL"] = "C.UTF-8"
+    env.pop("LANGUAGE", None)
+    return env
+
+
 @dataclass(slots=True)
 class VolumeState:
     volume: float = 0.0
@@ -90,6 +105,14 @@ class AudioService:
         self._sinks_cache: tuple[float, list[SinkInfo]] | None = None
         self._sources_cache: tuple[float, list[SinkInfo]] | None = None
         self._source_names_cache: tuple[float, set[str]] | None = None
+        #: Rohe Geräteliste je Art (``sinks``, ``sources``). Eine Kachel fragt
+        #: oft mehrere Werte daraus ab, ein ``pactl list`` je Wert wäre teuer.
+        self._raw_cache: dict[str, tuple[float, list[dict]]] = {}
+        #: Standardausgang und -eingang. Jede Taste „Ausgabegerät“ fragt bei
+        #: jedem Takt danach, und jeder ``pactl``-Aufruf meldet sich neu bei
+        #: PipeWire an. Verworfen wird nur bei einer Änderung am Server.
+        self._defaults: dict[str, tuple[float, str]] = {}
+        self._defaults_generation = 0
         #: Zählt jede Invalidierung. Ein Lesevorgang, der vor einer
         #: Änderung begann, darf sein Ergebnis danach nicht mehr ablegen.
         self._generation = 0
@@ -146,6 +169,7 @@ class AudioService:
                     stderr=subprocess.DEVNULL,
                     text=True,
                     bufsize=1,
+                    env=cli_env(),
                 )
                 self._subscriber = proc
                 self._subscriber_since = started
@@ -159,7 +183,9 @@ class AudioService:
                     event, facility = match.group(1), match.group(2)
                     if facility not in {"sink", "source", "server", "sink-input"}:
                         continue
-                    self.invalidate()
+                    # Den Standardausgang ändert nur ein Ereignis am Server.
+                    # Ein Regler am Ausgang meldet dagegen Dutzende ``sink``.
+                    self.invalidate(defaults=facility == "server")
                     for listener in list(self._listeners):
                         try:
                             listener(event, facility)
@@ -199,13 +225,17 @@ class AudioService:
     def _ttl(self, kurz: float) -> float:
         return WATCHED_TTL_S if self._watched() else kurz
 
-    def invalidate(self) -> None:
+    def invalidate(self, *, defaults: bool = True) -> None:
         with self._lock:
             self._generation += 1
             self._cache.clear()
+            self._raw_cache.clear()
             self._sinks_cache = None
             self._sources_cache = None
             self._source_names_cache = None
+            if defaults:
+                self._defaults_generation += 1
+                self._defaults.clear()
 
     # -- Lautstärke --------------------------------------------------------
 
@@ -360,27 +390,48 @@ class AudioService:
         return sources
 
     def get_default_sink(self) -> str:
-        return (self._run(["pactl", "get-default-sink"]) or "").strip()
+        return self._default("sink")
 
     def get_default_source(self) -> str:
-        return (self._run(["pactl", "get-default-source"]) or "").strip()
+        return self._default("source")
+
+    def _default(self, art: str) -> str:
+        now = time.monotonic()
+        ttl = self._ttl(CACHE_TTL_S)
+        with self._lock:
+            cached = self._defaults.get(art)
+            if cached is not None and now - cached[0] < ttl:
+                return cached[1]
+            generation = self._defaults_generation
+        name = (self._run(["pactl", f"get-default-{art}"]) or "").strip()
+        with self._lock:
+            if self._defaults_generation == generation:
+                self._defaults[art] = (now, name)
+        return name
 
     def switch_output(self, sink_name: str, *, move_streams: bool = True) -> bool:
-        """Ausgabegerät wechseln — inklusive laufender Streams.
+        """Ausgabegerät wechseln, inklusive laufender Streams.
 
         Nur ``set-default-sink`` würde ausschließlich *neue* Wiedergabe
         betreffen; Spotify, Browser oder ein laufendes Spiel blieben auf dem
-        alten Gerät. Deshalb werden alle aktiven sink-inputs explizit
-        mitgezogen.
+        alten Gerät. Deshalb werden die Streams des bisherigen Ausgangs
+        mitgezogen, aber nur die: Was jemand gezielt auf ein anderes Gerät
+        gelegt hat, bleibt dort. Welche Streams nie umziehen, entscheidet
+        :func:`_stream_zieht_um`.
         """
         if not self.has_pactl:
             raise AudioUnavailable(texte.t("audio.pactl_nicht_verfuegbar"))
 
+        # Vor dem Umschalten nachsehen, sonst ist der alte Ausgang schon weg.
+        vorher = (self._run(["pactl", "get-default-sink"]) or "").strip() if move_streams else ""
         ok = self._run(["pactl", "set-default-sink", sink_name]) is not None
         if ok and move_streams:
+            sinks = self._lies_liste("sinks")
+            alt = _sink_mit_namen(sinks, vorher)
+            neu = _sink_mit_namen(sinks, sink_name)
             for entry in self._list_raw("sink-inputs"):
                 index = entry.get("index")
-                if index is None:
+                if index is None or not _stream_zieht_um(entry, alt, neu):
                     continue
                 self._run(["pactl", "move-sink-input", str(index), sink_name])
         self.invalidate()
@@ -435,6 +486,24 @@ class AudioService:
     # -- Subprozess-Handhabung --------------------------------------------
 
     def _list_raw(self, what: str) -> list[dict]:
+        # Nur die Gerätelisten. Was laufende Streams betrifft, wird zum
+        # Umhängen gebraucht und muss frisch sein.
+        if what not in ("sinks", "sources"):
+            return self._lies_liste(what)
+        now = time.monotonic()
+        ttl = self._ttl(CACHE_TTL_S)
+        with self._lock:
+            cached = self._raw_cache.get(what)
+            if cached is not None and now - cached[0] < ttl:
+                return cached[1]
+            generation = self._generation
+        eintraege = self._lies_liste(what)
+        with self._lock:
+            if self._generation == generation:
+                self._raw_cache[what] = (now, eintraege)
+        return eintraege
+
+    def _lies_liste(self, what: str) -> list[dict]:
         out = self._run(["pactl", "-f", "json", "list", what])
         if not out:
             return []
@@ -490,6 +559,7 @@ class AudioService:
                 text=True,
                 timeout=COMMAND_TIMEOUT_S,
                 check=False,
+                env=cli_env(),
             )
         except FileNotFoundError:
             log.error("Befehl nicht gefunden: %s", command[0])
@@ -509,6 +579,55 @@ class AudioService:
             )
             return None
         return result.stdout
+
+
+def _sink_mit_namen(sinks: list[dict], name: str) -> dict | None:
+    if not name:
+        return None
+    for entry in sinks:
+        if entry.get("name") == name or str(entry.get("index")) == name:
+            return entry
+    return None
+
+
+def _ist_wahr(wert) -> bool:
+    return str(wert).strip().lower() in ("true", "1", "yes")
+
+
+def _stream_zieht_um(stream: dict, alt: dict | None, neu: dict | None) -> bool:
+    """Darf dieser Stream beim Wechsel des Ausgangs mit umziehen?
+
+    Nein bei allem, was zu einem virtuellen Gerät gehört: Die Rückleitung
+    eines Loopbacks (``game_sink.output`` und Verwandte), die Ausgänge von
+    EasyEffects und Mitschnitte (``stream.monitor``). Solche Streams hängen
+    an einem Filter und führen dessen Ton weiter. Auf das eigene virtuelle
+    Gerät umgehängt, liefe der Ton im Kreis.
+
+    Sonst nur, was auf dem bisherigen Standardausgang lag. Ist der nicht
+    bekannt, zieht jeder gewöhnliche Stream mit, wie bisher.
+    """
+    props = stream.get("properties") or {}
+    if _ist_wahr(props.get("node.virtual")) or _ist_wahr(props.get("stream.monitor")):
+        return False
+    gruppe = str(props.get("node.link-group") or "")
+    if gruppe:
+        return False
+    if str(props.get("application.id") or "").startswith("com.github.wwmm.easyeffects"):
+        return False
+
+    if neu is not None:
+        if stream.get("sink") == neu.get("index"):
+            return False
+        # Die Rückleitung des neuen Geräts selbst, auch wenn sie sich nicht
+        # als virtuell ausgibt: Sie teilt mit ihm die Gruppe.
+        neu_props = neu.get("properties") or {}
+        neu_gruppe = str(neu_props.get("node.link-group") or neu_props.get("node.group") or "")
+        if neu_gruppe and neu_gruppe in (str(props.get("node.group") or ""), gruppe):
+            return False
+
+    if alt is not None:
+        return stream.get("sink") == alt.get("index")
+    return True
 
 
 def _pactl_target(target: str) -> str:
