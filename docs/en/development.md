@@ -7,29 +7,44 @@
 
 ```
 backend/
+  pyproject.toml         Python package and its dependencies
   deckswitch/            core: devices, runtime, rendering, HTTP/WebSocket
+    __main__.py          entry point, starts runtime and local server together
     config.py            data model (decks → profiles → pages → assignments)
     runtime.py           shared things: config, plugins, services, discovery
     deck.py              one deck: page, key logic, drawing, screen saver
     device.py            HID handling, reconnecting
+    events.py            event bus between runtime, plugins and GUI
+    paths.py             where configuration, data and bundled files live
+    texte.py             texts for the interface in the chosen language
+    locales/             the language files (de.json, en.json)
     server.py            REST + WebSocket for the GUI (127.0.0.1 only)
     netserver.py         network decks: second, tiny application for the LAN
     netauth.py           passwords, sessions, brake against guessing
     virtualdeck.py       deck without hardware, images go to memory
+    tray.py              tray icon (StatusNotifierItem)
     plugins/base.py      plugin API (the only file plugin authors need)
+    plugins/loader.py    finds, loads and registers plugins
+    plugins/installer.py installs and removes plugins
     plugins/abhaengigkeiten.py  what plugins bring along: Python and system packages
-    services/            audio (PipeWire), icons, rendering, backgrounds,
-                         autostart, tray icon, input (uinput), media (MPRIS),
+    services/            audio (PipeWire), level meter, icons, rendering,
+                         backgrounds, touch strip wallpaper, screen saver,
+                         autostart, app icon, input (uinput), media (MPRIS),
                          desktop (KDE), soundboard, overlay, global
-                         shortcuts, session detection, portal, plugin store
+                         shortcuts, automatic profile switching, program
+                         list, session detection, portal, backup, plugin store
     web/netdeck.html     the page a network guest gets in the browser
   plugins/               bundled plugins, ordinary ones technically
     audio/ system/ streamdeck/ multi/ sound/ iconset-tabler/
   tests/                 test suites (see below)
 gui/                     Tauri + Vite/React
-packaging/               udev rules, systemd unit, URL handler
+packaging/               udev rules, systemd units (checkout and package),
+                         menu entry, window launcher (deckswitch-gui.sh),
+                         URL handler
+  aur/                   PKGBUILD for the Arch package
   overlay/               the virtual deck as a QML overlay
-scripts/                 installation (bash), start (POSIX sh)
+scripts/                 installation, start, removal, release files (shell),
+                         helpers for images and plugin archives (Python)
 docs/                    this documentation
 ```
 
@@ -50,6 +65,10 @@ sessions on the same plugins.
 | `~/.local/share/deckswitch/uploads/` | your own icons and key backgrounds |
 | `~/.local/share/deckswitch/wallpapers/` | touch strip wallpapers (800 × 100) |
 | `~/.local/share/deckswitch/plugins/` | plugins installed afterwards |
+| `~/.local/share/deckswitch/app/` | the application itself after the one-command install |
+| `~/.local/share/deckswitch/deckswitch.log` | backend log |
+| `~/.cache/deckswitch/fensterstart` | how the window starts on this system ([setup.md](setup.md#when-the-window-does-not-open)) |
+| `~/.config/systemd/user/deckswitch.service` | service for start at login, only in a checkout or one-command install (the package brings its own) |
 
 The two image stores are separate because an 800 × 100 strip is useless as an
 icon and would only get in the way in the icon picker.
@@ -60,8 +79,10 @@ inside is in its `manifest.json`. Older installations still have folders
 named after the plugin id, and both forms work.
 
 Before every write the previous state of the configuration goes into the
-backup folder, one per hour, the last 30 stay. An assignment is hours of
-manual work and lives in exactly one file.
+backup folder, at most one per hour. Every state stays for 24 hours. After
+that only the last one of each day is kept, and after 7 days it is deleted.
+No more than 30 states stay in total. An assignment is hours of manual work
+and lives in exactly one file.
 
 ## Development
 
@@ -94,15 +115,20 @@ done
 ```
 
 Without `XDG_CONFIG_HOME` set they abort by themselves and leave the real
-configuration alone.
+configuration alone. `XDG_DATA_HOME` keeps backups, uploads and the log out
+of your real data folder.
+
+Suites for store plugins load the plugin from `plugin-sources/` next to
+`backend/`. That folder is not part of the repository. In a fresh clone
+these suites skip themselves.
 
 `hotkey_test.py` talks to the `kglobalaccel` of the running session.
 Otherwise none of it would be tested, only imitated. The suite unregisters
 its shortcuts at the end and skips itself when Plasma is not running.
 
-`store_test.py` starts the plugin store from the neighbouring `PlugInStore`
-project and runs the whole chain: upload, catalogue, download with checksum.
-If the store is not next door, the suite skips itself.
+`store_test.py` starts a real plugin store server and runs the whole chain:
+upload, catalogue, download with checksum. It needs the store's source next
+to this repository. If it is missing, the suite skips itself.
 
 ### GUI
 
@@ -126,7 +152,10 @@ nowhere else by hand:
   `backend/tests/version_test.py` enforces that it matches.
 
 To raise it: `__init__.py`, `gui/src-tauri/Cargo.toml`, `gui/package.json`,
-then run `version_test.py`.
+then run `version_test.py`. For a release `pkgver` in `packaging/aur/PKGBUILD`
+changes as well, and so does the versioned download address in the Arch
+section of [setup.md](setup.md#arch-and-cachyos). The `sha256sums` in the
+PKGBUILD can only be filled in once the tarball for the tag exists.
 
 Separate from all of this are **`CONFIG_VERSION`** in `config.py` (the schema
 level of the configuration, bumped only for migrations) and the **plugin
@@ -135,11 +164,17 @@ to the application.
 
 ### About the scripts
 
-The scripts under `scripts/` are POSIX `sh`, except the installation (`get.sh`,
-`install.sh`, `fetch-release.sh`, `build-release-files.sh`), which needs `bash`.
-They are **in English**, output as
-well as comments. They run from any shell without fish having to be
-installed. Tested with `sh`, `dash`, `bash`, `zsh` and `fish`.
+The installation scripts (`get.sh`, `install.sh`, `fetch-release.sh`,
+`build-release-files.sh`) need `bash`. The other shell scripts (`dev.sh`,
+`start-backend.sh`, `start-gui.sh`, `delete.sh`, `install-service.sh`,
+`install-desktop-entry.sh`, `install-url-handler.sh`) are POSIX `sh`. None of
+them needs fish. Their output is in English, except `install-desktop-entry.sh`,
+which reports in German. Some comments are in German.
+
+Next to them are Python helpers. `make-icon.py`, `make-plugin-icons.py`,
+`make-wallpapers.py` and `make-plugin-screenshots.py` generate the app icon,
+plugin icons, touch strip wallpapers and plugin screenshots.
+`package_plugins.py` packs plugin sources into ZIP archives.
 
 The venv is never "activated". The scripts call `.venv/bin/python` directly,
 and that is independent of the shell. Activating it by hand works all the
@@ -182,29 +217,30 @@ the origin of the request and not the content.
 
 ## Known limits
 
-* Profiles exist per deck automatically, but there is **no free switching**
-  between several profiles on the same device and no automatic switch per
-  foreground application ("smart profiles").
+* **Automatic profile switching only works under KDE Plasma.** A key with
+  the *Switch profile* action works on every desktop. Following the
+  foreground application needs a KWin script (`services/smartprofile.py`),
+  because Wayland does not tell an ordinary application which window has the
+  focus.
 * **Push-to-talk does not mix with double press or hold** on the same key.
   Assigning both inevitably moves the trigger to the release.
 * **Type text** only manages characters directly reachable on the active
   layout. Anything produced by dead keys is skipped.
-* **Global shortcuts only work under Plasma** (`kglobalaccel`, see
-  `services/shortcuts.py`). The portable route would be
-  `org.freedesktop.portal.GlobalShortcuts`, but that one demands a parent
-  window and a confirmation dialog once per session.
-
-  This used to say that `kglobalaccel` never delivers the signal. That was a
-  measurement error: without a matching `AddMatch` rule the bus sends a
-  client no broadcasts at all. Re-measured with the rule on 2026-08-19, and
-  the signal arrives, all the way from a real key press through the
-  compositor into the service (`tests/hotkey_test.py`).
-* Plugin hot reload reloads manifests and classes, but Python caches modules
-  it has already imported. After changing a plugin, restarting the backend is
-  the more reliable route.
+* **Global shortcuts take your combination as given only under Plasma.**
+  There they go through `kglobalaccel` (`services/shortcuts.py`). Elsewhere
+  they go through `org.freedesktop.portal.GlobalShortcuts`
+  (`services/portal.py`), if the desktop offers it. The desktop then shows a
+  dialog, treats your combination as a suggestion and may assign a
+  different one. The app shows the combination that really applies. When
+  the list of overlay decks changes, the dialog comes again.
+* **Check for new plugins** only loads plugins that are new, were removed or
+  carry a new version number in the manifest. After changing a plugin's code
+  without a new number, restart the backend.
 * **systemd and PipeWire are taken as given.** `install.sh` knows Arch, Debian,
-  Ubuntu and Fedora. Developed and tested on the device on CachyOS only, the
-  other distributions are checked in containers.
+  Ubuntu, Fedora and openSUSE. On an image-based Fedora such as Bazzite it installs no
+  packages and names the `rpm-ostree` command instead. Developed and tested on
+  the device on CachyOS only, the other distributions are checked in
+  containers.
 * **DDC/CI depends on the monitor.** Brightness control needs a device that
   permits DDC/CI, and many have to be unlocked in the on-screen menu first.
   On top of that `ddcutil` is slow by nature, so the app keeps the value
@@ -212,6 +248,24 @@ the origin of the request and not the content.
 * **GPU readings with NVIDIA only.** They come from `nvidia-smi`. For AMD
   cards `/sys/class/drm/…/device/hwmon` would be the way, but that is not
   built.
+
+## Built on
+
+| | |
+| --- | --- |
+| **Backend** | Python 3, [`streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck), FastAPI with uvicorn |
+| **Rendering** | Pillow for key images, cairosvg for SVG icons |
+| **GUI** | Tauri + Vite/React, using the system WebView |
+| **Audio** | PipeWire via `wpctl`/`pactl`, level meter via `parec`, soundboard via `pw-play` |
+| **Input** | virtual keyboard via `/dev/uinput` with `evdev`, layout via libxkbcommon (`xkbcommon`) |
+| **Desktop** | D-Bus via `dbus-next` for MPRIS, tray and KWin. Global shortcuts and screenshots via KDE, otherwise via `xdg-desktop-portal` |
+| **Overlay** | `zwlr_layer_shell_v1` via layer-shell-qt, window hints on X11 and XWayland |
+| **Installation** | [`uv`](https://github.com/astral-sh/uv) for the Python environment and the packages of plugins |
+| **Icons** | [Tabler Icons](https://tabler.io/icons) (MIT), wired in as an ordinary icon set plugin |
+
+Without [`python-elgato-streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck)
+by Dean Camera this project would not exist. All of the device handling
+builds on it.
 
 ## About the name
 

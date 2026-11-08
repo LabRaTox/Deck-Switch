@@ -2,6 +2,11 @@
 
 *[English version](../en/plugins.md)* · Zurück zur [Übersicht](../../README.de.md).
 
+Die eingebauten Plugins gehören zum Lieferumfang. Alles andere kommt aus dem
+Store, im Netz unter <https://streamdeckstore.labratox.de> und in der App
+unter *Plugins*. Manche Store-Plugins brauchen eine einmalige Einrichtung,
+siehe [Store-Plugins einrichten](store-plugin-setup.md).
+
 ## Eingebaute Plugins
 
 | Plugin | Aktionen |
@@ -9,14 +14,14 @@
 | **Audio** | Lautstärke (Dial mit Balken und Pegelanzeige), Lautstärke auf Festwert setzen, Mikrofon stumm (auch Push-to-Talk), Ausgabegerät wechseln, App-Lautstärke |
 | **Multi-Aktion** | Multi-Aktion, Multi-Aktion (Umschalter) |
 | **Soundboard** | Klang abspielen (mit eigenem Ausgabegerät), alles anhalten |
-| **System** | Programm starten und beenden, Ordner/Datei/Link öffnen, Shell-Befehl, Tastenkombination (auch als Umschalter und als Push-to-Talk), Text tippen, Multimedia, Fenster & Arbeitsfläche, Bildschirmfoto, Sitzung (sperren, abmelden, ruhen, neu starten, ausschalten), Systemwerte (CPU, RAM, GPU, Temperaturen, Netz), Monitorhelligkeit über DDC/CI |
-| **Streamdeck** | Ordner, Home, Zurück, Seitenanzeige, Gehe zu Seite, Blättern, Helligkeit, Leer (Platzhalter), Virtuelles Deck |
+| **System** | Programm starten und beenden, Ordner/Datei/Link öffnen, Shell-Befehl, Tastenkombination (auch als Umschalter und als Push-to-Talk), Text tippen, Multimedia, Fenster & Arbeitsfläche, Bildschirmfoto, Sitzung (sperren, Bildschirme aus und ein, Bereitschaft, Ruhezustand, abmelden, neu starten, ausschalten), Systemwerte (CPU, RAM, Auslagerung, GPU, Grafikspeicher, CPU-/GPU-/SSD-Temperatur, Speicherplatz, Netz), Monitorhelligkeit über DDC/CI |
+| **Streamdeck** | Ordner, Home, Zurück, Seitenanzeige, Gehe zu Seite, Blättern, Profil wechseln, Helligkeit, Leer (Platzhalter), Virtuelles Deck |
 | **Tabler-Icons** | kein Aktions-Plugin, sondern der mitgelieferte Symbolsatz |
 
-Fachlich sind sie Pflicht, technisch aber ganz gewöhnliche Plugins. Sie
-liegen in `backend/plugins/` und nicht in
-`~/.local/share/deckswitch/plugins/`, und in der GUI tauchen sie ganz normal
-in der Plugin-Liste auf.
+Fachlich sind sie Pflicht, technisch aber ganz gewöhnliche Plugins. Im
+Quellbaum liegen sie in `backend/plugins/`, in einer installierten App in
+`/usr/share/deckswitch/plugins/`. Nie in `~/.local/share/deckswitch/plugins/`,
+und in der GUI tauchen sie ganz normal in der Plugin-Liste auf.
 
 ### Tastenkombination und Text tippen
 
@@ -39,20 +44,37 @@ Browser selbst abfängt (Strg+W schließt den Tab), trägst du von Hand ein.
 
 ### Fenster & Arbeitsfläche
 
-Das löst KDEs eigene globale Kurzbefehle aus: maximieren, kacheln, auf
-Bildschirm 2 schieben, Arbeitsfläche wechseln, und was sonst noch angemeldet
-ist. Bei einer Standardinstallation sind das rund 170 Einträge allein für
-KWin. Unter Wayland ist das der saubere Weg, denn Fenster von außen zu
-verschieben gibt es dort nicht. Und diese Kurzbefehle musst du nicht einmal
+Unter Plasma löst das KDEs eigene globale Kurzbefehle aus: maximieren,
+kacheln, auf Bildschirm 2 schieben, Arbeitsfläche wechseln, und was sonst noch
+angemeldet ist. Bei einer Standardinstallation sind das rund 170 Einträge
+allein für KWin. Unter Wayland ist das der saubere Weg, denn Fenster von außen
+zu verschieben gibt es dort nicht. Und diese Kurzbefehle musst du nicht einmal
 selbst belegt haben.
+
+Unter Hyprland und Sway spricht die Aktion direkt mit dem Compositor. Beide
+kennen keine Liste benannter Aktionen, deshalb bringt die App eine feste
+Auswahl an Befehlen mit. Beide bekommen Vollbild, Fenster schließen, schwebend
+umschalten, das Fenster in vier Richtungen schieben, zur Arbeitsfläche 1 bis
+10 wechseln und das Fenster dorthin schieben. Hyprland hat zusätzlich
+Maximieren, Anheften und Mittig setzen (beides nur für schwebende Fenster)
+und die Arbeitsfläche auf den nächsten Bildschirm. Sway hat zusätzlich auf
+allen Arbeitsflächen anheften, Aufteilung umschalten und das Fenster auf den
+nächsten Bildschirm. Auf anderen Desktops steht die Aktion nicht zur
+Verfügung.
 
 ### Sitzung
 
-Kennt sperren, abmelden, Bereitschaft, Ruhezustand, neu starten und
-ausschalten, jeweils mit oder ohne Rückfrage von Plasma. Voreingestellt ist
-zusätzlich **zweimal drücken**: Der erste Druck macht die Taste nur scharf
-und zeigt „Sicher?", erst der zweite führt aus. Ein versehentlich getroffenes
-Herunterfahren wäre der teuerste Fehlgriff, den dieses Gerät anbieten kann.
+Kennt sperren, Bildschirme aus und ein, Bereitschaft, Ruhezustand, neu
+starten, ausschalten und abmelden. Abmelden, neu starten und ausschalten gibt
+es zusätzlich *mit Rückfrage*, dann erscheint die Bestätigung von Plasma. Die
+Varianten mit Rückfrage und das Abmelden ohne brauchen die Sitzungsverwaltung
+von Plasma. Bildschirme aus und ein geht unter Plasma (über
+`kscreen-doctor`), Hyprland und Sway.
+
+Voreingestellt ist zusätzlich **zweimal drücken**. Der erste Druck macht die
+Taste nur scharf und zeigt „Sicher?", erst der zweite führt aus. Ein
+versehentlich getroffenes Herunterfahren wäre der teuerste Fehlgriff, den
+dieses Gerät anbieten kann.
 
 ### Multimedia
 
@@ -70,23 +92,24 @@ Schleife, und ein zweiter Druck startet neu oder hält an.
 
 ### Audio
 
+**Pegelanzeige.** *Lautstärke* und *Lautstärke setzen* zeigen unter dem Text,
+was gerade aus dem Gerät kommt: von -60 bis 0 dBFS, gelb ab -12, rot ab -3,
+dazu eine weiße Marke für die letzte Spitze. Der Wert folgt dem
+Lautstärkeregler. Gemessen wird nur, solange die Anzeige zu sehen ist, und der
+Ausgang darf dabei weiter in den Ruhezustand gehen. Abschalten lässt sie sich
+je Belegung über den Schalter *Pegelanzeige*. Stumm bleibt sie leer.
+
 **Ausgabegerät wechseln** setzt nicht nur den Standard-Sink, sondern zieht
 auch alle laufenden Streams mit. Sonst bliebe die schon laufende Musik auf
-dem alten Gerät.
+dem alten Gerät. Soll nur neue Wiedergabe auf dem neuen Gerät landen,
+schaltest du in der Belegung *Laufende Streams mitziehen* ab.
 
-**Pegelanzeige.** *Lautstärke* und *Lautstärke setzen* zeigen unter dem Text, was
-gerade aus dem Gerät kommt: von -60 bis 0 dBFS, gelb ab -12, rot ab -3, dazu eine
-weiße Marke für die letzte Spitze. Der Wert folgt dem Lautstärkeregler. Gemessen
-wird nur, solange die Anzeige zu sehen ist, und der Ausgang darf dabei weiter in
-den Ruhezustand gehen. Abschalten lässt sie sich je Belegung über den Schalter
-*Pegelanzeige*. Stumm bleibt sie leer.
-
-**Lautstärke setzen** springt mit einem Druck auf einen festen Prozentwert
-— eine Taste für 20 %, eine für 50 %, eine für 100 %. Ein stummes Gerät wird
-dabei standardmäßig wieder freigeschaltet, sonst zeigte der Balken den Wert
-und zu hören wäre nichts. Liegt der Wert gerade an, bekommt die Taste einen
-Rahmen. Auf einem Dial gilt beides: Drehen ändert wie gewohnt schrittweise,
-Druck springt auf den Festwert.
+**Lautstärke setzen** springt mit einem Druck auf einen festen Prozentwert.
+Eine Taste für 20 %, eine für 50 %, eine für 100 %. Ein stummes Gerät wird
+dabei standardmäßig wieder freigeschaltet (*Stummschaltung aufheben*), sonst
+zeigte der Balken den Wert und zu hören wäre nichts. Liegt der Wert gerade
+an, bekommt die Taste einen Rahmen. Auf einem Dial gilt beides: Drehen ändert
+wie gewohnt schrittweise, Druck springt auf den Festwert.
 
 **Zustände von außen.** Ändert jemand die Lautstärke in den
 Systemeinstellungen, wechselt OBS die Szene oder mutet Discord sich selbst,
@@ -94,292 +117,71 @@ zeichnet die betroffene Taste sofort neu. Dafür laufen `pactl subscribe` und
 die Event-Kanäle von obs-websocket und Discord-RPC mit. Der Sekundentakt ist
 nur das Sicherheitsnetz.
 
-## Nachinstallierbare Plugins
+## Was deine Sitzung nicht kann
 
-Diese neun gehören nicht zum Lieferumfang. Sie kommen über den Store.
+Eine Aktion oder eine Auswahl kann von etwas abhängen, das der Desktop
+liefern muss, etwa Fenstersteuerung oder die Sitzungsverwaltung. Ein Plugin
+nennt das in seinem Manifest (`requires`). Fehlt es deiner Sitzung, taucht die
+Aktion in der Aktionsbibliothek nicht auf. Auf einer Taste, die sie schon
+trägt, steht im Inspector „Wirkungslos in dieser Sitzung" mit dem Grund.
+Auswahllisten verhalten sich genauso: Die Einträge verschwinden, nur der schon
+gewählte bleibt stehen und ist mit „(in dieser Sitzung wirkungslos)"
+markiert.
 
-| Plugin | Aktionen |
-| --- | --- |
-| **Discord** | Mute (auch Push-to-Talk und Push-to-Mute), Deafen, Sprachkanal wechseln, Kanal verlassen, Textkanal öffnen, Mikrofonpegel |
-| **OBS** | Aufnahme (inkl. Pause und Kapitelmarken), Stream, Wiedergabepuffer und Replay speichern, Szenensammlung, Szene, Quelle, Ton stumm, Medienwiedergabe, Studio-Modus, Vorschau live schalten, Filter, Screenshot, Übergang, virtuelle Kamera |
-| **Spotify** | Wiedergabe, nächster/vorheriger Titel, Playlist starten, Shuffle, Wiederholung, Lautstärke, Multimedia-Dial |
-| **Wetter** | Aktuelles Wetter, Mehrtagesvorhersage, Luftqualität |
-| **Uhr-Schoner** | Bildschirmschoner: Uhrzeit als je eine Ziffer pro Taste |
-| **Timer** | Countdown, Stoppuhr, Wecker |
-| **Twitch** | Titel, Kategorie, Werbung, Marker, Clip, Raid, Chat, Chatmodus, Chat leeren, Shoutout, Umfrage, Vorhersage, Streamstatus, Follower |
-| **Govee** | An/Aus, Helligkeit, Farbe, Farbtemperatur, Szene, alle Geräte auf einmal |
-| **YouTube** | Zuschauer, Chatnachricht, Werbung, Dashboard öffnen, Stream starten und beenden |
+## Die Plugin-Liste
 
-### Discord
+Unter *Plugins* stehen die installierten Plugins und die Kacheln aus dem
+Store in einer Liste. Oben wählst du die Art (*Plugins*, *Icons*,
+*Bildschirmschoner*, *Hintergrundbilder*), links eine Kategorie, *Alle* oder
+*Installiert*. Die Zahlen daneben zählen, was das Suchfeld (*Plugins
+durchsuchen*) übrig lässt. So siehst du, wo die Treffer liegen, auch unter
+einem anderen Reiter. *Sortieren* ordnet die Liste *A bis Z*, *Z bis A*,
+*Neueste zuerst* oder nach *Beste Bewertung*.
 
-Braucht eine einmalige Einrichtung, siehe
-[discord-setup.md](discord-setup.md).
+Ein Klick auf den Namen eines Plugins öffnet seine Detailseite. Dort ist der
+Name des Autors ein Link. Ein Klick darauf zeigt in der Liste nur noch dessen
+Plugins, und ein Chip *Nur von …* über der Liste holt alles zurück.
+Eingebaute Plugins haben diesen Link nicht.
 
-**Kanaltasten** zeigen von sich aus das Logo des Servers, zu dem der Kanal
-gehört. Das kannst du je Taste abschalten, und ein selbst gewähltes Icon hat
-immer Vorrang. Die Logos liegen unter
-`~/.local/share/deckswitch/cache/discord-guilds/`.
+Jedes installierte Plugin hat einen Schalter, der es ein- und ausschaltet.
+*Plugin-Einstellungen* erscheint, solange es eingeschaltet ist und
+Einstellungen hat. Eingebaute Plugins tragen das Abzeichen *Eingebaut*. Die
+übrigen haben einen Knopf *Entfernen*. Vor dem Entfernen kommt eine Rückfrage,
+denn die Belegungen dieses Plugins werden mit gelöscht.
 
-### OBS
+*Nach neuen Plugins sehen* liest ein, was auf der Platte dazugekommen ist, und
+frischt den Store-Katalog auf. Laufende Plugins bleiben unangetastet.
 
-Braucht obs-websocket, das in OBS 28+ eingebaut ist. Aktivieren kannst du es
-unter *Werkzeuge → WebSocket-Servereinstellungen*. Host, Port, Passwort und
-der Screenshot-Ordner stehen in der GUI unter *Plugins → OBS →
-Plugin-Einstellungen*.
+### Updates
 
-Der Funktionsumfang entspricht dem offiziellen Elgato-OBS-Plugin. Ein paar
-Besonderheiten:
-
-* **Quelle** und **Filter** haben abhängige Auswahllisten. Erst die Szene
-  oder Quelle wählen, dann füllt sich die zweite Liste passend.
-* **Ton stumm** kann statt Umschalten auch als Push-to-Talk oder
-  Push-to-Mute arbeiten.
-* **Auf einem Dial** blättern *Szene*, *Übergang* und *Szenensammlung* per
-  Drehen durch die jeweilige Liste.
-* **Stream** und **Aufnahme** lassen sich gegen versehentliches Stoppen
-  absichern („zweimal drücken"). Beim Stream ist das voreingestellt.
-* **Kapitelmarken** brauchen OBS 30.2 oder neuer und Hybrid-MP4 als
-  Aufnahmeformat. Sonst erscheint ein Hinweis.
-
-**Spotify** braucht gar keine Einrichtung. Die Steuerung läuft über MPRIS,
-den D-Bus-Standard für Medienspieler unter Linux: kein Konto, keine
-Zugangsdaten, kein OAuth. Titel, Künstler, Wiedergabe-, Shuffle- und
-Wiederholungszustand aktualisieren sich in Echtzeit, und das Albumbild kann
-als Hintergrund des Dial-Segments dienen.
-
-* Gesteuert wird der **lokal laufende Player**. Die offizielle
-  Elgato-Version greift über Spotifys Web-API auch auf Handy oder
-  Lautsprecher zu, das kann MPRIS nicht.
-* Das Plugin funktioniert mit **jedem MPRIS-fähigen Player**, nicht nur
-  Spotify. Einstellbar unter *Plugins → Spotify*.
-
-**Playlist starten** braucht den Link zur Playlist: in Spotify Rechtsklick →
-*Teilen* → *Link kopieren*, dann in die Taste einfügen. Eine Auswahlliste
-deiner eigenen Playlists gibt es mit Absicht nicht, denn MPRIS kennt keine.
-
-**Wetter** kommt von [Open-Meteo](https://open-meteo.com), ohne Konto und
-ohne API-Schlüssel. Such unter *Plugins → Wetter* einen Ort und wähl ihn aus
-der Trefferliste. Die Daten frischt das Plugin alle zehn Minuten auf.
-
-* **Wetter** zeigt Temperatur und Wetterlage. Kurzer Druck blendet Höchst-
-  und Tiefstwert ein. Am Dial drehst du in Dreistundenschritten durch den Tag
-  und drückst, um zwischen Stundenverlauf, Temperaturdiagramm und
-  Detailansicht zu wechseln.
-* **Vorhersage** zeigt einen bestimmten Tag, am Dial stehen fünf Tage
-  nebeneinander.
-* **Luftqualität** zeigt den AQI mit Einstufung, wahlweise europäische oder
-  US-Skala, und färbt sich nach Schweregrad.
-
-Jede Belegung kann über *Abweichender Ort* eine eigene Stadt bekommen. So
-liegen Heimatort und Urlaubsziel nebeneinander auf dem Deck.
-
-### Timer
-
-Drei Aktionen, und jede Belegung führt ihre eigene Uhr — zwei Countdowns
-nebeneinander stören sich nicht.
-
-**Countdown** zählt eine eingestellte Zeit herunter. Die Dauer trägst du als
-`5:00` oder `1:30:00` ein; `90`, `5m` und `1h30m` versteht er auch. Ein Druck
-startet und pausiert, am Dial stellt Drehen die Zeit — auch während er läuft,
-wie an einer Mikrowelle, an der man nachlegt. Am Ende klingelt es und die
-Kachel blinkt rot, bis du sie mit einem Druck abstellst.
-
-Zum Zurücksetzen legst du dieselbe Aktion mit *Ein Druck → setzt zurück* auf
-den Doppeldruck derselben Taste.
-
-**Stoppuhr** zählt hoch, bis du sie anhältst. Ein grüner Rahmen heißt: sie
-läuft, ein bernsteinfarbener: sie steht. Einen Balken kann sie nicht haben,
-weil sie kein Ziel hat. Drehen am Dial setzt sie zurück, solange sie steht.
-
-**Wecker** klingelt zu einer festen Uhrzeit, wahlweise täglich, montags bis
-freitags, am Wochenende oder einmalig. Ein Druck schaltet ihn scharf oder
-aus, am Dial geht die Weckzeit in Fünf-Minuten-Schritten.
-
-Unter der Uhrzeit steht die Zeit bis zum nächsten Klingeln, und die zählt
-die Tage mit: Wer am Samstagabend auf einen Wecker für Montag bis Freitag
-schaut, liest „in 1 Tag 11 h" und nicht „in 11 h". Ein einmaliger Wecker, der
-geklingelt hat, ist vorbei — dann steht dort nichts mehr, statt den nächsten
-Tag zu versprechen. Ein Druck macht ihn wieder scharf.
-
-Er klingelt in Schleife, bis du auf die Taste drückst — ein Wecker, der einmal
-piept und dann schweigt, weckt niemanden. Über *Ton wiederholen* lässt sich
-das abstellen. Beim Countdown ist es andersherum: Der klingelt einmal, kann
-aber auf Dauerklingeln gestellt werden.
-
-Der Klang ist mitgeliefert; du kannst stattdessen eine eigene Datei wählen
-(WAV, FLAC, OGG, Opus oder MP3) oder den Ton ganz abschalten.
-
-Was ein Neustart des Backends nicht überlebt: laufende Uhren und die am Dial
-gedrehten Zeiten. Danach gilt wieder, was im Formular steht.
-
-### Twitch
-
-Vierzehn Aktionen für das, was man während eines Streams tut, ohne dafür aus
-dem Spiel zu wechseln.
-
-**Anmelden.** Einzurichten gibt es nichts. Twitch will zu jedem Aufruf eine
-Client-ID sehen; die gehört zu einer registrierten App und wird mitgeliefert.
-Ein Geheimnis kommt nicht vor — was auf fremden Rechnern liegt, wäre keins
-mehr. Stattdessen der Gerätecode-Weg: Unter *Plugins → Twitch →
-Plugin-Einstellungen* auf *Mit Twitch verbinden* drücken, den angezeigten Code
-auf [twitch.tv/activate](https://www.twitch.tv/activate) eintippen, fertig.
-Das Token liegt danach in `~/.config/deckswitch/twitch-token.json` und ist nur
-für dich lesbar.
-
-**Stream steuern.** *Titel setzen* legt einen vorbereiteten Titel auf eine
-Taste, optional samt Kategorie — mehrere Tasten, mehrere Titel. *Kategorie
-setzen* hat eine Suchliste. Dazu *Werbung* (30 Sekunden bis 3 Minuten),
-*Marker setzen* für eine wiederauffindbare Stelle in der Aufzeichnung, *Clip
-erstellen* (auf Wunsch öffnet sich danach der Editor) und *Raid*, wo ein
-zweiter Druck den Countdown wieder abbricht.
-
-**Chat und Moderation.** Eine vorbereitete *Chatnachricht*, der *Chatmodus*
-für Slow, Nur-Abonnenten, Nur-Follower, Nur-Emotes und Keine-Wiederholungen —
-die Taste zeigt, was gerade gilt, und ein Druck schaltet um. Dazu *Chat
-leeren* und *Shoutout*.
-
-**Umfragen und Vorhersagen.** Frage und Antworten stehen in der Belegung,
-getrennt durch einen senkrechten Strich. Läuft schon eine Umfrage, beendet
-der Druck sie. Bei einer Vorhersage sperrt der erste Druck die Wetten, der
-nächste löst sie zur eingestellten Antwort auf.
-
-**Anzeigen.** *Streamstatus* zeigt Zuschauer, Laufzeit oder Follower — was
-groß dasteht, stellst du ein; ein farbiger Streifen unten sagt live oder
-nicht. *Follower* zeigt nur die Zahl. Beide gibt es auch auf dem Dial.
-
-**Was Twitch nicht kann: den Stream starten.** Die Helix-API hat dafür
-schlicht keinen Aufruf — an Stream-Endpunkten gibt es nur Streamschlüssel
-abfragen, Streams nachschlagen, Marker setzen und den Sendeplan pflegen.
-Das ist auch folgerichtig: Twitch *empfängt* nur; losgeschickt wird der
-Stream von deiner Software. Losgehen lässt du ihn deshalb mit der Aktion
-*Stream* aus dem OBS-Plugin. Wer beides auf einer Taste will — Titel setzen
-und live gehen —, legt eine Multi-Aktion an: erster Schritt *Twitch → Titel
-setzen*, zweiter Schritt *OBS → Stream*.
-
-Was nicht angezeigt werden kann, wird nicht behauptet: Ohne Verbindung steht
-dort „nicht verbunden" und keine Zahl. Gezählt wird alle 20 Sekunden nach —
-Twitch begrenzt die Zahl der Anfragen, und acht Kacheln sollen nicht acht
-Abfragen auslösen.
-
-### Govee
-
-**Einrichten.** Govee gibt jedem seinen eigenen Schlüssel: In der
-Govee-Home-App unter *Profil → Einstellungen → Apply for API Key* anfordern,
-er kommt per Mail. Dann unter *Plugins → Govee → Plugin-Einstellungen*
-eintragen.
-
-**Zwei Schnittstellen, ein Schalter.** Govee betreibt zwei APIs
-nebeneinander, und welche bei welchem Gerät funktioniert, lässt sich von
-außen nicht vorhersagen. An einem H615C meldete die neue die Helligkeit als
-154 und wies genau diesen Wert beim Setzen als „out of range" ab; sie hielt
-das Gerät zeitweise für offline, während die alte es einwandfrei schaltete;
-und sie quittierte Farbbefehle mit „success", ohne dass sich etwas änderte.
-Deshalb steht das zur Wahl statt zu raten:
-
-* **Alt** (Vorgabe) — `developer-api.govee.com`. Erprobt, kennt aber keine
-  Szenen.
-* **Neu** — `openapi.api.govee.com`. Kennt Szenen.
-* **Beide** — jeder Befehl geht über beide Wege. Für Geräte, bei denen die
-  neue quittiert, ohne zu handeln. Danach füllen sich die Auswahllisten von selbst — welche Geräte da
-sind und was sie können, sagt Govee, hier wird nichts geraten.
-
-**An/Aus** schaltet ein Gerät um; wahlweise nur ein oder nur aus, wenn eine
-Taste immer dasselbe tun soll. Die Kachel trägt einen farbigen Rand: gelb
-wenn an, grau wenn aus, rot wenn das Gerät nicht antwortet. Brennt eine
-Farbe, hat der Rand sie.
-
-**Helligkeit** setzt einen festen Wert; am Dial drehst du in einstellbaren
-Schritten. **Farbe** und **Farbtemperatur** funktionieren genauso — die
-Kachel zeigt die eingestellte Farbe schon, bevor du drückst, bei Weiß
-ungefähr die Lichtfarbe von warm bis tageslicht.
-
-**Szene** ruft ab, was das Gerät selbst an Szenen mitbringt. Die Liste kommt
-vom Gerät; ein Modell ohne Szenen zeigt eine leere.
-
-**Alle Geräte** ist die Taste für den Weg zur Tür. Beim Umschalten gilt:
-Brennt irgendwo Licht, geht alles aus. Jedes Gerät für sich umzuschalten
-ergäbe ein halb erleuchtetes Zimmer, und danach weiß niemand mehr, was der
-nächste Druck tut.
-
-**Govee zählt mit.** Dreißig Zustandsabfragen je Minute und Gerät — acht
-Kacheln, die jede Sekunde nachsehen, wären sofort gesperrt. Deshalb wird
-gebündelt abgefragt, alle 25 Sekunden, und nur für Geräte, die gerade auf
-einer sichtbaren Taste liegen. Was du selbst schaltest, steht sofort auf der
-Kachel, ohne auf die nächste Abfrage zu warten. Bremst Govee doch einmal,
-steht das im Klartext da statt „unbekannter Fehler".
-
-### YouTube
-
-Fünf Aktionen für den laufenden Livestream: **Zuschauer** zeigt, wie viele
-gerade zusehen. **Chatnachricht** schickt einen vorbereiteten Text in den
-Live-Chat. **Werbung** schiebt einen Block ein. **Dashboard öffnen** springt
-in YouTube Studio, bei laufender Sendung direkt auf deren Seite. **Stream
-starten/beenden** wechselt den Zustand der Sendung — die Taste zeigt, was
-gerade gilt.
-
-**Einrichten braucht ein eigenes Google-Projekt**, und das ist keine
-Schikane, sondern rechnerisch nötig: YouTubes Kontingent gilt je Projekt und
-nicht je Benutzer — zehntausend Einheiten am Tag, geteilt von allen, die
-dieselbe Kennung benutzen. Eine mitgelieferte Client-ID wäre nach ein paar
-Dutzend Installationen erschöpft, und dann funktioniert das Plugin für
-niemanden mehr. Bei Twitch zählt das Limit je Benutzer, dort reicht eine App
-für alle; hier nicht.
-
-So kommst du an die Zugangsdaten:
-
-1. In der [Google Cloud Console](https://console.cloud.google.com) ein
-   Projekt anlegen
-2. Unter *APIs & Dienste* die **YouTube Data API v3** aktivieren
-3. Unter *Anmeldedaten* einen **OAuth-Client** anlegen, Typ *Fernseher und
-   Geräte mit begrenzter Eingabe*
-4. Unter *OAuth-Zustimmungsbildschirm → Zielgruppe* dich selbst als
-   **Testnutzer** eintragen
-5. Client-ID und Client-Secret in die Plugin-Einstellungen eintragen
-6. *Mit YouTube verbinden* drücken, den Code auf
-   [google.com/device](https://www.google.com/device) eintippen
-
-Schritt 4 wird gern übersehen und ist der Punkt, an dem es zuerst hakt:
-Solange die App die Überprüfung durch Google nicht durchlaufen hat, lässt
-Google nur eingetragene Testnutzer hinein — auch dich selbst nicht, obwohl du
-sie angelegt hast. Die Anmeldung endet dann mit „Zugriff blockiert" und
-`Fehler 403: access_denied`.
-
-Im Testmodus laufen die Anmeldungen nach sieben Tagen ab; danach einmal neu
-verbinden. Wer das nicht will, schickt die App durch Googles Überprüfung —
-für den Eigengebrauch ist das mehr Aufwand als Nutzen.
-
-Das Secret liegt danach auf deinem Rechner. Google nennt es bei installierten
-Anwendungen ausdrücklich nicht geheim — es benennt die Anwendung, es erlaubt
-nichts. Das Token liegt in `~/.config/deckswitch/youtube-token.json` und ist
-nur für dich lesbar.
-
-**Mit dem Kontingent wird gerechnet.** Lesen kostet eine Einheit, Schreiben
-fünfzig. Die Zuschauerzahl frischt sich standardmäßig alle 30 Sekunden auf —
-das sind knapp 3 000 Einheiten am Tag und lässt Luft für Chat und Werbung.
-Auf 5 Sekunden gestellt wären es 17 000, und danach ginge bis Mitternacht
-nichts mehr, auch kein Beenden des Streams. Das Feld lässt sich deshalb nicht
-unter 10 Sekunden stellen. Gezeichnet wird nur aus gespiegelten Werten; die
-Kacheln selbst fragen nie.
-
-**Was YouTube nicht verspricht:** dass jeder Zuschauer die Werbung sieht.
-Ausgespielt wird sie denen, denen gerade Werbung zusteht — die übrigen sehen
-weiter zu. Und eine Sendung muss in YouTube Studio angelegt sein, bevor sie
-sich von hier starten lässt.
+Hat der Store eine neuere Fassung eines installierten Plugins, bekommt dessen
+Karte einen Knopf mit der neuen Versionsnummer. Sind es mehrere, bietet ein
+Balken über der Liste *Alle aktualisieren* an. Eine Fassung, die eine neuere
+App braucht, lässt sich nicht installieren: Der Knopf bleibt gesperrt und
+sagt „Braucht DECK//SWITCH … oder neuer". Der Installer lehnt so ein Plugin
+auch aus jeder anderen Quelle ab.
 
 ## Nachinstallieren
 
-Unter *Plugins* stehen die Kacheln aus dem **Store** gleich neben deinen
-eigenen. Was du noch nicht hast, erkennst du am gestrichelten Rand und am
-Knopf *Installieren*. Bevor du klickst, siehst du, was die Durchsicht des
-Stores im Quelltext gefunden hat.
+Kacheln aus dem **Store** haben einen gestrichelten Rand und den Knopf
+*Installieren*. Bevor du klickst, siehst du, was die Durchsicht des Stores im
+Quelltext gefunden hat, auf der Kachel und auf der Detailseite.
 
-Zum Store gehört eine Anmeldung über GitHub. Brauchen tust du sie nur zum
-**Einreichen** eigener Plugins; stöbern und installieren geht ohne.
+Der Store prüft jeden Download. Der Katalog nennt zu jeder Fassung eine
+SHA-256-Prüfsumme, und ausgepackt wird nur, wenn sie stimmt. Nennt der
+Katalog keine, wird nichts installiert. Außerdem muss die Plugin-ID im Archiv
+zu dem Plugin passen, nach dem du gefragt hast.
 
-Daneben gibt es unter *Plugins → Installieren* drei weitere Wege:
+Zum Store gehört eine Anmeldung über GitHub (*Im Store anmelden*). Brauchen
+tust du sie zum **Einreichen** eigener Plugins und zum **Bewerten**; stöbern
+und installieren geht ohne.
 
-1. **Adresse eintragen** — ein ZIP von einer http(s)-Adresse
-2. **Datei ablegen** — ZIP per Drag & Drop oder Dateiauswahl
+Daneben gibt es unter *Plugins installieren* zwei weitere Wege, dazu Links
+aus dem Browser:
+
+1. **Von einer Adresse installieren**: ein ZIP von einer http(s)-Adresse
+2. **Plugin-Archiv (.zip) hierher ziehen oder klicken**: ein ZIP per Drag &
+   Drop oder Dateiauswahl
 3. **`streamdeck://`-Link** im Browser (siehe unten)
 
 Installiert wird nach `~/.local/share/deckswitch/plugins/`. Die Ordner dort
@@ -389,44 +191,55 @@ Platte heißt. Welches Plugin in welchem Ordner liegt, steht in dessen
 `manifest.json`.
 
 Bringt ein Plugin Abhängigkeiten mit, stehen sie auf seiner Detailseite und
-werden mit installiert. Python-Pakete landen in
-`~/.local/share/deckswitch/plugins/.deps/` und gehen mit dem Plugin. Für
-Systempakete fragt das System nach deinem Passwort. Lässt sich etwas nicht
-installieren, bleibt das Plugin draußen, und die Meldung nennt den Befehl.
+werden mit installiert. Python-Pakete kommen über `uv` von PyPI, nur als
+fertige Wheels, und landen je Plugin in einem eigenen Ordner unter
+`~/.local/share/deckswitch/plugins/.deps/`. Sie gehen mit dem Plugin.
+Systempakete werden je Distributionsfamilie benannt (Arch, Debian und Ubuntu,
+Fedora, openSUSE), und das System fragt nach deinem Passwort. Auf einem Fedora mit Image
+wie Bazzite kommt ein Paket erst mit dem nächsten Start an, dort ist es immer
+Handarbeit. Lässt sich etwas nicht installieren, bleibt das Plugin draußen,
+und die Meldung nennt den Befehl.
 
 Eingebaute Plugins lassen sich weder überschreiben noch entfernen.
-Nachinstallierte haben in der Liste einen *Entfernen*-Knopf.
 
-Verteilbare Archive der mitgelieferten Quellen baust du so:
+### Die Detailseite im Store
 
-```sh
-./scripts/package_plugins.py          # → dist/plugins/*.zip
-```
+Neben Beschreibung und *Was ist neu* listet die Detailseite die *Fassungen*,
+sobald es mehr als eine gibt, mit Datum, Downloads, dem Stand, wenn sie nicht
+freigegeben ist, und dem Text der Moderation. Unter *Bewertung* empfiehlst du
+ein Plugin oder nicht und kannst einen Text mit höchstens 500 Zeichen
+dazuschreiben. Ein Daumen nach unten braucht eine kurze Begründung. Eigene
+Plugins kannst du nicht bewerten. Auch die Detailseite eines installierten
+Plugins aus dem Store zeigt die Bewertung.
 
 ### Eigene Plugins einreichen
 
-*Plugins → Plugin einreichen* öffnet ein Feld, in das du ein Archiv ziehst.
-ZIP, TAR und tar.gz gehen alle: Der Store nimmt an, was er zum Prüfen öffnen
-kann. Ausgeliefert wird später immer ein ZIP, weil nur das der Installer
-auspacken kann.
+*Plugin einreichen* öffnet ein Feld, in das du ein Archiv ziehst. ZIP, TAR,
+tar.gz und tgz gehen alle: Der Store nimmt an, was er zum Prüfen öffnen kann.
+Ausgeliefert wird später immer ein ZIP, weil nur das der Installer auspacken
+kann.
 
 Im selben Fenster stehen deine bisherigen Einreichungen mit ihrem Stand
-(wartet, freigegeben, abgelehnt) und dem Text der Moderation. Jede Zeile hat
-einen Knopf, um sie wieder loszuwerden — was dabei passiert, hängt vom Stand
-ab:
+(*wartet auf Prüfung*, *freigegeben*, *abgelehnt*, *zurückgezogen*,
+*gesperrt*) und dem Text der Moderation. Fassungen, die auf Prüfung warten,
+abgelehnt oder freigegeben sind, haben einen Knopf. Was er tut, hängt vom
+Stand ab:
 
-* **Wartet oder abgelehnt:** Die Fassung wird gelöscht, das Archiv mit ihr,
-  und die Versionsnummer ist wieder frei. Praktisch, wenn du zu früh
-  hochgeladen hast.
-* **Freigegeben:** Sie fällt nur aus dem Katalog. Wer sie schon installiert
-  hat, kann sie weiter herunterladen — sonst stünde eine Neuinstallation
-  plötzlich vor einer Adresse, die es nicht mehr gibt.
-* **Gesperrt:** bleibt liegen. Das hat ein Moderator entschieden, und daran
-  ändert kein Knopf etwas.
+* **Wartet auf Prüfung oder abgelehnt:** *Löschen*. Die Fassung wird
+  gelöscht, das Archiv mit ihr, und die Versionsnummer ist wieder frei.
+  Praktisch, wenn du zu früh hochgeladen hast.
+* **Freigegeben:** *Zurückziehen*. Sie fällt nur aus dem Katalog. Wer sie
+  schon installiert hat, kann sie weiter herunterladen. Sonst stünde eine
+  Neuinstallation plötzlich vor einer Adresse, die es nicht mehr gibt.
+
+Zurückgezogene und gesperrte Fassungen haben keinen Knopf. Eine Sperre hat
+ein Moderator entschieden, und daran ändert kein Klick etwas.
 
 ### streamdeck://-Links
 
-Damit lassen sich Plugins direkt aus dem Browser installieren:
+Damit lassen sich Plugins direkt aus dem Browser installieren. Den Handler
+melden der Installer und das AUR-Paket an. Nur in einem bloßen Checkout der
+Quellen registrierst du ihn selbst:
 
 ```sh
 ./scripts/install-url-handler.sh     # einmalig registrieren
@@ -439,20 +252,26 @@ streamdeck://install?url=https://example.com/mein-plugin.zip
 ```
 
 zu einer **Anfrage**, die du in der Oberfläche bestätigen musst, mit Angabe
-der Herkunft. Ein Klick auf einen Link installiert also nichts von selbst.
-Das ist Absicht: Ein Plugin ist Programmcode, der mit deinen Rechten läuft,
-und eine beliebige Webseite darf das nicht ohne Rückfrage auslösen.
-Unbestätigte Anfragen verfallen nach zehn Minuten.
+der Adresse, von der sie kommt. Ein Klick auf einen Link installiert also
+nichts von selbst. Das ist Absicht: Ein Plugin ist Programmcode, der mit
+deinen Rechten läuft, und eine beliebige Webseite darf das nicht ohne
+Rückfrage auslösen. Unbestätigte Anfragen verfallen nach zehn Minuten.
+
+Ein Link kann die erwartete Prüfsumme als `&sha256=…` mitbringen. Die Anfrage
+zeigt dann „Angekündigte Prüfsumme: …", und ausgepackt wird nur, wenn sie
+stimmt. Ohne sie steht dort „Ohne Prüfsumme: Es wird installiert, was gerade
+unter der Adresse liegt."
 
 Läuft das Backend nicht, meldet der Handler das per
 Desktop-Benachrichtigung.
 
 ## Anordnen
 
-Unter *Plugins* ziehst du die Karten am Griff (⠿) in die gewünschte
-Reihenfolge. Sie gilt auch für die Aktionsliste im Editor und wird in der
-Config gespeichert. Neu installierte Plugins landen hinten, damit sich eine
-eingespielte Anordnung nicht von selbst verschiebt.
+In der Aktionsbibliothek des Editors ziehst du die Plugins am Griff (⠿) in
+die gewünschte Reihenfolge. Während einer Suche ist der Griff ausgeblendet.
+Die Reihenfolge wird in der Config gespeichert. Neu installierte Plugins
+landen hinten, damit sich eine eingespielte Anordnung nicht von selbst
+verschiebt.
 
 ## Plugin-Symbole
 

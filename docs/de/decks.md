@@ -16,23 +16,33 @@ allen dreien in derselben Zeichenkette.
 
 ## Profile
 
-Ein Profil ist ein eigener Satz Seiten. Jedes Deck zeigt genau eines — bei
+Ein Profil ist ein eigener Satz Seiten. Jedes Deck zeigt genau eines. Bei
 zwei Geräten kann jedes ein anderes zeigen.
 
 Gewählt wird es über dem Seitenbaum. Der Knopf daneben öffnet die Verwaltung:
-anlegen, umbenennen, kopieren, löschen. Eine Kopie bekommt eigene Seiten mit
-eigenen Kennungen; Ordnertasten und „Gehe zu Seite" zeigen danach in die
-Kopie und nicht mehr ins Original.
+anlegen, umbenennen, kopieren, löschen. Ein neues Profil beginnt entweder
+leer (*Leeres Profil*) oder als Kopie eines vorhandenen (*Kopie von …*). Eine
+Kopie bekommt eigene Seiten mit eigenen Kennungen; Ordnertasten und „Gehe zu
+Seite" zeigen danach in die Kopie und nicht mehr ins Original.
 
-Das letzte Profil lässt sich nicht löschen — ein Deck ohne Profil hätte keine
-Seite und damit nichts anzuzeigen. Wird ein Profil gelöscht, das gerade ein
-Deck anzeigt, wandert dieses Deck auf ein anderes.
+*Exportieren* speichert ein Profil samt seiner Bilder als ZIP-Datei. *Profil
+importieren* liest so eine Datei wieder ein. Ein importiertes Profil kommt
+immer hinzu und ersetzt nie ein vorhandenes.
+
+Das letzte Profil lässt sich nicht löschen, denn ein Deck ohne Profil hätte
+keine Seite und damit nichts anzuzeigen. Wird ein Profil gelöscht, das gerade
+ein Deck anzeigt, wandert dieses Deck auf ein anderes.
 
 **Automatisch nach Programm.** Trägst du in der Profilverwaltung Programme
-ein (`obs`, `code`, …), wechselt das Deck von selbst auf dieses Profil, sobald
-eines davon vorn ist. Passt keines mehr, kommt zurück, was vorher galt. Wer
-zwischendurch von Hand wählt, behält seine Wahl — eine Wahl von Hand hebt die
-Automatik auf, bis das nächste Mal ein Muster passt.
+ein (`obs`, `code`, …), wechselt jedes Deck von selbst auf dieses Profil,
+sobald eines davon vorn ist. Passt keines mehr, kommt zurück, was vorher
+galt. Wer zwischendurch von Hand wählt, behält seine Wahl. Eine Wahl von Hand
+hebt die Automatik auf, bis das nächste Mal ein Muster passt.
+
+Programme wählst du aus der Liste *Programm hinzufügen …*, die aus den
+Menüeinträgen des Systems kommt, oder du tippst einen Namen in das Feld
+daneben. Der Knopf *Vorderes Fenster: …* trägt das Fenster ein, das gerade
+vorn ist.
 
 Gesucht wird in der Fensterklasse *und* im Titel, ohne Rücksicht auf Groß-
 und Kleinschreibung, als Teilstück: `obs` trifft `obs` wie `obs-studio`.
@@ -43,7 +53,7 @@ in den Compositor, und genau eines davon meldet uns die Wechsel. Auf anderen
 Desktops steht in der Verwaltung, dass die Automatik aus ist, und warum.
 
 **Vom Deck aus wechseln.** Die Aktion *Profil wechseln* legt einen Wechsel
-auf eine Taste. Ohne eingestelltes Profil führt sie zurück zum vorigen —
+auf eine Taste. Ohne eingestelltes Profil führt sie zurück zum vorigen,
 damit reicht eine Taste je Profil und eine für den Rückweg. Liegt das
 eingestellte Profil gerade an, bekommt die Taste einen Rahmen.
 
@@ -58,10 +68,13 @@ anderen USB-Anschluss stecken oder in anderer Reihenfolge erkannt werden und
 findet trotzdem seine Belegung wieder. Kommt ein bisher unbekanntes Gerät
 dazu, legt die App ein leeres Profil dafür an.
 
-Sobald es mehr als ein Deck gibt, stehen sie in der Kopfzeile als Umschalter.
-Der Editor bearbeitet immer genau eines. Unter *Einstellungen → Decks* kannst
-du Geräte umbenennen. Ein Deck, das nicht mehr da ist, lässt sich dort
-entfernen, sein Profil bleibt erhalten.
+Sobald es mehr als ein Deck gibt, stehen sie in der Kopfzeile als
+Umschalter, nach Bauart gruppiert. Eine Bauart mit einem Deck bekommt einen
+Knopf, eine mit mehreren Decks eine Auswahlliste. Der Editor bearbeitet
+immer genau eines. Unter *Einstellungen → Decks* kannst du Decks umbenennen.
+Ein Hardware-Deck, das nicht mehr verbunden ist, lässt sich dort entfernen,
+ebenso jedes virtuelle oder Netz-Deck, solange es mehr als ein Deck gibt.
+Sein Profil bleibt erhalten.
 
 Wer nur ein Deck hat, merkt von alldem nichts.
 
@@ -80,8 +93,8 @@ Hardware.
 
 ## Virtuelles Deck (Overlay)
 
-Unter *Einstellungen → Decks → **+ Virtuelles Deck*** entsteht ein Deck mit
-frei wählbarem Raster (Spalten, Reihen, Dials, Kachelgröße), das als
+Unter *Einstellungen → Decks → **+ Virtuelles Deck anlegen*** entsteht ein
+Deck mit frei wählbarem Raster (Spalten, Reihen, Dials, Kachelgröße), das als
 **Overlay** über dem Bildschirm liegt.
 
 **Es ist mit Absicht kein Fenster.** Über `zwlr_layer_shell_v1` liegt die
@@ -95,13 +108,14 @@ Vordergrundfenster.
 Wo es keine Layer-Surface gibt, unter GNOME oder ohne das Modul LayerShellQt
 wie unter Ubuntu, läuft das Deck als X11-Fenster über XWayland und unter X11
 direkt. Es bleibt über allen Fenstern und nimmt ebenfalls keinen Fokus, unter
-Mutter 42 und 46 nachgemessen. Geht beides nicht, ist *+ Virtuelles Deck*
-ausgegraut und nennt den Grund.
+Mutter 42 und 46 nachgemessen. Geht beides nicht, ist *+ Virtuelles Deck
+anlegen* ausgegraut und nennt den Grund.
 
 **Herbeirufen** kannst du es auf drei Wegen:
 
 * über einen **globalen Kurzbefehl**, siehe unten
-* über *Einstellungen → Decks → Overlay zeigen*
+* über den Knopf *Overlay zeigen* in den Seiten-Eigenschaften des Editors
+  (keine Taste ausgewählt)
 * über die Aktion **Virtuelles Deck** (Plugin *Streamdeck*) auf einer Taste
   des echten Decks, wahlweise umschaltend und auf Wunsch **am Mauszeiger**
 
@@ -121,24 +135,27 @@ Aufruf:
   bei durchsichtigem Grund und ausgeblendeten leeren Kacheln kaum freie
   Fläche übrig ist.
 
-Während des Ziehens tritt das Overlay zurück und springt beim Loslassen an
-die neue Stelle. Es gleitet nicht mit, denn eine Layer-Shell-Fläche lässt
-sich im Betrieb nicht verschieben. `Window::setMargins` aus layer-shell-qt
-merkt sich den Wert und meldet ihn als Signal, erreicht die laufende
-Wayland-Fläche damit aber nicht. Deshalb baut die App sie an der neuen Stelle
-neu auf.
+Während des Ziehens tritt das Overlay zurück. Als X11-Fenster (direkt oder
+über XWayland) folgt es dem Zeiger. Als Layer-Shell-Fläche springt es beim
+Loslassen an die neue Stelle, denn so eine Fläche lässt sich im Betrieb
+nicht verschieben. `Window::setMargins` aus layer-shell-qt merkt sich den
+Wert und meldet ihn als Signal, erreicht die laufende Wayland-Fläche damit
+aber nicht. Deshalb baut die App sie an der neuen Stelle neu auf.
 
 ### Einstellungen
 
 Im Editor stehen Raster und Overlay-Schalter rechts in den
-Seiten-Eigenschaften. Die Kachelgröße ist stufenlos, dazu gibt es zwei
-Schalter:
+Seiten-Eigenschaften. Spalten gehen von 1 bis 16, Reihen von 1 bis 8, Dials
+von 0 bis 8, die Kachelgröße stufenlos von 48 bis 256 Pixel. Ein neues Deck
+beginnt mit 4 × 2 Tasten und ohne Dials. Dazu gibt es drei Schalter:
 
 * **Hintergrund transparent.** Ohne Platte darunter schweben nur die Kacheln
   über dem Bildschirm.
 * **Leere Kacheln ausblenden.** Unbelegte Plätze bleiben unsichtbar und
   nehmen auch keine Klicks an. Ihr Platz bleibt aber frei, damit die übrigen
   Kacheln nicht bei jeder Belegung springen.
+* **Deck nach Klick schließen.** Das Overlay verschwindet von selbst, sobald
+  eine Kachel angeklickt wurde.
 
 ### Kurzbefehl
 
@@ -149,16 +166,23 @@ Griff. Drück *Aufnehmen* und tipp die Kombination. Das Feld kannst du auch
 von Hand beschreiben (`ctrl+alt+d`), weil der Browser manche Kombinationen
 abfängt, bevor die Seite sie sieht.
 
-Angemeldet wird der Kurzbefehl bei Plasma (`kglobalaccel`). Das hat drei
-Folgen, die du kennen solltest:
+Unter KDE Plasma wird der Kurzbefehl bei `kglobalaccel` angemeldet. Das hat
+drei Folgen, die du kennen solltest:
 
 * Er steht danach auch in den **KDE-Systemeinstellungen** unter *Kurzbefehle
   → DECK//SWITCH* und lässt sich dort ändern.
 * Eine **schon vergebene Kombination wird abgelehnt** und nicht weggenommen.
-  Unter dem Feld steht dann, wem sie gehört, etwa „KWin — Blick auf die
-  Arbeitsfläche". Wer sie trotzdem will, nimmt sie erst dort weg.
+  Unter dem Feld steht dann, wem sie gehört. Wer sie trotzdem will, nimmt sie
+  erst dort weg.
 * Beendet sich das Backend, ist der Kurzbefehl wieder frei. Es bleibt nichts
   stehen, hinter dem kein Programm mehr steckt.
+
+Ohne `kglobalaccel` läuft der Kurzbefehl über die Schnittstelle
+GlobalShortcuts von `xdg-desktop-portal`. Dort ist deine Kombination nur ein
+Wunsch. Der Desktop fragt nach einer Bestätigung und kann eine andere
+Kombination vergeben. Dann steht unter dem Feld „Der Desktop hat dafür …
+vergeben." Ändern kannst du die Kombination danach in den Einstellungen des
+Desktops.
 
 `AltGr` geht nicht. Bei Qt ist das keine Modifier-Stufe, die ein globaler
 Kurzbefehl abbilden kann. Ein leeres Feld heißt: kein Kurzbefehl.
@@ -171,11 +195,13 @@ Die **Helligkeit** gibt es hier nicht. Ein Overlay hat keine
 Hintergrundbeleuchtung, die sich drosseln ließe, und beide denkbaren
 Übertragungen wären schlechter als gar keine: Als Deckkraft wird die Kachel
 durchscheinend und auf hellem Grund unlesbar, als Abdunkeln stimmen die
-Farben nicht mehr mit der Vorschau überein. Der Regler ist deshalb
-abgeschaltet.
+Farben nicht mehr mit der Vorschau überein. Der Regler in der Kopfzeile ist
+deshalb ausgegraut, und in den Einstellungen fehlt das Feld für die
+Helligkeit bei einem virtuellen Deck.
 
-**Voraussetzungen:** `qt6-declarative` (bringt `qml6` mit) und
-`layer-shell-qt`. Fehlt eines davon, sagt es die Oberfläche im Klartext.
+**Voraussetzungen:** `qt6-declarative` (bringt `qml6` mit). Ohne das Modul
+LayerShellQt oder unter GNOME läuft das Overlay über X11 oder XWayland, wie
+oben beschrieben. Fehlt etwas, sagt es die Oberfläche im Klartext.
 
 ---
 
@@ -188,7 +214,8 @@ daran ändern.
 
 Anlegen kannst du es unter *Einstellungen → Decks → **+ Netz-Deck***. Belegt
 wird es wie jedes andere Deck, und im Editor stehen rechts Raster, Passwort
-und Adresse.
+und Adresse. Für das Raster gelten dieselben Grenzen wie beim virtuellen
+Deck.
 
 ### Einrichten
 
@@ -196,6 +223,12 @@ und Adresse.
 2. Im Editor unter *Zugang* ein **Passwort** setzen, mindestens 4 Zeichen.
 3. Die angezeigte **Adresse** an den Gast weitergeben, etwa
    `http://192.168.178.37:8771/deck/net-a1b2c3d4`.
+
+Der Schalter *Im Netz anbieten* ist bei einem neuen Deck an. Ausgeschaltet
+bleibt das Deck ein gewöhnliches Deck auf deinem Rechner. *Passwort
+entfernen* löscht das Passwort, danach wird das Deck nicht mehr angeboten.
+Die Adressen erscheinen nur, solange der Server wirklich lauscht, jede mit
+einem Knopf *Kopieren* daneben.
 
 Der Gast öffnet die Adresse, gibt das Passwort ein und hat das Deck vor sich.
 Installieren muss er nichts. Die Seite ist eine einzelne Datei ohne
@@ -212,12 +245,19 @@ Subnetz als pauschal:
 sudo ufw allow from 192.168.178.0/24 to any port 8771 proto tcp
 ```
 
+Voreingestellt ist Port 8771. Ändern lässt er sich nur in der
+Konfigurationsdatei, als `network_port` im Abschnitt `app` von
+`~/.config/deckswitch/config.json`.
+
 ### Wie es abgesichert ist
 
-Der reguläre Server, der die Oberfläche bedient, bindet **ausschließlich an
-`127.0.0.1`** und bleibt dort. Er darf alles: Belegungen ändern, Plugins
-installieren, die Konfiguration exportieren, samt der Zugangsdaten in den
-Plugin-Einstellungen. So etwas gehört nicht ins Netz.
+Der reguläre Server, der die Oberfläche bedient, bindet voreingestellt
+**ausschließlich an `127.0.0.1`**. Ändern lässt sich das mit `--host` oder
+mit `host` im Abschnitt `app` der Konfiguration. Er darf alles: Belegungen
+ändern, Plugins installieren, die Konfiguration exportieren, samt der
+Zugangsdaten in den Plugin-Einstellungen. So etwas gehört nicht ins Netz.
+Außerdem beantwortet er nur Anfragen, deren `Host`-Kopf `127.0.0.1`,
+`localhost`, `::1` oder den eingestellten Host nennt.
 
 Ins Netz geht eine **zweite, absichtlich winzige Anwendung** auf einem
 eigenen Port, voreingestellt 8771. Sie kann drei Dinge: anmelden, Kacheln

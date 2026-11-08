@@ -1,205 +1,109 @@
 # DECK//SWITCH
 
-**Control software for the Elgato Stream Deck on Linux.** No official Elgato
-software needed, with its own plugin system.
-
 *[Deutsche Fassung](README.de.md)*
 
-Built and tested on a **Stream Deck +** running **CachyOS / Arch Linux** with
-KDE Plasma on Wayland.
+[![Discord](https://img.shields.io/badge/Discord-Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/2ckNnCZ4wq)
 
-Other desktops work too. On startup the app checks what the running session
-can do and only shows actions that will work there. If something is missing
-on your system, the settings tell you what and why.
+![The DECK//SWITCH editor](docs/screenshots/editor.png)
 
-| | Virtual deck | Window control |
-| --- | --- | --- |
+Control software for the **Elgato Stream Deck** on Linux. No official Elgato
+software needed, with its own plugin system and a store inside the app.
+
+## Where it runs
+
+**Supported:** CachyOS, Arch Linux, Debian 12 and 13, Ubuntu 22.04, 24.04
+and 25.04, Fedora 42 and 43, openSUSE Tumbleweed and Leap 15.6, and Bazzite,
+each on x86_64.
+
+- **Linux** with systemd. Developed and tested with a **Stream Deck +** on
+  [CachyOS](https://cachyos.org/) with KDE Plasma on Wayland. On the other
+  distributions the installation itself is checked in fresh Docker images.
+- **Wayland or X11.** On startup the app checks what the session can do and
+  only shows actions that work there. What is missing and why is in the
+  settings.
+- **Desktops:**
+
+| Session | Virtual deck | Window control |
+|---|---|---|
 | KDE Plasma (Wayland and X11) | yes | yes |
 | Hyprland, Sway | yes | yes |
 | XFCE, Cinnamon, MATE, i3 … (X11) | yes | no |
 | GNOME | yes, through XWayland | no |
 
-The virtual deck uses `zwlr_layer_shell_v1` on Wayland and the classic window
-hints on X11. Where the layer shell is missing, as on GNOME or on Ubuntu, it
-runs through XWayland. Either way, a click never takes the keyboard focus.
-Window control needs an interface in the compositor: Plasma, Hyprland and Sway
-have one, GNOME does not.
+The virtual deck never takes the keyboard focus. Window control needs an
+interface in the compositor: Plasma, Hyprland and Sway have one, GNOME does
+not.
 
-The installer runs on Arch, Debian, Ubuntu and Fedora. Only CachyOS is tested
-with a real Deck. On the other distributions only the installation itself is
-checked, in fresh Docker images.
+## What it can do
 
-> The name is written **DECK//SWITCH**, with the slashes in the accent
-> colour. Technically everything is called `deckswitch`: package, service,
-> config directory.
-
-![The editor](docs/screenshots/editor.png)
-
----
-
-## Features
-
-**Keys and dials**
-Three actions per key: press, double press, hold. Dials either adjust
-continuously or fire a separate action per rotation direction. Several
-assignments can share one dial (dial stack). Swiping the touch strip pages
-through your layout.
-
-**Pages and folders**
-A page tree as deep as you like, sortable by drag and drop. Folders are
-simply sub-pages.
-
-**Multi-actions**
-Several steps one after another. Pauses count as their own step, every step
-can be switched off individually, and the whole chain runs in a loop if you
-want. There is also a toggle with two chains and its own icon per direction.
-
-**Appearance**
-Icon, label (font, weight, size, colour, alignment) and background (colour,
-gradient, texture, image) for every key. Animated GIFs play on the key. For
-ready-made key images there is a built-in workshop. Everything is drawn in
-the backend, so the preview shows exactly what ends up on the device.
-
-**Multiple decks**
-As many devices at once as you have. Each gets its own profile, its own
-brightness and its own timings, matched by serial number.
-
-**Virtual deck**
-A deck as an overlay on screen, with a grid of your choosing. No window
-frame, no entry in Alt-Tab, and the keyboard focus stays where it is. You can
-put it anywhere and the app remembers the spot. A **global shortcut** brings
-it up from anywhere.
-
-**Network deck**
-A deck that someone else on the same network operates in a browser: your
-moderator during a stream, for example. Password protected, nothing to
-install, and guests cannot change anything.
+- **Keys and dials**: press, double press and hold per key. Dials adjust
+  continuously or fire one action per direction, several can share a dial.
+  Swiping the touch strip pages through your layout.
+- **Pages and folders** in a tree as deep as you like, sorted by drag and
+  drop.
+- **Multi-actions** with pauses, steps you switch off one by one, loops and a
+  toggle with two chains.
+- **Appearance**: icon, label, gradient, texture or image per key, animated
+  GIFs included. The preview shows exactly what ends up on the device.
+- **Multiple decks** at once, each with its own profile and brightness.
+- **Virtual deck**: a deck as an overlay on screen, without a frame or an
+  Alt-Tab entry, brought up by a global shortcut.
+- **Network deck**: someone else on the same network operates a deck in the
+  browser, your moderator during a stream for example. Password protected,
+  guests cannot change anything.
+- **Screensavers and wallpapers** across all keys and the touch strip.
+- **English and German.**
 
 <p align="center">
   <img src="docs/screenshots/netzdeck-login.png" alt="Network deck login" width="300">
   <img src="docs/screenshots/netzdeck.png" alt="Network deck in the browser" width="300">
 </p>
 
-**Screensavers and wallpapers**
-One image across all keys and the touch strip, animated or still. Every page
-can have its own touch strip wallpaper.
-
-**Plugins**
-Six plugins are built in: audio, system, soundboard, multi-action,
-navigation and the Tabler icon set. The store has more, among them OBS,
-Discord, Spotify, Twitch, YouTube, Steam, Govee, weather, a battery display and
-a clock screensaver. For your own there is an open API, and a plugin can bring
-the Python and system packages it needs. Icon sets are plugins too.
-
-There are four ways to install one: through the **store** inside the app,
-from a ZIP file, from a URL, or through a `streamdeck://` link in the
-browser.
-
-**Built-in plugin store**
-It shows you every plugin there is, the installed ones included. The ones you
-do not have yet carry a dashed frame. Clicking the name opens the detail page
-with pictures, description, licence, size and dependencies. Filter by topic on
-the left and by kind at the top, search by name, description or author, and
-sort by name, newest release or best rating.
+## Plugins
 
 <p align="center">
   <img src="docs/screenshots/plugins.png" alt="Plugin overview with store cards" width="49%">
   <img src="docs/screenshots/store.png" alt="A plugin from the store" width="49%">
 </p>
 
-**Settings**
-Language, autostart, backup and restore, and everything about the decks.
+Audio, system, soundboard, multi-action, navigation and the Tabler icon set
+are built in. More come from the
+[plugin store](https://streamdeckstore.labratox.de), with one click under
+**Plugins**. Some of them need a one-time setup, see
+[Setting up store plugins](docs/en/store-plugin-setup.md).
 
-<p align="center">
-  <img src="docs/screenshots/einstellungen.png" alt="Settings" width="49%">
-</p>
+- A plugin brings the Python and system packages it needs.
+- Updates show up on their own, **Update all** fetches them.
+- Store downloads are checked against their SHA-256 before installing.
+- Besides the store, a plugin installs from a ZIP file, a URL or a
+  `streamdeck://` link in the browser. Your own can be submitted to the store
+  from the same window.
 
-More on all of this: [Operation](docs/en/operation.md) ·
-[Decks](docs/en/decks.md) · [Plugins](docs/en/plugins.md)
-
----
+How to build one: [Writing plugins](docs/en/plugin-development.md).
 
 ## Installation
 
-### With one command (all distributions)
+**Any distribution**, with one command. It fetches `uv` if needed, installs
+the newest release and asks for the password once, for system packages, the
+udev rule and the `input` group. Running it again updates, the settings stay.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/LabRaTox/Deck-Switch/main/scripts/get.sh | bash
 ```
 
-This fetches `uv` if it is missing, unpacks the newest release into
-`~/.local/share/deckswitch/app` and starts the installer. It needs no Node, no
-Rust and no compiler, the window and the interface come finished with the
-release. It asks for your password once, for everything that needs root:
-missing system packages, the udev rule and the `input` group. After that the
-backend runs, now and at every login, and DECK//SWITCH is in the application
-menu. Run the same command again to update, the settings stay.
-
-The menu entry *Help* in the window leads to the repository, the Discord
-community and the *About* page with the version.
-
-To remove it again:
+**Arch and CachyOS**: download the `.pkg.tar.zst` from the
+[latest release](https://github.com/LabRaTox/Deck-Switch/releases/latest),
+so updates come through pacman. It needs `python-elgato-streamdeck` from the
+AUR first.
 
 ```sh
-~/.local/share/deckswitch/app/scripts/delete.sh
-```
-
-Your settings stay in `~/.config/deckswitch/`, your images and plugins in
-`~/.local/share/deckswitch/`. With `--all` they go as well, after a question.
-
-Runs through on Arch, Debian 13, Ubuntu 22.04 and 24.04 and Fedora 43. On an
-image-based Fedora such as Bazzite the installer names the `rpm-ostree` command
-instead, because a package only arrives there with the next boot. Without a
-`layer-shell`, as on GNOME or Ubuntu, the virtual deck runs over XWayland
-instead, and it keeps out of the task list and of your keyboard focus just the
-same.
-
-On Arch and CachyOS the package below is the better way, because pacman then
-manages it.
-
-### Arch and CachyOS
-
-DECK//SWITCH is not in the AUR yet, the package is attached to the GitHub
-release. It puts the udev rule and the systemd unit where they belong.
-
-The library for the Deck comes first, because it only exists in the AUR. With
-`paru` or `yay`, `paru -S python-elgato-streamdeck` is enough, otherwise:
-
-```sh
-git clone https://aur.archlinux.org/python-elgato-streamdeck.git
-cd python-elgato-streamdeck
-makepkg -si
-cd ..
-```
-
-Then download and install the package. Passing the address straight to
-`pacman -U` does not work, pacman looks for a signature there:
-
-```sh
-curl -fLO https://github.com/LabRaTox/Deck-Switch/releases/download/v1.4.1/deckswitch-1.4.1-1-x86_64.pkg.tar.zst
-sudo pacman -U ./deckswitch-1.4.1-1-x86_64.pkg.tar.zst
+paru -S python-elgato-streamdeck
+sudo pacman -U ./deckswitch-*-x86_64.pkg.tar.zst
 systemctl --user enable --now deckswitch.service
-```
-
-Then add yourself to the `input` group once and log in again. You need it for
-the actions *Hotkey* and *Type text*:
-
-```sh
 sudo usermod -aG input "$USER"
 ```
 
-To update, download the new package file and install it the same way. Building
-it yourself works too, the library has to be there for that as well:
-
-```sh
-git clone https://github.com/LabRaTox/Deck-Switch.git
-cd Deck-Switch/packaging/aur
-makepkg -si
-```
-
-### From the repository
-
-For hacking on it:
+**From the repository**, for development:
 
 ```sh
 git clone https://github.com/LabRaTox/Deck-Switch.git
@@ -207,166 +111,29 @@ cd Deck-Switch
 ./scripts/install.sh
 ```
 
-`install.sh` does the same as the one-line install. In a git checkout it builds
-the window itself if `npm` and `cargo` are there. Running it again is safe.
+Afterwards the backend runs at every login and DECK//SWITCH is in the
+application menu. Logs: `journalctl --user -u deckswitch -f`.
 
-| Option | |
-| --- | --- |
-| `--no-root` | change nothing that needs root, print what is left instead |
-| `--no-download` | take nothing from the release, build everything here |
-| `--no-start` | install everything, but do not start the service |
-| `--no-autostart` | start now, but not at the next login |
+## More
 
-The interface then runs at <http://127.0.0.1:8770>, or as its own window:
+- [Installation and setup](docs/en/setup.md): the installer in detail,
+  removing it, udev, when the window does not open, backup and restore
+- [Operation](docs/en/operation.md): editor, key logic, multi-actions, dials,
+  appearance
+- [Decks](docs/en/decks.md): multiple devices, virtual deck, network deck
+- [Plugins](docs/en/plugins.md) and [Writing plugins](docs/en/plugin-development.md)
+- [Setting up store plugins](docs/en/store-plugin-setup.md) and
+  [Discord setup](docs/en/discord-setup.md)
+- [Architecture and development](docs/en/development.md): project layout,
+  tests, security, limits
 
-```sh
-./scripts/start-gui.sh
-```
+Questions, ideas and your own layouts go to the
+[Discord server](https://discord.gg/2ckNnCZ4wq), bugs and feature requests to
+[GitHub issues](https://github.com/LabRaTox/Deck-Switch/issues).
 
-### Device access (udev)
+All of the device handling builds on
+[`python-elgato-streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck)
+by Dean Camera.
 
-Without the udev rule the HID node belongs to root, so only root could talk
-to the device. `install.sh` sets it up; by hand it goes like this:
-
-```sh
-sudo install -m 644 packaging/70-streamdeck.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules
-sudo udevadm trigger --subsystem-match=usb --subsystem-match=hidraw
-```
-
-Then unplug the Stream Deck once and plug it back in.
-
-The same rule also sets up access to `/dev/uinput`. That is the virtual
-keyboard behind **hotkey** and **type text**. Your user needs to be in the
-`input` group for it. `install.sh` adds you; by
-hand it goes like this:
-
-```sh
-groups | grep -q input || sudo usermod -aG input "$USER"
-```
-
-Group membership only takes effect after your next login. You can see whether
-it worked in the interface: the settings of a hotkey action spell out what is
-missing.
-
-### When the window does not open
-
-On some drivers WebKitGTK and Wayland do not get along: the window closes
-after half a second and the terminal says `Gdk-Message: Error 71 (protocol
-error) dispatching to Wayland display`. With NVIDIA under KDE this happens
-every time.
-
-This is dealt with: if the first attempt dies right away, the window starts
-over with the DMABUF renderer switched off. That lives in
-`packaging/deckswitch-gui.sh`, the same script the package installs as
-`deckswitch-gui` and that `scripts/start-gui.sh` calls in a checkout, so an
-installed copy behaves exactly the same.
-
-It only happens once, though. The outcome is written down, together with a
-signature of the system (session type, graphics driver and WebKit version)
-in
-
-```
-~/.cache/deckswitch/fensterstart
-```
-
-As long as those three stay the same, the window starts correctly right
-away, without the brief failed attempt. If one of them changes, after a
-driver update for instance, the note is discarded and measured again.
-Deleting the file is harmless at any time.
-
-To skip the detour from the start, set the switch yourself:
-
-```sh
-export WEBKIT_DISABLE_DMABUF_RENDERER=1
-```
-
-### In the application menu
-
-`install.sh` creates the launcher along the way. By hand:
-
-```sh
-./scripts/install-desktop-entry.sh            # add it
-./scripts/install-desktop-entry.sh --remove   # take it out again
-```
-
-Entry and icon go to `~/.local/share`, so no sudo is involved. The launcher
-runs `scripts/start-gui.sh`, which brings the backend along if it isn't
-running yet. Started that way it keeps running after the window closes,
-until you log out. The service below also starts it at login, before any
-window, and restarts it after a crash. The Arch package ships the entry
-anyway.
-
-### Start at login
-
-The easiest way is the **Start at login** switch in the settings. It creates
-the systemd service and turns it on or off. The same from the command line:
-
-```sh
-./scripts/install-service.sh            # set up
-./scripts/install-service.sh --remove   # remove again
-```
-
-### Backup, restore, hand over
-
-In the settings under **Backup & restore**:
-
-| | |
-| --- | --- |
-| **Export configuration** | The configuration as JSON, small and readable, but without your uploaded images |
-| **Backup archive** | Configuration *and* all your own images in one ZIP file. This is the one for a move or a real backup |
-| **Earlier states** | Before every overwrite DECK//SWITCH keeps a copy of the configuration, at most one per hour and the last thirty of them. This is the way back |
-
-A single profile goes out through the profile manager: **Export** next to the
-profile packs it together with the images used in it. **Import profile** adds
-it on the other side, nothing is overwritten, and a name that already exists
-gets a number.
-
-Not included are the soundboard's sounds: you point at them by arbitrary
-paths, so they live somewhere on your disk rather than in the application's
-data directory. The references survive a backup, the files themselves you back
-up like your other own files. Plugins you installed later are not included
-either, get those from the store after restoring.
-
----
-
-## Built on
-
-| | |
-| --- | --- |
-| **Backend** | Python 3, [`streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck), FastAPI |
-| **GUI** | Tauri + Vite/React, using the system WebView |
-| **Audio** | PipeWire via `wpctl`/`pactl`, level meter via `parec`, soundboard via `pw-play` |
-| **Input** | virtual keyboard via `/dev/uinput`, layout via libxkbcommon |
-| **Desktop** | MPRIS over D-Bus. Global shortcuts and screenshots via KDE, otherwise via `xdg-desktop-portal` |
-| **Overlay** | `zwlr_layer_shell_v1` via layer-shell-qt, window hints on X11 and XWayland |
-| **Installation** | [`uv`](https://github.com/astral-sh/uv) for the Python environment and the packages of plugins |
-| **Icons** | [Tabler Icons](https://tabler.io/icons) (MIT), wired in as an ordinary icon set plugin |
-
-Without [`python-elgato-streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck)
-by Dean Camera this project would not exist. All of the device handling
-builds on it.
-
-## Documentation
-
-Everything in both languages, under [`docs/de/`](docs/de/) and
-[`docs/en/`](docs/en/).
-
-| | |
-| --- | --- |
-| [Operation](docs/en/operation.md) | editor, key logic, multi-actions, dials, appearance |
-| [Decks](docs/en/decks.md) | multiple devices, virtual deck, network deck |
-| [Plugins](docs/en/plugins.md) | built in and installable, how to install |
-| [Writing plugins](docs/en/plugin-development.md) | the plugin API |
-| [Discord setup](docs/en/discord-setup.md) | one-time setup |
-| [Architecture and development](docs/en/development.md) | project layout, tests, security, limits |
-
-## Licence
-
-[MIT](LICENSE), Heiko Stuhrmann.
-
-The Tabler Icons are MIT licensed as well
-(`backend/plugins/iconset-tabler/LICENSE`).
-
-This project has nothing to do with Elgato or Corsair. "Stream Deck" is a
-trademark of Corsair Memory, Inc.
+MIT, see [LICENSE](LICENSE). Not affiliated with Elgato or Corsair. "Stream
+Deck" is a trademark of Corsair Memory, Inc.

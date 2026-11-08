@@ -2,20 +2,26 @@
 
 *[Deutsche Fassung](../de/plugins.md)* · Back to the [overview](../../README.md).
 
+The built-in plugins ship with the app. Everything else comes from the store,
+on the web at <https://streamdeckstore.labratox.de> and inside the app under
+*Plugins*. Some store plugins need a one-time setup, see
+[Setting up store plugins](store-plugin-setup.md).
+
 ## Built-in plugins
 
 | Plugin | Actions |
 | --- | --- |
-| **Audio** | volume (dial with bar), set volume to a fixed percentage, microphone mute (push-to-talk too), switch output device, per-app volume |
+| **Audio** | volume (dial with bar and level meter), set volume to a fixed percentage, microphone mute (push-to-talk too), switch output device, per-app volume |
 | **Multi action** | multi action, multi action (toggle) |
 | **Soundboard** | play sound (with its own output device), stop everything |
-| **System** | start and stop programs, open folder/file/link, shell command, hotkey (as a toggle and as push-to-talk too), type text, multimedia, windows and desktops, screenshot, session (lock, log out, suspend, restart, shut down), system values (CPU, RAM, GPU, temperatures, network), monitor brightness over DDC/CI |
-| **Streamdeck** | folder, home, back, page indicator, go to page, page through, brightness, empty (placeholder), virtual deck |
+| **System** | start and stop programs, open folder/file/link, shell command, hotkey (as a toggle and as push-to-talk too), type text, multimedia, windows and desktops, screenshot, session (lock, displays off and on, suspend, hibernate, log out, restart, shut down), system values (CPU, RAM, swap, GPU, VRAM, CPU/GPU/SSD temperature, disk space, network), monitor brightness over DDC/CI |
+| **Streamdeck** | folder, home, back, page indicator, go to page, page through, switch profile, brightness, empty (placeholder), virtual deck |
 | **Tabler icons** | not an action plugin, but the icon set that ships with the app |
 
-They are required in practice but ordinary plugins technically. They live in
-`backend/plugins/` rather than `~/.local/share/deckswitch/plugins/`, and in
-the GUI they show up in the plugin list like any other.
+They are required in practice but ordinary plugins technically. In the source
+tree they live in `backend/plugins/`, in an installed app in
+`/usr/share/deckswitch/plugins/`. Never in `~/.local/share/deckswitch/plugins/`,
+and in the GUI they show up in the plugin list like any other.
 
 ### Hotkey and type text
 
@@ -37,19 +43,32 @@ browser catches itself (Ctrl+W closes the tab) you type in by hand.
 
 ### Windows and desktops
 
-This triggers KDE's own global shortcuts: maximise, tile, move to screen 2,
-switch desktop, and whatever else is registered. On a default installation
-that is around 170 entries for KWin alone. On Wayland it is the clean way,
-because moving windows from outside does not exist there. And you do not even
-need to have assigned those shortcuts yourself.
+Under Plasma this triggers KDE's own global shortcuts: maximise, tile, move to
+screen 2, switch desktop, and whatever else is registered. On a default
+installation that is around 170 entries for KWin alone. On Wayland it is the
+clean way, because moving windows from outside does not exist there. And you
+do not even need to have assigned those shortcuts yourself.
+
+Under Hyprland and Sway the action talks to the compositor directly. Neither
+offers a list of named actions, so the app brings a fixed set of commands.
+Both get fullscreen, close window, toggle floating, moving the window in four
+directions, going to workspace 1 to 10 and moving the window there. Hyprland
+adds maximise, pin and centre (both for floating windows only) and moving the
+workspace to the next screen. Sway adds pin to all workspaces, toggle split
+and moving the window to the next screen. On other desktops the action is not
+available.
 
 ### Session
 
-Knows lock, log out, standby, hibernate, restart and shut down, each with or
-without Plasma's confirmation. On top of that **press twice** is the default:
-the first press only arms the key and shows "sure?", the second one runs it.
-An accidental shutdown would be the most expensive misfire this device can
-offer.
+Knows lock, displays off and on, suspend, hibernate, restart, shut down and
+log out. Log out, restart and shut down also come in a variant *with prompt*,
+which shows Plasma's confirmation. The prompt variants and logging out
+without one need Plasma's session manager. Displays off and on work under
+Plasma (through `kscreen-doctor`), Hyprland and Sway.
+
+On top of that **press twice** is the default. The first press only arms the
+key and shows "Sure?", the second one runs it. An accidental shutdown would be
+the most expensive misfire this device can offer.
 
 ### Multimedia
 
@@ -67,22 +86,24 @@ headphones. Looping optional, and a second press restarts or stops.
 
 ### Audio
 
-**Level meter.** *Volume* and *Set volume* show what is coming out of the device
-right now: from -60 to 0 dBFS, yellow from -12, red from -3, with a white mark for
-the last peak. The value follows the volume control. It only measures while the
-meter is visible, and the output can still go to sleep meanwhile. Turn it off per
-assignment with the *Level meter* switch. While muted it stays empty.
+**Level meter.** *Volume* and *Set volume* show what is coming out of the
+device right now: from -60 to 0 dBFS, yellow from -12, red from -3, with a
+white mark for the last peak. The value follows the volume control. It only
+measures while the meter is visible, and the output can still go to sleep
+meanwhile. Turn it off per assignment with the *Level meter* switch. While
+muted it stays empty.
 
 **Switch output device** does not only set the default sink, it pulls all
 running streams along. Otherwise the music already playing would stay on the
-old device.
+old device. If you only want new playback on the new device, switch off *Move
+running streams* in the assignment.
 
-**Set volume** jumps to a fixed percentage with one press — one key for
-20%, one for 50%, one for 100%. A muted device is unmuted by default;
-otherwise the bar would show the value while nothing could be heard. While
-that value is the current one, the key gets a border. On a dial both apply:
-rotating steps through the volume as usual, pressing jumps to the fixed
-value.
+**Set volume** jumps to a fixed percentage with one press. One key for 20%,
+one for 50%, one for 100%. A muted device is unmuted by default (*Unmute when
+set*). Otherwise the bar would show the value while nothing could be heard.
+While that value is the current one, the key gets a border. On a dial both
+apply: rotating steps through the volume as usual, pressing jumps to the
+fixed value.
 
 **State from outside.** If somebody changes the volume in the system
 settings, OBS switches the scene or Discord mutes itself, the affected key
@@ -90,272 +111,66 @@ redraws immediately. For that, `pactl subscribe` and the event channels of
 obs-websocket and Discord RPC are running. The one-second tick is only the
 safety net.
 
-## Plugins to install afterwards
+## What your session cannot do
 
-These nine do not ship with the app. They come from the store.
+An action or an option can depend on something the desktop has to provide,
+for example window control or the session manager. A plugin declares that in
+its manifest (`requires`). If your session lacks it, the action is missing
+from the action library. On a key that already has it, the inspector says
+"Has no effect in this session" with the reason. Options in a dropdown work
+the same way: they disappear, except the one already chosen, which stays
+marked "(has no effect in this session)".
 
-| Plugin | Actions |
-| --- | --- |
-| **Discord** | mute (push-to-talk and push-to-mute too), deafen, switch voice channel, leave channel, open text channel, microphone level |
-| **OBS** | recording (incl. pause and chapter markers), stream, replay buffer and save replay, scene collection, scene, source, mute, media playback, studio mode, push preview live, filter, screenshot, transition, virtual camera |
-| **Spotify** | playback, next/previous track, start playlist, shuffle, repeat, volume, multimedia dial |
-| **Weather** | current weather, multi-day forecast, air quality |
-| **Clock screensaver** | screen saver: the time as one digit per key |
-| **Timer** | countdown, stopwatch, alarm clock |
-| **Twitch** | title, category, commercial, marker, clip, raid, chat, chat mode, clear chat, shoutout, poll, prediction, stream status, followers |
-| **Govee** | on/off, brightness, colour, colour temperature, scene, every device at once |
-| **YouTube** | viewers, chat message, ad, open dashboard, start and stop the stream |
+## The plugin list
 
-### Discord
+Under *Plugins* the installed plugins and the tiles from the store sit in one
+list. At the top you choose the type (*Plugins*, *Icons*, *Screensavers*,
+*Wallpapers*), on the left a category, *All* or *Installed*. The numbers next
+to them count what the search field (*Search plugins*) leaves over, so you see
+where the matches are even under another tab. *Sort* orders the list *A to Z*,
+*Z to A*, *Newest first* or *Best rated*.
 
-Needs a one-time setup, see [discord-setup.md](discord-setup.md).
+Clicking a plugin's name opens its detail page. There the author's name is a
+link. A click filters the list to that author's plugins, and a chip *Only by …*
+above the list brings everything back. Built-in plugins have no such link.
 
-**Channel keys** show the logo of the server the channel belongs to by
-themselves. You can switch that off per key, and an icon you chose yourself
-always wins. The logos live in
-`~/.local/share/deckswitch/cache/discord-guilds/`.
+Every installed plugin has a switch that turns it on and off. *Plugin
+settings* appears while it is on and the plugin has settings. Built-in plugins
+carry the *Built in* badge. The others have a *Remove* button. Removing asks
+first, because assignments using that plugin are deleted along with it.
 
-### OBS
+*Check for new plugins* picks up what has been added on disk and refreshes the
+store catalogue. Running plugins are left alone.
 
-Needs obs-websocket, built into OBS 28+. You enable it under *tools →
-WebSocket server settings*. Host, port, password and the screenshot folder
-are in the GUI under *plugins → OBS → plugin settings*.
+### Updates
 
-The feature set matches the official Elgato OBS plugin. A few specifics:
-
-* **Source** and **filter** have dependent dropdowns. Pick the scene or
-  source first, then the second list fills accordingly.
-* **Mute** can work as push-to-talk or push-to-mute instead of toggling.
-* **On a dial**, *scene*, *transition* and *scene collection* page through
-  their list as you turn.
-* **Stream** and **recording** can be protected against accidental stopping
-  ("press twice"). For the stream that is the default.
-* **Chapter markers** need OBS 30.2 or newer and hybrid MP4 as the recording
-  format. Otherwise you get a note.
-
-**Spotify** needs no setup at all. Control runs over MPRIS, the D-Bus
-standard for media players on Linux: no account, no credentials, no OAuth.
-Title, artist, playback, shuffle and repeat state update in real time, and
-the album art can serve as the background of the dial segment.
-
-* It controls the **locally running player**. The official Elgato version
-  reaches phones and speakers through Spotify's web API, which MPRIS cannot
-  do.
-* The plugin works with **any MPRIS-capable player**, not just Spotify. You
-  set that under *plugins → Spotify*.
-
-**Start playlist** needs the link to the playlist: in Spotify right-click →
-*share* → *copy link*, then paste it into the key. There is deliberately no
-dropdown of your own playlists, because MPRIS does not know any.
-
-**Weather** comes from [Open-Meteo](https://open-meteo.com), without an
-account and without an API key. Search for a place under *plugins → weather*
-and pick it from the results. The plugin refreshes the data every ten
-minutes.
-
-* **Weather** shows temperature and conditions. A short press reveals today's
-  high and low. On a dial you turn through the day in three-hour steps and
-  press to switch between hourly view, temperature chart and details.
-* **Forecast** shows a particular day, and on a dial five days sit next to
-  each other.
-* **Air quality** shows the AQI with a rating, European or US scale as you
-  prefer, and colours itself by severity.
-
-Every assignment can get its own city through *different location*. That way
-home and holiday destination sit next to each other on the deck.
-
-### Timer
-
-Three actions, and every assignment runs its own clock — two countdowns side
-by side do not interfere.
-
-**Countdown** counts down from a set time. Type the duration as `5:00` or
-`1:30:00`; `90`, `5m` and `1h30m` work too. A press starts and pauses it; on
-a dial, turning sets the time, even while it runs — like adding a minute on a
-microwave. When the time is up it rings and the key blinks red until you
-press it.
-
-To reset, put the same action with *A press → resets* on the double press of
-the same key.
-
-**Stopwatch** counts up until you stop it. A green frame means it is
-running, an amber one that it stands still — a progress bar is not possible
-here, as there is nothing to count towards. Turning the dial resets it while
-it stands still.
-
-**Alarm clock** rings at a fixed time of day: every day, Monday to Friday, at
-the weekend, or once. A press arms or disarms it; on a dial the time moves in
-five-minute steps.
-
-Below the time is how long until it rings, days included: looking at a
-Monday-to-Friday alarm on a Saturday evening reads “in 1 day 11 h”, not “in
-11 h”. A one-off alarm that has rung is over — nothing is shown there any
-more, rather than promising a next day. A press arms it again.
-
-It keeps ringing until you press the key — an alarm that beeps once and then
-goes quiet wakes nobody. *Repeat the sound* turns that off. The countdown is
-the other way round: it rings once, but can be set to keep going.
-
-The sound ships with the plugin; you can pick your own file instead (WAV,
-FLAC, OGG, Opus or MP3) or turn it off.
-
-What a backend restart does not survive: running clocks and times turned on a
-dial. After that, whatever is in the form applies again.
-
-### Twitch
-
-Fourteen actions for the things you do while streaming, without switching
-away from the game.
-
-**Signing in.** There is nothing to set up. Twitch wants a client ID with
-every call; it belongs to a registered app and ships with the plugin. No
-secret is involved — anything that sits on other people's machines would not
-be one. Instead the device code flow: under *plugins → Twitch → plugin
-settings* press *connect to Twitch*, type the code shown at
-[twitch.tv/activate](https://www.twitch.tv/activate), done. The token then
-lives in `~/.config/deckswitch/twitch-token.json`, readable only by you.
-
-**Running the stream.** *Set title* puts a prepared title on a key,
-optionally with a category — several keys, several titles. *Set category*
-comes with a search list. Plus *commercial* (30 seconds to 3 minutes), *set
-marker* for a spot you can find again in the recording, *create clip*
-(optionally opening the editor afterwards) and *raid*, where a second press
-cancels the countdown.
-
-**Chat and moderation.** A prepared *chat message*, and *chat mode* for slow,
-subscribers-only, followers-only, emotes-only and unique messages — the key
-shows what is on and a press toggles it. Plus *clear chat* and *shoutout*.
-
-**Polls and predictions.** Question and answers live in the assignment,
-separated by a vertical bar. If a poll is already running, a press ends it.
-For a prediction the first press locks betting, the next resolves it to the
-outcome you set.
-
-**Displays.** *Stream status* shows viewers, uptime or followers — you choose
-what is large; a coloured strip at the bottom says live or not. *Followers*
-shows just the number. Both work on a dial as well.
-
-**What Twitch cannot do: start the stream.** The Helix API simply has no
-call for it — its stream endpoints are limited to fetching the stream key,
-looking up streams, setting markers and managing the schedule. That follows
-from how it works: Twitch only *receives*; the stream is sent by your own
-software. So you go live with the *stream* action from the OBS plugin. If
-you want both on one key — set the title and go live — build a multi action:
-first step *Twitch → set title*, second step *OBS → stream*.
-
-What cannot be shown is not claimed: without a connection it says “not
-connected” and no number. Figures are refreshed every 20 seconds — Twitch
-limits how often you may ask, and eight keys should not cause eight
-requests.
-
-### Govee
-
-**Setting up.** Govee gives everyone their own key: request it in the Govee
-Home app under *profile → settings → Apply for API Key*, it arrives by
-email. Then enter it under *plugins → Govee → plugin settings*.
-
-**Two interfaces, one switch.** Govee runs two APIs side by side, and which
-one works with which device cannot be told from the outside. On an H615C the
-new one reported brightness as 154 and rejected that very value when setting
-it as “out of range”; it considered the device offline while the old one
-switched it fine; and it acknowledged colour commands with “success” without
-anything changing. So this is a choice rather than a guess:
-
-* **Old** (default) — `developer-api.govee.com`. Proven, but no scenes.
-* **New** — `openapi.api.govee.com`. Knows scenes.
-* **Both** — every command goes down both paths. For devices where the new
-  one acknowledges without acting. After that
-the dropdowns fill themselves — which devices exist and what they can do
-comes from Govee, nothing is guessed here.
-
-**On/off** toggles a device, or only switches on or only off if a key should
-always do the same thing. The key carries a coloured border: yellow when on,
-grey when off, red when the device does not answer. If a colour is lit, the
-border has it.
-
-**Brightness** sets a fixed value; on a dial you turn it in steps you choose.
-**Colour** and **colour temperature** work the same way — the key shows the
-colour before you press, and for white roughly the light's tint from warm to
-daylight.
-
-**Scene** calls up whatever scenes the device itself offers. The list comes
-from the device; a model without scenes shows an empty one.
-
-**All devices** is the key for the way out. Toggling means: if any light is
-on, everything goes off. Toggling each device separately would leave a
-half-lit room, and after that nobody knows what the next press will do.
-
-**Govee counts requests.** Thirty state queries per minute and device — eight
-keys checking every second would be blocked at once. So queries are bundled,
-every 25 seconds, and only for devices currently on a visible key. What you
-switch yourself shows on the key immediately, without waiting for the next
-query. If Govee does throttle, it says so plainly instead of “unknown
-error”.
-
-### YouTube
-
-Five actions for a running livestream: **viewers** shows how many are
-watching. **Chat message** posts a prepared text to the live chat. **Ad**
-inserts a break. **Open dashboard** jumps into YouTube Studio, straight to
-the running broadcast's page if there is one. **Start/stop stream** switches
-the broadcast's state — the key shows which applies.
-
-**Setting up needs your own Google project**, and that is arithmetic rather
-than red tape: YouTube's quota is per project, not per user — ten thousand
-units a day, shared by everyone using the same credentials. A bundled client
-ID would be exhausted after a few dozen installs, and then the plugin works
-for nobody. Twitch counts per user, so one app serves everyone there; not
-here.
-
-How to get the credentials:
-
-1. Create a project in the [Google Cloud Console](https://console.cloud.google.com)
-2. Under *APIs & Services*, enable the **YouTube Data API v3**
-3. Under *Credentials*, create an **OAuth client** of type *TV and limited
-   input device*
-4. Under *OAuth consent screen → Audience*, add yourself as a **test user**
-5. Enter client ID and client secret in the plugin settings
-6. Press *connect to YouTube* and type the code at
-   [google.com/device](https://www.google.com/device)
-
-Step 4 is easily missed and is where things first go wrong: until the app has
-passed Google's verification, only registered test users may sign in — not
-even you, although you created it. Signing in then ends with “Access blocked”
-and `Error 403: access_denied`.
-
-In testing mode sign-ins expire after seven days; just connect again after
-that. Avoiding it means putting the app through Google's verification, which
-for personal use is more effort than it is worth.
-
-The secret then sits on your machine. Google explicitly does not treat it as
-secret for installed applications — it names the application, it grants
-nothing. The token lives in `~/.config/deckswitch/youtube-token.json`,
-readable only by you.
-
-**The quota is budgeted for.** A read costs one unit, a write fifty. The
-viewer count refreshes every 30 seconds by default — about 3,000 units a day,
-leaving room for chat and ads. Set to 5 seconds it would be 17,000, and
-after that nothing would work until midnight, not even stopping the stream.
-That is why the field will not go below 10 seconds. Drawing uses mirrored
-values only; the keys themselves never query.
-
-**What YouTube does not promise:** that every viewer sees the ad. It is
-served to those currently eligible; the rest keep watching. And a broadcast
-has to exist in YouTube Studio before it can be started from here.
+If the store has a newer version of an installed plugin, its card gets a
+button with the new version number. With several of them a bar above the list
+offers *Update all*. A version that needs a newer app cannot be installed: the
+button stays disabled and says "Needs DECK//SWITCH … or newer". The installer
+refuses such a plugin from every other source as well.
 
 ## Installing plugins
 
-Under *plugins* the tiles from the **store** sit right next to your own. What
-you do not have yet you can spot by the dashed border and the *install*
-button. Before you click, you see what the store's scan found in the source.
+Tiles from the **store** have a dashed border and an *Install* button. Before
+you click, you see what the store's scan found in the source, on the tile and
+on the detail page.
 
-The store comes with a GitHub sign-in. You only need it to **submit** your
-own plugins; browsing and installing work without.
+The store checks every download. The catalogue names a SHA-256 checksum for
+each version, and the archive is only unpacked if it matches. If the catalogue
+names none, nothing is installed. The plugin ID in the archive also has to
+match the plugin you asked for.
 
-Next to that, *plugins → install* offers three more ways:
+The store comes with a GitHub sign-in (*Sign in to the store*). You need it
+to **submit** your own plugins and to **rate**. Browsing and installing work
+without.
 
-1. **Enter a URL** — a ZIP from an http(s) address
-2. **Drop a file** — ZIP by drag and drop or file picker
+Next to that, *Install plugins* offers two more ways, plus links from the
+browser:
+
+1. **Install from a URL**: a ZIP from an http(s) address
+2. **Drop a plugin archive (.zip) here, or click**: a ZIP by drag and drop or
+   file picker
 3. **`streamdeck://` link** in the browser (see below)
 
 Plugins are installed into `~/.local/share/deckswitch/plugins/`. The folders
@@ -363,42 +178,53 @@ there are named after a running number (`0001`, `0002`, …) and not after the
 plugin's id. That way no archive decides what a folder on your disk is
 called. Which plugin sits in which folder is in its `manifest.json`.
 
-If a plugin brings dependencies, they show on its detail page and install along
-with it. Python packages land in `~/.local/share/deckswitch/plugins/.deps/` and
-leave with the plugin. For system packages the system asks for your password. If
-something cannot be installed, the plugin stays out and the message names the
-command.
+If a plugin brings dependencies, they show on its detail page and install
+along with it. Python packages come from PyPI through `uv`, only as
+ready-made wheels, into a folder of their own per plugin under
+`~/.local/share/deckswitch/plugins/.deps/`. They leave with the plugin. System
+packages are named per distribution family (Arch, Debian and Ubuntu, Fedora, openSUSE),
+and the system asks for your password. On an image-based Fedora such as
+Bazzite a package only arrives with the next boot, so there it is always a
+manual step. If something cannot be installed, the plugin stays out and the
+message names the command.
 
-Built-in plugins can neither be overwritten nor removed. The ones you
-installed have a *remove* button in the list.
+Built-in plugins can neither be overwritten nor removed.
 
-You build distributable archives of the bundled sources like this:
+### The store detail page
 
-```sh
-./scripts/package_plugins.py          # → dist/plugins/*.zip
-```
+Next to the description and *What's new* the detail page lists the
+*Versions* once there is more than one, with date, downloads, the state if
+it is not approved, and the moderator's note. Under *Rating* you recommend a
+plugin or not, and you can add a text of up to 500 characters. A thumbs down
+needs a short note on what is wrong. Your own plugins you cannot rate. The
+detail page of an installed plugin from the store shows the rating too.
 
 ### Submitting your own plugins
 
-*Plugins → submit plugin* opens a field you drop an archive into. ZIP, TAR
-and tar.gz all work: the store accepts what it can open for review. What
-ships later is always a ZIP, because that is what the installer can unpack.
+*Submit a plugin* opens a field you drop an archive into. ZIP, TAR, tar.gz
+and tgz all work: the store accepts what it can open for review. What ships
+later is always a ZIP, because that is what the installer can unpack.
 
-The same window lists your previous submissions with their state (waiting,
-approved, rejected) and the moderator's note. Every row has a button to get
-rid of it again, and what that does depends on the state:
+The same window lists your previous submissions with their state (*awaiting
+review*, *approved*, *rejected*, *withdrawn*, *blocked*) and the moderator's
+note. Versions awaiting review, rejected or approved have a button, and what
+it does depends on the state:
 
-* **Waiting or rejected:** the version is deleted, its archive with it, and
-  the version number is free again. Handy when you uploaded too early.
-* **Approved:** it only leaves the catalogue. Anyone who already installed it
-  can still download it — otherwise a fresh install would suddenly face an
-  address that no longer exists.
-* **Blocked:** stays where it is. A moderator decided that, and no button of
-  yours changes it.
+* **Awaiting review or rejected:** *Delete*. The version is deleted, its
+  archive with it, and the version number is free again. Handy when you
+  uploaded too early.
+* **Approved:** *Withdraw*. It only leaves the catalogue. Anyone who already
+  installed it can still download it. Otherwise a fresh install would suddenly
+  face an address that no longer exists.
+
+Withdrawn and blocked versions have no button. A block was decided by a
+moderator, and nothing you click changes it.
 
 ### streamdeck:// links
 
-These let you install plugins straight from the browser:
+These let you install plugins straight from the browser. The installer and
+the AUR package register the handler. Only in a bare source checkout do you
+register it yourself:
 
 ```sh
 ./scripts/install-url-handler.sh     # register once
@@ -410,20 +236,26 @@ After that a link of this form
 streamdeck://install?url=https://example.com/my-plugin.zip
 ```
 
-creates a **request** that you confirm in the interface, including where it
-came from. So clicking a link installs nothing by itself. That is deliberate:
-a plugin is program code running with your rights, and no random web page may
-trigger that without asking. Unconfirmed requests expire after ten minutes.
+creates a **request** that you confirm in the interface, including the
+address it came from. So clicking a link installs nothing by itself. That is
+deliberate: a plugin is program code running with your rights, and no random
+web page may trigger that without asking. Unconfirmed requests expire after
+ten minutes.
+
+A link can carry the expected checksum as `&sha256=…`. The request then shows
+"Announced checksum: …", and the archive is only unpacked if it matches.
+Without it the request says "No checksum: whatever is at that address will
+be installed."
 
 If the backend is not running, the handler says so with a desktop
 notification.
 
 ## Arranging them
 
-Under *plugins* you drag the cards by the handle (⠿) into the order you want.
-It applies to the action list in the editor as well and is stored in the
-config. Newly installed plugins land at the end, so an order you settled on
-does not shift by itself.
+In the editor's action library you drag the plugins by the handle (⠿) into
+the order you want. The handle is hidden while you search. The order is
+stored in the config. Newly installed plugins land at the end, so an order you
+settled on does not shift by itself.
 
 ## Plugin icons
 

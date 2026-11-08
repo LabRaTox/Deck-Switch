@@ -2,9 +2,13 @@
 
 *[English version](../en/plugin-development.md)* · Zurück zur [Übersicht](../../README.de.md).
 
-Es gibt zwei Sorten. **Action-Plugins** steuern Tasten, Dials und
-Touchstrip-Segmente, **Iconset-Plugins** liefern nur SVGs für den
-Icon-Picker.
+Es gibt vier Sorten, welche ein Plugin ist, sagt das Manifest-Feld `type`.
+**Action-Plugins** (`action`) steuern Tasten, Dials und
+Touchstrip-Segmente. **Iconset-Plugins** (`iconset`) liefern nur SVGs für
+den Icon-Picker. **Schoner-Plugins** (`screensaver`) malen über das ganze
+Deck, solange der Bildschirmschoner läuft, **Hintergrund-Plugins**
+(`wallpaper`) malen den Grund des Touchstrips. Die letzten beiden tauchen
+nicht in der Aktionsbibliothek auf, man wählt sie in den Einstellungen.
 
 Plugins liegen in `~/.local/share/deckswitch/plugins/`. Jeder Ordner dort
 trägt eine laufende Nummer, welches Plugin darin steckt, steht in seiner
@@ -31,13 +35,17 @@ Dazu kannst du bis zu drei Bilder für die Detailansicht angeben:
 { "screenshots": ["screenshots/deck.png", "screenshots/aktionen.png"] }
 ```
 
+Bildschirmfotos müssen PNG, JPEG oder WebP sein, SVG geht hier nicht. Mit
+mehr als drei Einträgen ist das Manifest ungültig, und das Plugin lädt
+nicht.
+
 ## Action-Plugin
 
 Ein minimales Beispiel: ein Plugin mit einer Aktion, die einen Zähler
 hochzählt.
 
 ```
-counter/
+my-counter/
 ├── manifest.json
 └── plugin.py
 ```
@@ -46,7 +54,7 @@ counter/
 
 ```json
 {
-  "id": "counter",
+  "id": "my-counter",
   "name": { "de": "Zähler", "en": "Counter" },
   "version": "1.0.0",
   "type": "action",
@@ -86,6 +94,61 @@ Feldtypen: `text`, `number`, `bool`, `select`, `color`, `path`, `file`,
 `password`. Bei `select` entweder feste `options` angeben oder über
 `options_source` zur Laufzeit füllen lassen (siehe unten).
 
+Ein Feld kann mehr tragen als Schlüssel, Typ, Beschriftung und Vorgabe.
+`placeholder` zeigt einen Hinweis im leeren Eingabefeld, `help` eine
+Erklärung zum Feld. Beide dürfen wie `label` zweisprachig sein. `min`,
+`max` und `step` begrenzen ein `number`-Feld. `depends_on` zeigt das Feld
+nur, wenn andere Felder einen bestimmten Wert haben, eine Liste heißt dort
+einer von mehreren Werten:
+
+```json
+{
+  "key": "interface",
+  "type": "select",
+  "options_source": "interfaces",
+  "depends_on": { "metric": ["net_down", "net_up"] }
+}
+```
+
+### Weitere Manifest-Felder
+
+Diese Felder gelten für jeden Typ:
+
+| Feld | Bedeutung |
+| --- | --- |
+| `description` | volle Beschreibung in der Detailansicht, gern zweisprachig |
+| `summary` | ein Satz für die Plugin-Liste. Fehlt er, zeigt die Liste die Beschreibung auf zwei Zeilen gekürzt |
+| `author` | wer das Plugin geschrieben hat |
+| `category` | wohin das Plugin in der Übersicht gehört, Vorgabe `other` |
+| `support` | Adresse für Fragen und Fehlerberichte, steht unter *Hilfe* |
+| `changelog` | was sich zuletzt geändert hat, steht unter *Was ist neu* |
+| `license` | Lizenzhinweis, steht in der Detailansicht |
+| `accent` | Farbe des Plugins in der Aktionsbibliothek und der Plugin-Liste |
+
+Erlaubte Werte für `category`: `system`, `audio`, `business`, `creative`,
+`development`, `engagement`, `finance`, `gaming`, `lighting`, `monitoring`,
+`music`, `productivity`, `screensaver`, `smarthome`, `social`, `streaming`,
+`utilities`, `video`, `other`. Jeder andere Wert macht das Manifest
+ungültig, und das Plugin lädt nicht.
+
+Eine Aktion kennt neben `id`, `name`, `inputs`, `default_icon`, `states`
+und `settings_schema` diese Felder:
+
+* `description` steht bei der Aktion in der Bibliothek.
+* `default_label` wird als Beschriftung eingetragen, wenn die Aktion auf
+  eine Taste gezogen wird.
+* `states[].default_icon` ist das Icon für einen Zustand, solange der
+  Nutzer keines gewählt hat. Fehlt es, gilt das `default_icon` der Aktion.
+* `requires` nennt, was die Sitzung können muss, damit die Aktion etwas
+  bewirkt. Fehlt davon etwas, taucht die Aktion in der Bibliothek nicht
+  auf, und eine Taste, die sie schon trägt, zeigt den Grund. Unbekannte
+  Namen gelten als vorhanden. Die Namen sind `keyboard_input`,
+  `window_control`, `global_shortcuts`, `screenshot`, `screen_power`,
+  `session_power`, `session_manager`, `overlay`, `ddc`, `audio`,
+  `sound_playback`, `tray`, `open_uri` und `process_control`. Auch ein
+  Eintrag in den `options` eines Feldes kann `requires` tragen, die GUI
+  markiert dann nur diesen Eintrag.
+
 ### plugin.py
 
 ```python
@@ -116,35 +179,47 @@ stellt der Nutzer in der GUI ein, dafür muss das Plugin nichts tun.
 
 ## Die Hooks
 
-Alle sind optional, und alle dürfen `def` **oder** `async def` sein.
-Synchrone Hooks laufen in einem Worker-Thread. Ein `subprocess.run` blockiert
-also nie die Anwendung.
+Alle sind optional. Nicht jeder Hook darf `async def` sein, die rechte
+Spalte sagt, welche Form die App erwartet.
 
-| Hook | Wann |
-| --- | --- |
-| `on_key_down(action_id, settings, ctx)` | Taste gedrückt |
-| `on_key_up(action_id, settings, ctx)` | Taste losgelassen |
-| `on_dial_rotate(action_id, settings, delta, ctx)` | Dial gedreht (`delta` ±) |
-| `on_dial_push(action_id, settings, ctx)` | Dial gedrückt |
-| `on_touch(action_id, settings, x, y, ctx)` | Touchstrip berührt (segment-relativ) |
-| `on_tick(action_id, settings, ctx)` | periodisch, Standard 1×/Sekunde |
-| `get_state(action_id, settings, ctx)` | welcher Zustand gilt gerade |
-| `get_label(action_id, settings, ctx)` | dynamischer Text statt des konfigurierten |
-| `render(action_id, settings, ctx)` | eigenes Bild zeichnen |
-| `setup()` / `teardown()` | beim Laden/Beenden (Verbindungen aufbauen/schließen) |
-| `on_plugin_config_changed(config)` | globale Plugin-Einstellungen geändert |
-| `get_status()` | Verbindungszustand für die Plugin-Liste |
-| `get_dynamic_options(source, context)` | Auswahllisten zur Laufzeit füllen |
-| `gui_command(command, payload)` | Aktion, die die GUI direkt auslöst |
+| Hook | Wann | Form |
+| --- | --- | --- |
+| `on_key_down(action_id, settings, ctx)` | Taste gedrückt | `def` oder `async def` |
+| `on_key_up(action_id, settings, ctx)` | Taste losgelassen | `def` oder `async def` |
+| `on_dial_rotate(action_id, settings, delta, ctx)` | Dial gedreht (`delta` ±) | `def` oder `async def` |
+| `on_dial_push(action_id, settings, ctx)` | Dial gedrückt | `def` oder `async def` |
+| `on_touch(action_id, settings, x, y, ctx)` | Touchstrip berührt (segment-relativ) | `def` oder `async def` |
+| `on_tick(action_id, settings, ctx)` | periodisch, Standard 1×/Sekunde | `def` oder `async def` |
+| `render(action_id, settings, ctx)` | eigenes Bild zeichnen | `def` oder `async def` |
+| `get_dynamic_options(source, context)` | Auswahllisten zur Laufzeit füllen | `def` oder `async def` |
+| `get_state(action_id, settings, ctx)` | welcher Zustand gilt gerade | `def` |
+| `get_label(action_id, settings, ctx)` | dynamischer Text statt des konfigurierten | `def` |
+| `get_status()` | Verbindungszustand für die Plugin-Liste | `def` |
+| `on_plugin_config_changed(config)` | globale Plugin-Einstellungen geändert | `def` |
+| `setup()` / `teardown()` | beim Laden/Beenden (Verbindungen aufbauen/schließen) | `async def` |
+| `gui_command(command, payload)` | Aktion, die die GUI direkt auslöst | `async def` |
+
+Hooks mit `def` oder `async def` laufen in einem Worker-Thread, wenn sie
+synchron sind. Ein `subprocess.run` blockiert also nie die Anwendung. Als `async def`
+laufen sie im Event-Loop und dürfen ihn nicht blockieren.
+
+Die reinen `def`-Hooks ruft die App direkt auf und wartet nicht auf sie.
+Sie sollen sofort antworten, aus dem Zustand, den das Plugin schon kennt.
+`get_state` und `get_label` ruft das Standard-`render` auf. Wer `render`
+überschreibt, entscheidet selbst, ob und wie er sie benutzt.
+
+`setup()`, `teardown()` und `gui_command()` werden erwartet (`await`). Ein
+einfaches `def` scheitert dort.
 
 Eine Falle: Ein **synchroner** Hook läuft im Worker-Thread, und dort gibt
 es keinen Event-Loop. `asyncio.create_task` scheitert dann mit „no running
 event loop". Zwei Auswege:
 
-* den Hook als `async def` deklarieren (dann läuft er im Loop), oder
-* `self.run_async(coro)` benutzen. Der Helfer funktioniert aus jedem Thread
-  und ist der richtige Weg in `render`, wo ein `async def` nicht in Frage
-  kommt.
+* den Hook als `async def` deklarieren, wo die Tabelle das erlaubt (dann
+  läuft er im Loop), oder
+* `self.run_async(coro)` benutzen. Der Helfer funktioniert aus jedem
+  Thread, auch aus eigenen Watcher-Threads und aus den reinen
+  `def`-Hooks.
 
 ### Verbindungszustand anzeigen
 
@@ -169,16 +244,28 @@ GUI dort auch nichts an.
 Dieselbe Aktion kann mehrfach belegt sein, zum Beispiel eine Taste je
 Ausgabegerät. Der `ctx` sagt, welche Belegung gerade dran ist:
 
-* `ctx.index`, `ctx.input_type` (`"key"`/`"dial"`), `ctx.page_id`
-* `ctx.size` ist die Zeichenfläche: `(120, 120)` für Tasten, `(200, 100)`
-  je Segment
+* `ctx.index`, `ctx.input_type` (`"key"`/`"dial"`), `ctx.page_id`,
+  `ctx.profile_id`
+* `ctx.key` ist ein fester Name für die Belegung (Seite, Eingabeart,
+  Index), etwa als `owner` für das Soundboard
+* `ctx.size` ist die Zeichenfläche: auf einem Stream Deck + `(120, 120)`
+  für Tasten und `(200, 100)` je Segment. Virtuelle Decks können andere
+  Größen haben
 * `ctx.setting(name, default)` holt eine Einstellung mit Rückfallwert
+* `ctx.slot` ist die ganze Belegung, `ctx.appearance` ihr Aussehen
+  (Hintergrund, Icon, Beschriftung)
+* `ctx.is_long_press` ist `True`, wenn der Halten-Zweig einer Taste
+  auslöst
 * `ctx.scratch` ist freier Zwischenspeicher und überlebt zwischen Aufrufen
 * `ctx.request_redraw()` zeichnet genau diese Kachel sofort neu
 * `ctx.services` sind Audio, Icons, Rendering, Runtime und die Systemdienste
 * `ctx.deck_serial` sagt, auf welchem Deck die Belegung liegt
 * `ctx.frame_time` ist die Laufzeit in Sekunden, animierte Bilder wählen
   daraus ihr Einzelbild
+
+Drücken, Doppeldruck und Halten einer Taste sind getrennte Belegungen, und
+jede bekommt ihren eigenen `ctx.scratch`. Was der Druck-Zweig dort ablegt,
+sieht der Halten-Zweig nicht.
 
 **Bei mehreren Decks wichtig:** `ctx.services.runtime` zeigt auf *das Deck,
 auf dem gedrückt wurde*. Wer über `self.services.runtime` navigiert, landet
@@ -233,7 +320,7 @@ oder die Quellen *einer* Szene, deklarierst du das im Manifest:
 }
 ```
 
-Die bereits gesetzten Einstellungen kommen dann als ``context`` an, und die
+Die bereits gesetzten Einstellungen kommen dann als `context` an, und die
 GUI lädt die Liste neu, sobald sich das übergeordnete Feld ändert.
 
 ## Selbst zeichnen
@@ -251,38 +338,80 @@ def render(self, action_id, settings, ctx):
 ```
 
 Bausteine im Render-Service: `background`, `compose` (Icon + Label wie im
-Standard), `draw_bar`, `draw_text`, `draw_text_at`, `draw_badge`,
-`blank`, `empty_slot`.
+Standard), `bar_box`, `draw_bar`, `draw_meter` (Aussteuerungsanzeige von
+-60 bis 0 dBFS), `draw_text`, `draw_text_at`, `draw_badge`, `blank`,
+`empty_slot`, `error_slot`.
+
+Oft passt das Standard-Layout fast und braucht nur eine Ergänzung. Dann
+zeichnet `render_slot(ctx, state=…, label_override=…, accent=…,
+icon_override=…, reserve_bottom=…)` es, und du malst darüber.
+`icon_override` setzt ein fertiges Bild an die Stelle des Icons (ein Cover,
+ein Serverlogo), `icon_px(ctx.size, ctx.appearance.icon_size)` liefert die
+passende Kantenlänge. `reserve_bottom` hält unten Platz frei, damit die
+Beschriftung nicht unter einem Balken liegt, `bar_reserve(ctx.size, box)`
+rechnet diesen Platz für einen Balken in `box` aus:
+
+```python
+def render(self, action_id, settings, ctx):
+    render = self.services.render
+    box = render.bar_box(ctx.size)
+    image = render.render_slot(
+        ctx,
+        state=self.get_state(action_id, settings, ctx),
+        reserve_bottom=render.bar_reserve(ctx.size, box),
+    )
+    render.draw_bar(image, 0.6, box=box)
+    return image
+```
 
 Wichtig: **Nimm den Hintergrund aus `ctx.appearance`** und füll nicht hart
 schwarz. Sonst ignoriert das Plugin die Einstellungen des Nutzers.
 
 ## Services
 
-* `services.audio` — PipeWire: `get_volume`, `set_volume`, `change_volume`,
-  `toggle_mute`, `list_sinks`, `list_sources`, `switch_output`,
-  `list_streams`, `add_listener`
-* `services.icons` — `resolve(icon_ref, size=…)`, `list_icons`
-* `services.render` — siehe oben
-* `services.runtime` — `request_redraw`, `navigate`, `navigate_home`,
-  `navigate_back`, `page_number`, `step_page`, `notify`, `save_config`;
-  über `ctx` zusätzlich `device_settings` (Helligkeit & Co. dieses Decks),
+* `services.audio` (PipeWire): `get_volume`, `set_volume`, `change_volume`,
+  `toggle_mute`, `set_mute`, `list_sinks`, `list_sources`,
+  `get_default_sink`, `get_default_source`, `switch_output`,
+  `list_streams`, `move_stream`, `add_listener`. Einzelne
+  Anwendungs-Streams über ihren Index: `set_stream_volume`,
+  `change_stream_volume`, `toggle_stream_mute`
+* `services.icons`: `resolve(icon_ref, size=…)`, `list_icons(set_id)`
+  (Namen in einem Iconset), `system_iconset` (ID des eingebauten Sets)
+* `services.render`: siehe oben
+* `services.runtime`: `request_redraw`, `navigate`, `navigate_home`,
+  `navigate_back`, `current_page_id`, `page_number`, `sibling_pages`,
+  `step_page`, `notify`, `save_config`, `publish_plugin_status`; über
+  `ctx` zusätzlich `switch_profile(name)` (leerer Name geht zum vorigen
+  Profil zurück), `device_settings` (Helligkeit & Co. dieses Decks),
   `cycle_stack` und die Ketten-Steuerung `run_steps` / `stop_steps` /
   `steps_running`
-* `services.input` — virtuelle Tastatur: `send_combo("ctrl+shift+f5")`,
-  `hold_combo(combo, pressed)` für Push-to-Talk, `type_text(text)`,
-  `available()`. Die Zuordnung Zeichen → Taste kommt aus der aktiven
-  Tastaturbelegung, nicht aus einer Annahme.
-* `services.media` — der gerade laufende Player über MPRIS:
-  `control("play_pause"|"next"|…)`, `refresh()`, `list_players()`,
-  `state` (spielt, Titel, Interpret)
-* `services.desktop` — Sitzung und Fenster: `power("lock"|"suspend"|…)`,
-  `invoke_shortcut(component, name)` für KDEs globale Kurzbefehle,
-  `list_shortcuts(component)`, `screenshot(mode)`, `close_application()`
-* `services.sound` — Soundboard: `play(pfad, owner=ctx.key, sink=…)`,
-  `toggle`, `stop`, `stop_all`, `is_playing(ctx.key)`
-* `services.config` — die gesamte Konfiguration (lesend)
-* `self.plugin_config` — die globalen Einstellungen dieses Plugins
+* `services.input` ist die virtuelle Tastatur:
+  `send_combo("ctrl+shift+f5")`, `hold_combo(combo, pressed)` für
+  Push-to-Talk, `type_text(text)`, `available()`. Die Zuordnung
+  Zeichen → Taste kommt aus der aktiven Tastaturbelegung, nicht aus einer
+  Annahme.
+* `services.media` ist der gerade laufende Player über MPRIS:
+  `await control("play_pause"|"next"|…)`, `await refresh()`,
+  `await list_players()`, `state` (spielt, Titel, Interpret)
+* `services.desktop` deckt Sitzung und Fenster ab: `await
+  power("lock"|"suspend"|…)`, `await invoke_shortcut(component, name)` für
+  globale Kurzbefehle, `await list_components()`, `await
+  list_shortcuts(component)`, `screenshot(mode)`,
+  `close_application(pattern, force=False)` (liefert, wie viele Prozesse
+  beendet wurden)
+* `services.sound` ist das Soundboard: `play(pfad, owner=ctx.key, sink=…)`,
+  `toggle`, `stop`, `stop_all`, `is_playing(ctx.key)`, `available()`
+* `services.overlay` zeigt das Overlay eines virtuellen Decks:
+  `is_visible(deck)`, `await toggle(deck)`, `await show(deck)`,
+  `hide(deck)`. `deck` ist die Kennung des Decks wie in `ctx.deck_serial`
+* `services.config` ist die gesamte Konfiguration (lesend)
+* `services.plugin_dir` ist der eigene Ordner des Plugins, für
+  mitgelieferte Dateien
+* `self.plugin_config` enthält die globalen Einstellungen dieses Plugins
+
+Aufrufe mit `await` sind Coroutinen. Aus einem synchronen Hook startest du
+sie mit `self.run_async(…)`. `available()` von Input und Sound liefert ein
+Paar `(ok, grund)`, der Grund ist Text für die GUI.
 
 ## Globale Plugin-Einstellungen
 
@@ -294,9 +423,18 @@ unter *Plugins → \<Plugin\> → Plugin-Einstellungen*, das Plugin liest es
 ## Fehler melden
 
 `self.notify_error("…")` schreibt ins Log **und** in die Fehleranzeige der
-GUI. Wirft ein Hook eine Ausnahme, fängt die Runtime sie ab, zeigt eine rote
-Fehlerkachel auf dem Gerät und listet den Fehler in der Oberfläche. Ein
-kaputtes Plugin legt also nie die ganze Anwendung lahm.
+GUI. `self.notify_info("…")` ist für erwartbare Zustände gedacht, einen
+Dienst, der gerade nicht läuft, oder einen fehlenden Player. Es geht nur
+ins Log, die GUI zeigt es nicht an.
+
+Wirft ein Hook eine Ausnahme, fängt die Runtime sie ab und listet den
+Fehler in der Oberfläche. Eine rote Fehlerkachel auf dem Gerät gibt es nur
+bei einem scheiternden `render`, und dazu zählen `get_state` und
+`get_label`, die darin aufgerufen werden. Dieselbe Kachel erscheint, wenn
+`render` etwas anderes als ein Bild zurückgibt. Scheitert ein
+Eingabe-Hook, `on_tick` oder `on_plugin_config_changed`, wird der Fehler
+erfasst und die Kachel ganz normal neu gezeichnet. Ein kaputtes Plugin legt
+also nie die ganze Anwendung lahm.
 
 ## Texte übersetzen
 
@@ -306,7 +444,7 @@ Tasten und im Touchstrip. Das Manifest ist schon zweisprachig, das gilt
 für alles andere.
 
 ```
-counter/
+my-counter/
   locales/
     de.json
     en.json
@@ -332,10 +470,6 @@ selbst. Hilfsmodule ohne `self` benutzen `plugin_text` aus
 `deckswitch.plugins.base` mit dem eigenen Ordner und der Plugin-ID.
 
 Log-Zeilen bleiben unübersetzt, sie stehen nur im Journal.
-
-`self.t()` gibt es ab DECK//SWITCH 1.4.0. Ein Plugin, das es benutzt,
-trägt deshalb `"min_app_version": "1.4.0"` im Manifest. Ältere Versionen
-der App installieren es dann gar nicht erst.
 
 ## Drehrichtungen
 
@@ -387,15 +521,101 @@ Der Dateiname ohne Endung ist der Icon-Name. SVGs, die mit
 `stroke="currentColor"` oder `fill="currentColor"` arbeiten, lassen sich in
 der GUI einfärben. Alle anderen tönt die App über ihre Alpha-Maske.
 
+## Schoner- und Hintergrund-Plugins
+
+Beide bekommen eine Leinwand statt einer Taste. Die Klasse erbt von
+`ScreensaverPlugin` oder `WallpaperPlugin` aus `deckswitch.plugins.base`.
+Beide Namen stehen für dieselbe Basisklasse `CanvasPlugin`, und der Loader
+weist bei diesen Typen eine Klasse ab, die nicht von ihr erbt. `entry` und
+`class` sind wie beim Action-Plugin Pflicht.
+
+```python
+import time
+
+from PIL import Image
+
+from deckswitch.plugins.base import ScreensaverPlugin
+
+
+class SimpleClock(ScreensaverPlugin):
+    interval_s = 30.0
+
+    def render(self, size, elapsed_s):
+        image = Image.new("RGBA", size, (0, 0, 0, 255))
+        height = size[1] // 4
+        self.services.render.draw_text(
+            image, time.strftime("%H:%M"), y=(size[1] - height) // 2, size=height
+        )
+        return image
+```
+
+`render(size, elapsed_s)` liefert ein Bild der Größe `size`. Die App
+zerlegt es selbst auf Tasten und Touchstrip. `elapsed_s` zählt die
+Sekunden, seit der Schoner läuft. `render` wird synchron aufgerufen, ist
+also ein einfaches `def`.
+
+* `interval_s` ist der Abstand zwischen zwei Bildern in Sekunden. `0`
+  zeichnet einmal und lässt das Bild stehen.
+* Liefert ein Schoner `None`, bleibt das vorige Bild stehen.
+* `self.deck_layout` sagt, wo die Kacheln auf der Leinwand liegen:
+  `deck_layout.keys` ist eine Liste aus `(x, y, w, h)` je Taste in
+  Lesereihenfolge, `deck_layout.strip` das Rechteck des Touchstrips. Wer
+  etwas pro Taste zeigen will, braucht das, sonst landet der Inhalt in den
+  Fugen zwischen den Tasten.
+* Ein Hintergrund-Plugin bekommt nur den Streifen als Leinwand,
+  `deck_layout` bleibt dort `None`. Die App zeichnet es mit `elapsed_s` 0
+  und wiederholt es nicht nach `interval_s`. Ein Hintergrund muss ein Bild
+  liefern.
+
+`setup()`, `teardown()`, `on_plugin_config_changed()`, `self.t()` und
+`self.plugin_config` funktionieren wie beim Action-Plugin.
+
+## Verpacken und installieren
+
+Die ID darf Kleinbuchstaben, Ziffern, Punkt, Unterstrich und Bindestrich
+enthalten, beginnt mit einem Buchstaben oder einer Ziffer und ist höchstens
+64 Zeichen lang (`^[a-z0-9][a-z0-9._-]{0,63}$`). IDs der mitgelieferten
+Plugins sind vergeben. Alle Typen außer `iconset` brauchen `entry` und
+`class`.
+
+Lokal installiert die App nur ZIP-Archive. Die `manifest.json` liegt in der
+Wurzel des Archivs, in einem einzelnen Ordner oder eine Ebene tiefer. Ein
+Archiv enthält genau ein Plugin. Es darf höchstens 64 MB groß sein und
+entpackt höchstens 256 MB. Mehr als 20.000 Einträge nimmt die App nicht an.
+Symbolische Links, Pfade mit `..` und Backslashes in Namen werden
+abgewiesen.
+
+Wie man installiert, steht unter [Plugins](plugins.md#nachinstallieren),
+die Links für den Browser unter
+[streamdeck://-Links](plugins.md#streamdeck-links).
+
+### Mindestversion der App
+
+Braucht dein Plugin ein neueres DECK//SWITCH, trägst du diese Version als
+Text ins Manifest ein:
+
+```json
+{ "min_app_version": "1.4.0" }
+```
+
+Das Feld ist freiwillig. Ist die laufende App älter, verweigert sie die
+Installation, aus einem ZIP ebenso wie von einer Adresse oder aus dem
+Store, und die Meldung nennt die nötige Version. In der Plugin-Liste bleibt
+der Knopf eines solchen Updates gesperrt und zeigt den Hinweis „Braucht
+DECK//SWITCH {version} oder neuer“.
+
+Ein Plugin, das `self.t()` benutzt, braucht mindestens `"1.4.0"`.
+
 ## Ausprobieren
 
-```fish
+```sh
 ./scripts/start-backend.sh --verbose
 ```
 
-In der GUI dann *Plugins → Plugins neu laden*. Python speichert bereits
-importierte Module zwischen, deshalb ist nach Codeänderungen ein Neustart des
-Backends der verlässlichere Weg.
+In der GUI dann *Plugins → Nach neuen Plugins sehen*. Der Knopf lädt nur
+Plugins, die neu sind, verschwunden sind oder im Manifest eine andere
+`version` tragen. Eine Codeänderung ohne neue Versionsnummer kommt so nicht
+an, deshalb nach Codeänderungen das Backend neu starten.
 
 ## Abhängigkeiten
 
@@ -405,7 +625,7 @@ Rest macht der Installer.
 ```json
 "dependencies": {
   "python": ["icalendar>=6.0"],
-  "system": ["ffmpeg", {"arch": "python-gobject", "debian": "python3-gi", "fedora": "python3-gobject"}]
+  "system": ["ffmpeg", {"arch": "python-gobject", "debian": "python3-gi", "fedora": "python3-gobject", "suse": "python3-gobject"}]
 }
 ```
 
@@ -418,9 +638,9 @@ Rest macht der Installer.
   verschiedene Versionen eines Pakets, teilen sie sich die zuerst geladene.
 * **`system`** nennt Pakete der Distribution. Ein einfacher Name gilt überall.
   Wo die Namen abweichen, nennt ein Objekt einen je Familie: `arch`, `debian`
-  (auch Ubuntu) und `fedora`. Fehlt der Name für eine Familie, stoppt dort die
+  (auch Ubuntu), `fedora` und `suse` (openSUSE). Fehlt der Name für eine Familie, stoppt dort die
   Installation. Fehlt ein Paket, fragt `pkexec` nach dem Passwort, und pacman,
-  apt oder dnf installieren es. Auf einem Fedora mit Image wie Bazzite nennt
+  apt, dnf oder zypper installieren es. Auf einem Fedora mit Image wie Bazzite nennt
   die Meldung stattdessen den `rpm-ostree`-Befehl. Ohne einen dieser
   Paketmanager wird jeder Name als Programm gesucht.
 
@@ -428,14 +648,13 @@ Rest macht der Installer.
 installieren, wird das Plugin nicht installiert, eine ältere Fassung bleibt
 liegen, und der Fehler nennt den Befehl für die Hand.
 
-Nenne nur Pakete, denen du traust, mit einer unteren Versionsgrenze. Setze
-`min_app_version` auf `1.4.1`: Ältere Versionen ignorieren das Feld, und das
-Plugin scheitert dann an seinem Import.
+Nenne nur Pakete, denen du traust, mit einer unteren Versionsgrenze.
 
 ## Einreichen
 
 Ist das Plugin fertig, kannst du es über *Plugins → Plugin einreichen* in den
-Store geben. Zieh ein Archiv in das Feld, ZIP, TAR und tar.gz gehen alle.
+Store geben. Dafür musst du im Store angemeldet sein. Zieh ein Archiv in das
+Feld, ZIP, TAR, tar.gz und tgz gehen alle.
 
 Der Store sieht sich den Python-Quelltext an und notiert, was auffällt:
 Adressen, Netzbibliotheken, Programmaufrufe, zur Laufzeit erzeugter Code.

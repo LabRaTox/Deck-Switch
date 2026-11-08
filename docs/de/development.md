@@ -6,30 +6,45 @@
 
 ```
 backend/
+  pyproject.toml         Python-Paket und seine Abhängigkeiten
   deckswitch/            Kern: Geräte, Runtime, Rendering, HTTP/WebSocket
+    __main__.py          Einstieg, startet Runtime und lokalen Server gemeinsam
     config.py            Datenmodell (Decks → Profile → Seiten → Belegungen)
     runtime.py           Geteiltes: Config, Plugins, Dienste, Gerätesuche
     deck.py              Ein Deck: Seite, Tastenlogik, Zeichnen, Schoner
     device.py            HID-Anbindung, Wiederverbinden
+    events.py            Ereignis-Bus zwischen Runtime, Plugins und GUI
+    paths.py             wo Konfiguration, Daten und Mitgeliefertes liegen
+    texte.py             Texte für die Oberfläche in der eingestellten Sprache
+    locales/             die Sprachdateien (de.json, en.json)
     server.py            REST + WebSocket für die GUI (nur 127.0.0.1)
     netserver.py         Netz-Decks: zweite, winzige Anwendung fürs Netz
     netauth.py           Passwörter, Sitzungen, Bremse gegen Raten
     virtualdeck.py       Deck ohne Hardware, Bilder gehen in den Speicher
+    tray.py              Symbol in der Leiste (StatusNotifierItem)
     plugins/base.py      Plugin-API (die einzige Datei für Plugin-Autoren)
+    plugins/loader.py    findet, lädt und registriert Plugins
+    plugins/installer.py installiert und entfernt Plugins
     plugins/abhaengigkeiten.py  Was Plugins mitbringen: Python- und Systempakete
-    services/            Audio (PipeWire), Icons, Rendering, Hintergründe,
-                         Autostart, App-Symbol, Eingabe (uinput),
-                         Medien (MPRIS), Desktop (KDE), Soundboard, Overlay,
-                         globale Kurzbefehle, Sitzungserkennung, Portal,
-                         Plugin-Store
+    services/            Audio (PipeWire), Pegelanzeige, Icons, Rendering,
+                         Hintergründe, Touchstrip-Hintergrund,
+                         Bildschirmschoner, Autostart, App-Symbol,
+                         Eingabe (uinput), Medien (MPRIS), Desktop (KDE),
+                         Soundboard, Overlay, globale Kurzbefehle,
+                         automatischer Profilwechsel, Programmliste,
+                         Sitzungserkennung, Portal, Sicherung, Plugin-Store
     web/netdeck.html     die Seite, die ein Netz-Gast im Browser bekommt
   plugins/               Mitgelieferte Plugins, technisch ganz normale
     audio/ system/ streamdeck/ multi/ sound/ iconset-tabler/
   tests/                 Prüfsuiten (siehe unten)
 gui/                     Tauri + Vite/React
-packaging/               udev-Regeln, systemd-Unit, URL-Handler
+packaging/               udev-Regeln, systemd-Units (Checkout und Paket),
+                         Menüeintrag, Fensterstarter (deckswitch-gui.sh),
+                         URL-Handler
+  aur/                   PKGBUILD für das Arch-Paket
   overlay/               das virtuelle Deck als QML-Overlay
-scripts/                 Installation (bash), Start (POSIX sh)
+scripts/                 Installation, Start, Entfernen, Release-Dateien (Shell),
+                         Helfer für Bilder und Plugin-Archive (Python)
 docs/                    diese Dokumentation
 ```
 
@@ -50,6 +65,10 @@ angeschlossene Decks sind damit zwei Sitzungen auf denselben Plugins.
 | `~/.local/share/deckswitch/uploads/` | eigene Icons und Kachelhintergründe |
 | `~/.local/share/deckswitch/wallpapers/` | Touchstrip-Hintergründe (800 × 100) |
 | `~/.local/share/deckswitch/plugins/` | nachinstallierte Plugins |
+| `~/.local/share/deckswitch/app/` | die Anwendung selbst nach der Installation mit einem Befehl |
+| `~/.local/share/deckswitch/deckswitch.log` | Log des Backends |
+| `~/.cache/deckswitch/fensterstart` | wie das Fenster auf diesem System startet ([setup.md](setup.md#wenn-das-fenster-nicht-aufgeht)) |
+| `~/.config/systemd/user/deckswitch.service` | Dienst für den Start beim Anmelden, nur im Checkout oder nach der Installation mit einem Befehl (das Paket bringt einen eigenen mit) |
 
 Die beiden Bildablagen sind getrennt, weil ein 800 × 100 breiter Streifen als
 Icon nichts taugt und in der Icon-Auswahl nur im Weg stünde.
@@ -60,8 +79,10 @@ Plugin darin liegt, steht in dessen `manifest.json`. Ältere Installationen
 haben noch Ordner mit dem Namen der Kennung, beide Formen funktionieren.
 
 Vor jedem Schreiben wandert der bisherige Stand der Konfiguration in den
-Backup-Ordner, einer je Stunde, die letzten 30 bleiben liegen. Eine Belegung
-ist Handarbeit von Stunden und steht in genau einer Datei.
+Backup-Ordner, höchstens einer je Stunde. Jeder Stand bleibt 24 Stunden
+liegen. Danach bleibt von jedem Tag nur der letzte, und nach 7 Tagen wird er
+gelöscht. Insgesamt bleiben höchstens 30 Stände. Eine Belegung ist
+Handarbeit von Stunden und steht in genau einer Datei.
 
 ## Entwicklung
 
@@ -95,16 +116,22 @@ done
 ```
 
 Ohne gesetztes `XDG_CONFIG_HOME` brechen sie von selbst ab und rühren die
-echte Konfiguration nicht an.
+echte Konfiguration nicht an. `XDG_DATA_HOME` hält Sicherungen, Uploads und
+das Log aus deinem echten Datenordner heraus.
+
+Suiten für Store-Plugins laden das Plugin aus `plugin-sources/` neben
+`backend/`. Dieser Ordner gehört nicht zum Repository. In einem frischen
+Klon überspringen sich diese Suiten selbst.
 
 `hotkey_test.py` redet mit dem `kglobalaccel` der laufenden Sitzung. Sonst
 wäre nichts davon geprüft, sondern nur nachgespielt. Die Suite meldet ihre
 Kurzbefehle am Ende wieder ab und überspringt sich selbst, wenn kein Plasma
 läuft.
 
-`store_test.py` startet den Plugin-Store aus dem Nachbarprojekt `PlugInStore`
-und fährt die ganze Kette durch: hochladen, Katalog, Download mit Prüfsumme.
-Liegt der Store nicht daneben, überspringt sich die Suite.
+`store_test.py` startet einen echten Plugin-Store-Server und fährt die ganze
+Kette durch: hochladen, Katalog, Download mit Prüfsumme. Dafür muss die
+Quelle des Stores neben diesem Repository liegen. Fehlt sie, überspringt
+sich die Suite.
 
 ### GUI
 
@@ -129,7 +156,11 @@ sonst nirgends von Hand:
   sie übereinstimmt.
 
 Zum Anheben also: `__init__.py`, `gui/src-tauri/Cargo.toml`,
-`gui/package.json`, dann `version_test.py` laufen lassen.
+`gui/package.json`, dann `version_test.py` laufen lassen. Für ein Release
+ändern sich außerdem `pkgver` in `packaging/aur/PKGBUILD` und die Adresse mit
+Versionsnummer im Arch-Abschnitt von [setup.md](setup.md#arch-und-cachyos).
+Die `sha256sums` im PKGBUILD lassen sich erst eintragen, wenn der Tarball zum
+Tag existiert.
 
 Davon getrennt sind **`CONFIG_VERSION`** in `config.py` (der Schemastand der
 Konfiguration, zählt nur bei Migrationen hoch) und die **Versionen der
@@ -138,10 +169,18 @@ der Anwendung.
 
 ### Zu den Skripten
 
-Die Skripte unter `scripts/` sind POSIX-`sh` und **auf Englisch**, Ausgaben
-wie Kommentare. Nur die Installation (`get.sh`, `install.sh`, `fetch-release.sh`,
-`build-release-files.sh`) braucht `bash`. Sie laufen damit aus jeder Shell heraus, ohne dass fish
-installiert sein muss. Geprüft mit `sh`, `dash`, `bash`, `zsh` und `fish`.
+Die Installationsskripte (`get.sh`, `install.sh`, `fetch-release.sh`,
+`build-release-files.sh`) brauchen `bash`. Die übrigen Shell-Skripte
+(`dev.sh`, `start-backend.sh`, `start-gui.sh`, `delete.sh`,
+`install-service.sh`, `install-desktop-entry.sh`, `install-url-handler.sh`)
+sind POSIX-`sh`. Keines davon braucht fish. Ihre Ausgaben sind auf Englisch,
+nur `install-desktop-entry.sh` meldet sich auf Deutsch. Ein Teil der
+Kommentare ist deutsch.
+
+Daneben liegen Helfer in Python. `make-icon.py`, `make-plugin-icons.py`,
+`make-wallpapers.py` und `make-plugin-screenshots.py` erzeugen das
+App-Symbol, die Plugin-Icons, Touchstrip-Hintergründe und die Bilder für die
+Plugin-Ansicht. `package_plugins.py` packt Plugin-Quellen zu ZIP-Archiven.
 
 Das venv wird dabei nie „aktiviert". Die Skripte rufen `.venv/bin/python`
 direkt auf, und das ist von der Shell unabhängig. Von Hand aktivieren geht
@@ -183,29 +222,32 @@ Herkunft der Anfrage und nicht der Inhalt.
 
 ## Bekannte Grenzen
 
-* Profile gibt es je Deck automatisch, aber **kein freies Umschalten**
-  mehrerer Profile auf demselben Gerät und keinen automatischen Wechsel je
-  Vordergrund-Anwendung („Smart Profiles").
+* **Der automatische Profilwechsel geht nur unter KDE Plasma.** Eine Taste
+  mit der Aktion *Profil wechseln* funktioniert auf jedem Desktop. Der
+  Vordergrund-Anwendung zu folgen braucht ein KWin-Skript
+  (`services/smartprofile.py`), weil Wayland einer gewöhnlichen Anwendung
+  nicht verrät, welches Fenster den Fokus hat.
 * **Push-to-Talk verträgt sich nicht mit Doppeldruck oder Halten** auf
   derselben Taste. Wer beides belegt, verschiebt das Auslösen zwangsläufig
   auf das Loslassen.
 * **Text tippen** schafft nur Zeichen, die auf der aktiven Belegung direkt
   erreichbar sind. Was dort über Tottasten entsteht, wird übersprungen.
-* **Globale Kurzbefehle gehen nur unter Plasma** (`kglobalaccel`, siehe
-  `services/shortcuts.py`). Der portable Weg wäre
-  `org.freedesktop.portal.GlobalShortcuts`, der verlangt aber ein
-  Elternfenster und einen Bestätigungsdialog je Sitzung.
-
-  Hier stand früher, `kglobalaccel` liefere das Signal nicht aus. Das war ein
-  Messfehler: Ohne passende `AddMatch`-Regel schickt der Bus einem Client
-  keine Broadcasts. Am 2026-08-19 mit Regel nachgemessen, da kommt das Signal
-  an, vom echten Tastendruck über den Compositor bis in den Dienst
-  (`tests/hotkey_test.py`).
-* Plugin-Hot-Reload lädt Manifeste und Klassen neu, aber Python cached
-  bereits importierte Module. Nach Änderungen an einem Plugin ist ein
-  Neustart des Backends der verlässlichere Weg.
+* **Globale Kurzbefehle übernehmen deine Kombination nur unter Plasma
+  unverändert.** Dort laufen sie über `kglobalaccel`
+  (`services/shortcuts.py`). Anderswo laufen sie über
+  `org.freedesktop.portal.GlobalShortcuts` (`services/portal.py`), sofern der
+  Desktop es anbietet. Der Desktop zeigt dann einen Dialog, nimmt deine
+  Kombination als Vorschlag und vergibt womöglich eine andere. Die App zeigt
+  die Kombination an, die tatsächlich gilt. Ändert sich die Liste der
+  Overlay-Decks, kommt der Dialog erneut.
+* **Nach neuen Plugins sehen** lädt nur Plugins, die neu sind, entfernt
+  wurden oder eine neue Versionsnummer im Manifest tragen. Nach einer
+  Änderung am Code eines Plugins ohne neue Nummer startest du das Backend
+  neu.
 * **systemd und PipeWire setzt die App voraus.** `install.sh` kennt Arch,
-  Debian, Ubuntu und Fedora. Entwickelt und am Gerät getestet wird nur auf
+  Debian, Ubuntu, Fedora und openSUSE. Auf einem Fedora mit Image wie Bazzite
+  installiert es keine Pakete und nennt stattdessen den `rpm-ostree`-Befehl.
+  Entwickelt und am Gerät getestet wird nur auf
   CachyOS, die anderen Distributionen laufen im Container.
 * **DDC/CI hängt am Monitor.** Die Helligkeitssteuerung braucht ein Gerät,
   das DDC/CI zulässt, und viele muss man dafür erst im Bildschirmmenü
@@ -213,6 +255,24 @@ Herkunft der Anfrage und nicht der Inhalt.
   die App den Wert lokal und schreibt ihn nur entprellt.
 * **GPU-Werte nur mit NVIDIA.** Sie kommen aus `nvidia-smi`. Für AMD-Karten
   wäre `/sys/class/drm/…/device/hwmon` der Weg, das ist aber nicht gebaut.
+
+## Aufgebaut auf
+
+| | |
+| --- | --- |
+| **Backend** | Python 3, [`streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck), FastAPI mit uvicorn |
+| **Rendering** | Pillow für die Tastenbilder, cairosvg für SVG-Icons |
+| **GUI** | Tauri + Vite/React, mit dem WebView des Systems |
+| **Audio** | PipeWire über `wpctl`/`pactl`, Pegelanzeige über `parec`, Soundboard über `pw-play` |
+| **Eingaben** | virtuelle Tastatur über `/dev/uinput` mit `evdev`, Belegung über libxkbcommon (`xkbcommon`) |
+| **Desktop** | D-Bus über `dbus-next` für MPRIS, Tray und KWin. Globale Kurzbefehle und Bildschirmfotos über KDE, sonst über `xdg-desktop-portal` |
+| **Overlay** | `zwlr_layer_shell_v1` über layer-shell-qt, unter X11 und XWayland über Fenster-Hinweise |
+| **Installation** | [`uv`](https://github.com/astral-sh/uv) für die Python-Umgebung und die Pakete von Plugins |
+| **Icons** | [Tabler Icons](https://tabler.io/icons) (MIT), eingebunden als ganz normales Iconset-Plugin |
+
+Ohne [`python-elgato-streamdeck`](https://github.com/abcminiuser/python-elgato-streamdeck)
+von Dean Camera gäbe es dieses Projekt nicht. Die ganze Geräteanbindung baut
+darauf auf.
 
 ## Zum Namen
 

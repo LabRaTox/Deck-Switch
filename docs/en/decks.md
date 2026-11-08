@@ -16,23 +16,32 @@ all three.
 
 ## Profiles
 
-A profile is a set of pages of its own. Each deck shows exactly one — with
-two devices, each can show a different one.
+A profile is a set of pages of its own. Each deck shows exactly one. With two
+devices, each can show a different one.
 
 You pick it above the page tree. The button next to it opens the management:
-create, rename, duplicate, delete. A duplicate gets its own pages with their
-own ids; folder keys and "go to page" then point inside the copy instead of
-back into the original.
+create, rename, duplicate, delete. A new profile starts either empty
+(*Empty profile*) or as a copy of an existing one (*Copy of …*). A duplicate
+gets its own pages with their own ids; folder keys and "go to page" then
+point inside the copy instead of back into the original.
 
-The last profile cannot be deleted — a deck without a profile would have no
-page and nothing to show. Deleting a profile that a deck is showing moves
-that deck to another one.
+*Export* saves a profile together with its images as a ZIP file. *Import
+profile* reads such a file back in. An imported profile is always added and
+never replaces an existing one.
+
+The last profile cannot be deleted, because a deck without a profile would
+have no page and nothing to show. Deleting a profile that a deck is showing
+moves that deck to another one.
 
 **Automatically per program.** List programs in the profile management
-(`obs`, `code`, …) and the deck switches to that profile by itself as soon as
-one of them is in front. When none matches any more, whatever was there
-before comes back. Picking a profile by hand wins — it ends the automatic
+(`obs`, `code`, …) and every deck switches to that profile by itself as soon
+as one of them is in front. When none matches any more, whatever was there
+before comes back. Picking a profile by hand wins. It ends the automatic
 switch until a pattern matches again.
+
+You pick programs from the list *Add program …*, which comes from the
+system's menu entries, or type a name into the field next to it. The button
+*Foreground window: …* adds the window that is in front right now.
 
 Matching looks at the window class *and* the title, case-insensitively, as a
 substring: `obs` matches `obs` as well as `obs-studio`.
@@ -59,9 +68,11 @@ device turns up that the app has not seen before, it creates an empty profile
 for it.
 
 As soon as there is more than one deck, they appear in the header as a
-switch. The editor always edits exactly one. Under *settings → decks* you can
-rename devices. A deck that is no longer around can be removed there, and its
-profile stays.
+switch, grouped by kind. A kind with a single deck gets a button, a kind with
+several decks gets a drop-down list. The editor always edits exactly one.
+Under *settings → decks* you can rename decks. A hardware deck that is no
+longer connected can be removed there, and so can any virtual or network
+deck, as long as more than one deck exists. Its profile stays.
 
 If you only have one deck, none of this shows up.
 
@@ -79,9 +90,9 @@ models are tested against faked device reports, never on real hardware.
 
 ## Virtual deck (overlay)
 
-Under *settings → decks → **+ virtual deck*** you get a deck with a grid of
-your choosing (columns, rows, dials, tile size) that sits as an **overlay**
-on the screen.
+Under *settings → decks → **+ Add virtual deck*** you get a deck with a grid
+of your choosing (columns, rows, dials, tile size) that sits as an
+**overlay** on the screen.
 
 **It is deliberately not a window.** Through `zwlr_layer_shell_v1` the
 surface sits on the overlay layer: no entry in the task bar, no Alt-Tab, no
@@ -94,12 +105,14 @@ window.
 Where there is no layer surface, on GNOME or without the LayerShellQt module as
 on Ubuntu, the deck runs as an X11 window through XWayland, and directly on X11.
 It stays above all windows and takes no focus either, measured under Mutter 42
-and 46. If neither works, *+ Virtual deck* is greyed out and gives the reason.
+and 46. If neither works, *+ Add virtual deck* is greyed out and gives the
+reason.
 
 **Calling it up** works three ways:
 
 * through a **global shortcut**, see below
-* through *settings → decks → show overlay*
+* through the button *Show overlay* in the editor's page properties (select
+  no key)
 * through the **virtual deck** action (*Streamdeck* plugin) on a key of the
   real deck, toggling if you like and optionally **at the mouse pointer**
 
@@ -110,15 +123,16 @@ spot. Not an error, just less convenient.
 
 ### Moving it around
 
-With *appear at pointer* **off** you can put the overlay where it belongs.
-The spot is stored and applies every time it comes up:
+With *Appear at the mouse pointer* **off** you can put the overlay where it
+belongs. The spot is stored and applies every time it comes up:
 
 * **left mouse button** on the border around the tiles
 * **right mouse button** anywhere, tiles included. You need that when a
   transparent background and hidden empty tiles leave hardly any free area.
 
-While you drag, the overlay steps back and jumps to the new spot when you let
-go. It does not glide along, because a layer shell surface cannot be moved
+While you drag, the overlay steps back. As an X11 window (directly or
+through XWayland) it follows the pointer. As a layer shell surface it jumps
+to the new spot when you let go, because such a surface cannot be moved
 while it runs. `Window::setMargins` from layer-shell-qt remembers the value
 and emits it as a signal, but never reaches the live Wayland surface. So the
 app rebuilds it at the new spot.
@@ -126,33 +140,43 @@ app rebuilds it at the new spot.
 ### Settings
 
 In the editor the grid and the overlay switches are on the right in the page
-properties. Tile size is continuous, and there are two switches:
+properties. Columns go from 1 to 16, rows from 1 to 8, dials from 0 to 8,
+and the tile size from 48 to 256 pixels without steps. A new deck starts with
+4 × 2 keys and no dials. There are three switches:
 
 * **Transparent background.** Without a plate underneath, only the tiles
   float over the screen.
 * **Hide empty tiles.** Unassigned slots stay invisible and take no clicks.
   Their space stays reserved though, so the other tiles do not jump around
   every time you assign something.
+* **Close deck after click.** The overlay disappears by itself as soon as a
+  tile has been clicked.
 
 ### Shortcut
 
 Below that is the **shortcut** that fetches this particular overlay and sends
 it away again, from anywhere and without opening the interface. If you only
 have a virtual deck, you need it: a deck without a case has no other handle.
-Press *record* and type the combination. You can also write into the field by
+Press *Record* and type the combination. You can also write into the field by
 hand (`ctrl+alt+d`), because the browser catches some combinations before the
 page sees them.
 
-The shortcut is registered with Plasma (`kglobalaccel`). That has three
+On KDE Plasma the shortcut is registered with `kglobalaccel`. That has three
 consequences worth knowing:
 
 * It then also shows up in the **KDE system settings** under *shortcuts →
   DECK//SWITCH* and can be changed there.
 * A **combination that is already taken is refused**, not taken away. Below
-  the field you then see who owns it, for instance "KWin — peek at desktop".
-  If you want it anyway, remove it there first.
+  the field you then see who owns it. If you want it anyway, remove it there
+  first.
 * When the backend quits, the shortcut is free again. Nothing is left behind
   with no program behind it.
+
+Without `kglobalaccel` the shortcut goes through the GlobalShortcuts
+interface of `xdg-desktop-portal`. There your combination is only a request.
+The desktop asks for confirmation and may assign a different combination.
+In that case the field shows "The desktop assigned … for this." After that
+you change the combination in the desktop's own settings.
 
 `AltGr` does not work. In Qt that is not a modifier level a global shortcut
 can express. An empty field means: no shortcut.
@@ -164,10 +188,12 @@ rectangles and the corners would stay as squares.
 There is no **brightness** here. An overlay has no backlight to dim, and both
 conceivable translations would be worse than none: as opacity the tile
 becomes see-through and unreadable on a light background, as darkening the
-colours no longer match the preview. The slider is switched off.
+colours no longer match the preview. The slider in the header is greyed out,
+and the settings do not show the brightness field for a virtual deck.
 
-**Requirements:** `qt6-declarative` (which brings `qml6`) and
-`layer-shell-qt`. If one of them is missing, the interface says so in plain
+**Requirements:** `qt6-declarative` (which brings `qml6`). Without the
+LayerShellQt module or on GNOME the overlay runs through X11 or XWayland, as
+described above. If something is missing, the interface says so in plain
 words.
 
 ---
@@ -179,9 +205,9 @@ browser. It is meant for the moderator who should help out during a stream
 without walking over to your machine. They see this one deck and cannot
 change anything about it.
 
-You create one under *settings → decks → **+ network deck***. Assigning works
+You create one under *settings → decks → **+ Network deck***. Assigning works
 like any other deck, and the editor shows grid, password and address on the
-right.
+right. The grid has the same limits as with a virtual deck.
 
 ### Setting it up
 
@@ -189,6 +215,12 @@ right.
 2. Set a **password** under *access* in the editor, at least 4 characters.
 3. Pass the **address** shown there to your guest, for example
    `http://192.168.178.37:8771/deck/net-a1b2c3d4`.
+
+The switch *Offer on the network* is on for a new deck. Switched off, the
+deck stays an ordinary deck on your machine. *Remove password* deletes the
+password, and the deck is then no longer offered. The addresses only appear
+while the server is actually listening, each with a *Copy* button next to
+it.
 
 Your guest opens the address, enters the password and has the deck in front
 of them. Nothing to install. The page is a single file without libraries and
@@ -205,12 +237,19 @@ subnet only than for everything:
 sudo ufw allow from 192.168.178.0/24 to any port 8771 proto tcp
 ```
 
+The port is 8771 by default. You can only change it in the configuration
+file, as `network_port` in the `app` section of
+`~/.config/deckswitch/config.json`.
+
 ### How it is secured
 
 The regular server that serves the interface binds **only to `127.0.0.1`**
-and stays there. It may do everything: change assignments, install plugins,
-export the configuration, credentials in the plugin settings included. That
-does not belong on a network.
+by default. You can change that with `--host` or `host` in the `app` section
+of the configuration. It may do everything: change assignments, install
+plugins, export the configuration, credentials in the plugin settings
+included. That does not belong on a network. It also only answers requests
+whose `Host` header names `127.0.0.1`, `localhost`, `::1` or the configured
+host.
 
 What goes onto the network is a **second, deliberately tiny application** on
 its own port, 8771 by default. It can do three things: sign in, show tiles,
